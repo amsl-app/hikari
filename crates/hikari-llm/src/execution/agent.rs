@@ -11,6 +11,7 @@ use futures_util::StreamExt;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::Content;
+use hikari_core::tts::config::TTSConfig;
 use hikari_model::chat::{Direction, TextContent, TypeSafePayload};
 use hikari_model::llm::message::{ConversationMessage, MessageStatus};
 use hikari_model::llm::slot::Slot;
@@ -39,6 +40,7 @@ pub struct LlmAgent {
     conversation_id: Uuid,
     iterator: LlmStepIterator,
     config: LlmConfig,
+    tts_config: Option<TTSConfig>,
     llm_service: LlmService,
     conn: DatabaseConnection,
     current_action: Option<Arc<Mutex<LlmStep>>>,
@@ -54,6 +56,7 @@ impl LlmAgent {
         session_id: String,
         module_id: String,
         config: LlmConfig,
+        tts_config: Option<TTSConfig>,
         llm_service: LlmService,
         conn: DatabaseConnection,
     ) -> Result<LlmAgent, LlmExecutionError> {
@@ -74,6 +77,7 @@ impl LlmAgent {
             conversation_id,
             iterator,
             config,
+            tts_config,
             llm_service,
             conn,
             current_action,
@@ -85,6 +89,7 @@ impl LlmAgent {
         &mut self,
         mut message: Option<TypeSafePayload>,
         history_needed: bool,
+        voice_mode: bool,
     ) -> Pin<Box<dyn Stream<Item = Result<Response, LlmExecutionError>> + '_ + Send>> {
         tracing::debug!("starting chat with LLM agent");
         Box::pin(try_stream! {

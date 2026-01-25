@@ -1,4 +1,5 @@
 pub mod args;
+pub mod audio;
 pub mod date;
 pub mod id_map;
 pub mod loader;

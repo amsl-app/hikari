@@ -138,7 +138,7 @@ impl LlmStepTrait for SseCall {
 
             Ok(LlmStepResponse::new(
                 LlmStepContent::Message {
-                    message: MessageStream::new(result),
+                    message: result,
                     store: self.store.clone(),
                 },
                 None,

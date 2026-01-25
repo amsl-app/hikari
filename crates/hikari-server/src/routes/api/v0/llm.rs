@@ -1,4 +1,3 @@
-use super::modules::messaging::ChatRequest;
 use crate::AppConfig;
 use crate::data::modules::session::get_session;
 use crate::db::sea_orm::util::{
@@ -19,11 +18,12 @@ use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
+use hikari_core::tts::config::TTSConfig;
 use hikari_llm::builder::LlmStructureBuilder;
 use hikari_llm::execution::agent::LlmAgent;
 use hikari_llm::execution::agent::response::Response;
 use hikari_llm::execution::iterator::LlmStepIterator;
-use hikari_model::chat::TypeSafePayload;
+use hikari_model::chat::{ChatMode, ChatRequest, TypeSafePayload};
 use hikari_model::llm::conversation::LlmConversation;
 use hikari_model::llm::state::LlmConversationState;
 use hikari_model::module::locked_until;
@@ -59,7 +59,7 @@ type Documents = Vec<String>;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ResponseAction {
     SetFinished,
-    Restart,
+    Restart { chat_mode: ChatMode },
     Abort,
     Nothing,
 }
@@ -68,16 +68,17 @@ pub(crate) enum ResponseAction {
 #[serde(rename_all = "snake_case")]
 pub(crate) struct ConnectionInfo {
     pub history_needed: bool,
-    pub current_sequence: u16, //Fixme: Don't know if u16 makes sense
+    pub current_sequence: u16,
+    pub chat_mode: ChatMode,
 }
 
 #[derive(ToSchema, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub(crate) enum Request {
-    Chat(ChatRequest<TypeSafePayload>),
+    Chat(ChatRequest<Option<TypeSafePayload>>),
     ConnectionInfo(ConnectionInfo),
     Abort,
-    Restart,
+    Restart { chat_mode: ChatMode },
     ControllMessage,
 }
 
@@ -179,6 +180,7 @@ async fn create_agent(
     session_id: &str,
     conn: &DatabaseConnection,
     llm_config: &LlmConfig,
+    tts_config: Option<&TTSConfig>,
     constants: &HashMap<String, serde_yml::Value>,
     force: bool,
 ) -> Result<LlmAgent, LlmError> {
@@ -207,6 +209,7 @@ async fn create_agent(
         session_id.to_owned(),
         module_id.to_owned(),
         llm_config.clone(),
+        tts_config.cloned(),
         llm_service,
         conn.clone(),
     )
@@ -265,6 +268,7 @@ pub async fn handle_socket(
     // By splitting socket we can send and receive at the same time.
     let (mut sender, mut receiver) = socket.split();
     let llm_config = config.llm_config().clone();
+    let tts_config = config.tts_config().cloned();
     let constants = &config.llm_data().constants.constants;
     let llm_agent = create_agent(
         &user,
@@ -273,6 +277,7 @@ pub async fn handle_socket(
         &session_id,
         &conn,
         &llm_config,
+        tts_config.as_ref(),
         constants,
         false,
     )
@@ -290,6 +295,7 @@ pub async fn handle_socket(
                 &session_id,
                 &conn,
                 &llm_config,
+                tts_config.as_ref(),
                 constants,
                 true,
             )
@@ -321,6 +327,7 @@ pub async fn handle_socket(
                             &conn,
                             &mut sender,
                             &llm_config,
+                            tts_config.as_ref(),
                             constants,
                             &mut llm_agent,
                             reqeust_message,
@@ -383,6 +390,7 @@ async fn handle_message(
     conn: &DatabaseConnection,
     sender: &mut SplitSink<WebSocket, Message>,
     llm_config: &LlmConfig,
+    tts_config: Option<&TTSConfig>,
     constants: &HashMap<String, serde_yml::Value>,
     llm_agent: &mut Option<Mutex<LlmAgent>>,
     message: Result<Request, LlmError>,
@@ -395,11 +403,13 @@ async fn handle_message(
                 .await
                 .map_err(Into::into)
         }
-        ResponseAction::Restart => {
-            let new_agent =
-                create_agent(user, config, module_id, session_id, conn, llm_config, constants, true).await?;
+        ResponseAction::Restart { chat_mode } => {
+            let new_agent = create_agent(
+                user, config, module_id, session_id, conn, llm_config, tts_config, constants, true,
+            )
+            .await?;
             *llm_agent = Some(Mutex::new(new_agent));
-            send_connection_info(llm_agent.as_ref(), sender, false).await?;
+            send_connection_info(llm_agent.as_ref(), sender, false, chat_mode.voice_mode).await?;
             Ok(())
         }
         ResponseAction::SetFinished => {
@@ -427,22 +437,29 @@ async fn handle_request(
         Request::Chat(chat_message) => {
             tracing::trace!("chat message received");
             let message = chat_message.payload;
-            generate_agent_response(llm_agent, sender, Some(message.clone()), false).await
+            let voice_mode = chat_message.chat_mode.voice_mode;
+            generate_agent_response(llm_agent, sender, message.clone(), false, voice_mode).await
         }
         Request::ConnectionInfo(connection_info) => {
             tracing::trace!(
                 current_sequence = connection_info.current_sequence,
                 "connection info received"
             );
-            send_connection_info(llm_agent, sender, connection_info.history_needed).await
+            send_connection_info(
+                llm_agent,
+                sender,
+                connection_info.history_needed,
+                connection_info.chat_mode.voice_mode,
+            )
+            .await
         }
         Request::Abort => {
             tracing::trace!("abort message received");
             Ok(ResponseAction::Abort)
         }
-        Request::Restart => {
+        Request::Restart { chat_mode } => {
             tracing::trace!("restart message received");
-            Ok(ResponseAction::Restart)
+            Ok(ResponseAction::Restart { chat_mode })
         }
         Request::ControllMessage => Ok(ResponseAction::Nothing),
     }
@@ -452,8 +469,9 @@ async fn send_connection_info(
     llm_agent: Option<&Mutex<LlmAgent>>,
     sender: &mut SplitSink<WebSocket, Message>,
     history_needed: bool,
+    voice_mode: bool,
 ) -> Result<ResponseAction, LlmError> {
-    generate_agent_response(llm_agent, sender, None, history_needed).await
+    generate_agent_response(llm_agent, sender, None, history_needed, voice_mode).await
 }
 
 async fn generate_agent_response(
@@ -461,11 +479,12 @@ async fn generate_agent_response(
     sender: &mut SplitSink<WebSocket, WsMessage>,
     message: Option<TypeSafePayload>,
     history_needed: bool,
+    voice_mode: bool,
 ) -> Result<ResponseAction, LlmError> {
     tracing::debug!(?message, "sending message to agent");
     let llm_agent = llm_agent.ok_or(LlmError::NoAgent)?;
     let mut agent_guard = llm_agent.lock().await;
-    let stream = agent_guard.chat(message, history_needed);
+    let stream = agent_guard.chat(message, history_needed, voice_mode);
     let mut stream = pin!(stream);
     while let Some(response) = stream.next().await {
         match response {

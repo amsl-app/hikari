@@ -17,7 +17,9 @@ use hikari_db::module::session::status;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_db::util::FlattenTransactionResultExt;
 use hikari_entity::module::session::status::Status;
-use hikari_model::chat::{Client, Direction, Message, MessageResponse, Payload, RequestMetadata, TypeSafePayload};
+use hikari_model::chat::{
+    ChatMode, ChatRequest, Client, Direction, Message, MessageResponse, Payload, RequestMetadata, TypeSafePayload,
+};
 use hikari_model::module::session::instance::SessionInstanceStatus;
 use hikari_model::user::User;
 use hikari_model_tools::convert::{FromDbModel, IntoDbModel};
@@ -53,13 +55,6 @@ pub(crate) struct HistoryMessage {
     client: Client,
     payload: Payload,
     direction: Direction,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub(crate) struct ChatRequest<T> {
-    pub(crate) payload: T,
-    #[serde(default)]
-    pub(crate) metadata: RequestMetadata,
 }
 
 pub(crate) fn create_router<S>() -> Router<S>
@@ -375,6 +370,7 @@ pub(crate) async fn chat_session(
         ChatRequest {
             payload,
             metadata: RequestMetadata::default(),
+            chat_mode: ChatMode::default(),
         },
         app_config,
         conn,
@@ -454,7 +450,7 @@ pub(crate) async fn chat_session_inner(
                         bot_id: bot_id.to_string(),
                     })?;
 
-                let ChatRequest { payload, metadata } = chat_request;
+                let ChatRequest { payload, metadata, .. } = chat_request;
                 start_conversation(
                     txn,
                     user,

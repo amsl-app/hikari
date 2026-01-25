@@ -1,4 +1,3 @@
-use crate::args::s3::S3;
 use crate::loader::error::LoadingError;
 use crate::loader::file::{File, FileHash};
 use crate::loader::{FileMetadata, Filter, LoaderTrait};
@@ -8,6 +7,7 @@ use aws_sdk_s3::operation::get_object::GetObjectOutput;
 use aws_sdk_s3::types::Object;
 use aws_sdk_s3::{Client, config::Region};
 use chrono::{DateTime, Utc};
+use clap::Args;
 use futures::future::BoxFuture;
 use futures::{FutureExt, Stream};
 use num_traits::cast::ToPrimitive;
@@ -16,22 +16,17 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use url::Url;
 
+#[derive(Debug, Clone, Args)]
+#[allow(clippy::struct_field_names)]
 pub struct S3Config {
+    #[arg(long = "s3_endpoint", required = false)]
     pub endpoint: Url,
+    #[arg(long = "s3_region", required = false)]
     pub region: String,
+    #[arg(long = "s3_access_key", required = false)]
     pub access_key: String,
+    #[arg(long = "s3_secret_key", required = false)]
     pub secret_key: String,
-}
-
-impl From<S3> for S3Config {
-    fn from(s3: S3) -> Self {
-        Self {
-            endpoint: s3.s3_endpoint,
-            region: s3.s3_region,
-            access_key: s3.s3_access_key,
-            secret_key: s3.s3_secret_key,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -164,6 +159,20 @@ impl LoaderTrait for S3Loader {
         tracing::trace!(?key, "loading object");
 
         self.load_object(key).await
+    }
+
+    async fn store_file<P: AsRef<Path>>(&self, path: P, content: &[u8]) -> Result<(), LoadingError> {
+        let key = self.sub_key(path);
+        tracing::trace!(?key, "Storing file");
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(&key)
+            .body(content.to_vec().into())
+            .send()
+            .await
+            .inspect_err(|error| tracing::error!(error = error as &dyn Error, key, "failed to put object"))?;
+        Ok(())
     }
 
     async fn get_file_metadata<P: AsRef<Path>>(&self, path: P) -> Result<FileMetadata, LoadingError> {

@@ -11,6 +11,10 @@ use csml_model::FlowTrigger;
 use crate::journal::MetaJournalEntryWithMetaContent;
 use crate::llm::message::ConversationMessage;
 
+pub trait MergeContent {
+    fn merge(&mut self, other: Self) -> Result<(), anyhow::Error>;
+}
+
 #[derive(Deserialize, ToSchema)]
 pub struct ClientInfo {
     pub client: String,
@@ -53,10 +57,27 @@ pub enum Direction {
     Receive,
 }
 
+impl MergeContent for TextContent {
+    fn merge(&mut self, other: Self) -> Result<(), anyhow::Error> {
+        self.text.push_str(&other.text);
+        Ok(())
+    }
+}
+
 #[derive(ToSchema, Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct TextContent {
     pub text: String,
+}
+
+impl MergeContent for PayloadContent {
+    fn merge(&mut self, other: Self) -> Result<(), anyhow::Error> {
+        if self.content_type != other.content_type || self.display_type != other.display_type {
+            return Err(anyhow::anyhow!("Payload types are not the same"));
+        }
+        self.payload.push_str(&other.payload);
+        Ok(())
+    }
 }
 
 #[derive(ToSchema, Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -91,6 +112,16 @@ pub struct ButtonContent {
 #[serde(rename_all = "kebab-case")]
 pub struct TypingContent {
     pub duration: Option<u16>,
+}
+
+impl MergeContent for TypeSafePayload {
+    fn merge(&mut self, other: Self) -> Result<(), anyhow::Error> {
+        match (self, other) {
+            (TypeSafePayload::Text(s), TypeSafePayload::Text(o)) => s.merge(o),
+            (TypeSafePayload::Payload(s), TypeSafePayload::Payload(o)) => s.merge(o),
+            _ => Err(anyhow::anyhow!("Payload types are not the same")),
+        }
+    }
 }
 
 #[derive(ToSchema, Serialize, Deserialize, Debug, Clone, PartialEq, IntoStaticStr, Display)]
@@ -205,19 +236,34 @@ pub struct ErrorResponse {
     pub status_code: u16,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Default, ToSchema)]
 pub struct RequestMetadata {
     pub time: Option<DateTime<FixedOffset>>,
 }
 
-#[derive(Deserialize, utoipa::ToSchema)]
+#[derive(Deserialize, ToSchema)]
 pub struct Request {
     pub client: String,
-
     pub payload: Payload,
-
     pub metadata: Option<RequestMetadata>,
 }
+
+#[derive(ToSchema, Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ChatMode {
+    #[serde(default)]
+    pub voice_mode: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ChatRequest<T> {
+    pub payload: T,
+    #[serde(default)]
+    pub metadata: RequestMetadata,
+    #[serde(default)]
+    pub chat_mode: ChatMode,
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

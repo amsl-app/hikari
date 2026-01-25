@@ -50,4 +50,19 @@ impl Query {
                 tracing::error!(error = error as &dyn Error, "failed to load messages");
             })
     }
+
+    pub async fn get_message_from_id<C: ConnectionTrait + TransactionTrait>(
+        db: &C,
+        conversation_id: &Uuid,
+        message_ids: &i32,
+    ) -> Result<Option<MessageModel>, DbErr> {
+        Message::find()
+            .filter(message::Column::ConversationId.eq(*conversation_id))
+            .filter(message::Column::MessageOrder.eq(*message_ids))
+            .one(db)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(error = error as &dyn Error, "failed to load messages");
+            })
+    }
 }

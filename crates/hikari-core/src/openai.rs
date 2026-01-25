@@ -303,7 +303,7 @@ pub async fn openai_call_with_timeout(
                     }
                 }
                 .boxed();
-                Ok(OpenAiCallResult::Stream(MessageStream::new(stream)))
+                Ok(OpenAiCallResult::Stream(stream))
             }
             Err(error) => Err(OpenAiError::Api(error)),
         }

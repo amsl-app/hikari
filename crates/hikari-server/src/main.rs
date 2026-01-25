@@ -22,6 +22,7 @@ use hikari_config::module::ModuleConfig;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::pgvector::documents::{PgVectorDocument, RagDocumentLoaderFn};
 use hikari_core::pgvector::{PgVector, upload_document};
+use hikari_core::tts::config::TTSConfig;
 use hikari_db::sea_orm::{ConnectOptions, Database};
 use hikari_db::tag;
 use hikari_llm::builder::LlmStructureConfig;
@@ -57,6 +58,7 @@ pub(crate) struct InnerAppConfig {
     worker_url: WorkerUrl,
     llm_config: LlmConfig,
     llm_data: LlmData,
+    tts_config: Option<TTSConfig>,
 }
 
 #[derive(Debug)]
@@ -96,6 +98,7 @@ impl AppConfig {
         worker_url: WorkerUrl,
         llm_config: LlmConfig,
         llm_data: LlmData,
+        tts_config: Option<TTSConfig>,
     ) -> Self {
         Self(Arc::new(InnerAppConfig {
             module_config,
@@ -105,6 +108,7 @@ impl AppConfig {
             worker_url,
             llm_config,
             llm_data,
+            tts_config,
         }))
     }
 
@@ -130,6 +134,10 @@ impl AppConfig {
 
     pub fn llm_config(&self) -> &LlmConfig {
         &self.0.llm_config
+    }
+
+    pub fn tts_config(&self) -> Option<&TTSConfig> {
+        self.0.tts_config.as_ref()
     }
 
     pub fn llm_data(&self) -> &LlmData {
@@ -167,7 +175,8 @@ async fn run(opt: Run) -> Result<()> {
 
     let seaorm_pool_options = build_connect_options(&opt.db, db_url);
     let seaorm_pool = Database::connect(seaorm_pool_options).await?;
-    let s3_config: Option<S3Config> = opt.s3.map(Into::into);
+    let s3_config: Option<S3Config> = opt.s3;
+    let tts_config: Option<TTSConfig> = opt.tts.map(Into::into);
     let loader_handler = LoaderHandler::new(s3_config);
     let llm_config: LlmConfig = opt.llm_services.into();
     let llm_rag_documents_path = opt.llm_config.llm_collections;
@@ -246,6 +255,7 @@ async fn run(opt: Run) -> Result<()> {
         WorkerUrl(worker_url),
         llm_config,
         llm_data,
+        tts_config,
     );
 
     let app = app::create_app(app_config, auth, deletable, seaorm_pool).await?;
