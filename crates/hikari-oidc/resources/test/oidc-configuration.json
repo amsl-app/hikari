@@ -1,0 +1,9 @@
+{
+  "issuer": "https://example.com",
+  "authorization_endpoint": "https://example.com/openid-connect/auth",
+  "token_endpoint": "https://example.com/openid-connect/token",
+  "introspection_endpoint": "https://example.com/openid-connect/token/introspect",
+  "userinfo_endpoint": "https://example.com/openid-connect/userinfo",
+  "end_session_endpoint": "https://example.com/openid-connect/logout",
+  "jwks_uri": "https://example.com/test/openid-connect/certs"
+}

@@ -1,0 +1,1 @@
+ALTER TABLE question ADD COLUMN session_id TEXT NOT NULL DEFAULT '';

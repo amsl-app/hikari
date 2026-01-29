@@ -1,0 +1,70 @@
+version: "0.1"
+hikari:
+  frontend:
+    version:
+      min: 0.0.0
+  onboarding:
+    module: onboarding
+  config:
+    allowed-keys:
+      - test1
+      - test2
+      - test3
+      - test4
+      - test5
+      - test6
+      - module_order
+      - bot_name
+      - bot_avatar
+      - vr_attention
+  approvals:
+    - id: some-id
+      version: 0.0.3
+    - id: other-id
+      version: fancy version!%&
+  journal:
+    focus:
+      - name: Studium
+        icon: study_graduation_cap
+      - name: Sport
+        icon: soccer_ball
+      - name: Zuhause
+        icon: house_home
+      - name: Relaxen
+        icon: sun
+      - name: Date
+        icon: heart
+      - name: Filme
+        icon: cinema
+      - name: Ich
+        icon: trophy
+      - name: Partner
+        icon: group
+      - name: Fitness
+        icon: weight_dumbbell
+      - name: Lesen
+        icon: book
+      - name: Reisen
+        icon: train
+      - name: Natur
+        icon: leaf
+      - name: Arbeit
+        icon: suitcase
+  module:
+    groups:
+      - key: "lecture"
+        label: "Your lecture"
+        weight: 20
+
+  access:
+    - token: "test"
+      approvals:
+        declaration-of-consent: https://example.com
+        privacy-policy: https://example.com
+        participant-information: https://example.com
+      groups:
+        - "wi"
+
+    - token: "abc123"
+      groups:
+        - "group-a"

@@ -1,0 +1,38 @@
+[package]
+name = "hikari-test-helpers"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Sven Scheu <itssvens@gmail.com>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+postgresql_archive = { version = "0.20.0" }
+postgresql_embedded = { version = "0.20.0", features = ["tokio", "bundled"] }
+tempfile = "3.23.0"
+tokio = { version = "1.47.1", features = ["full"] }
+tracing = "0.1.41"
+thiserror = "2.0.16"
+sea-schema = { version = "0.16.2", default-features = false, features = ["sqlx-postgres", "sqlx-sqlite", "sqlx-mysql", "query", "discovery"] }
+sea-query = "0.32.7"
+semver = "1.0.27"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "registry", "std", "fmt"] }
+test-log = { version = "0.2.18", default-features = false, features = ["trace"] }
+
+[lints.clippy]
+# Custom lint config because this is test code
+clone_on_ref_ptr = "warn"
+unwrap_in_result = "warn"
+unreachable = "warn"
+unimplemented = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+implicit_clone = "warn"
+string_add = "warn"
+todo = "warn"
+ref_patterns = "warn"
+dbg_macro = "warn"
+as_underscore = "warn"

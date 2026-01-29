@@ -1,0 +1,1 @@
+ALTER TABLE history_assessment DROP COLUMN module;

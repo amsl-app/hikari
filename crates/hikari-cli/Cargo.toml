@@ -1,0 +1,24 @@
+[package]
+name = "hikari-cli"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Sven Scheu <itssvens@gmail.com>"]
+
+[lints]
+workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0", features = ["sea-orm"] }
+csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0" }
+futures = { version = "0.3.31", features = ["async-await"] }
+hikari-common = { path = "../hikari-common" }
+hikari-utils = { path = "../hikari-utils" }
+tokio = "1.47.1"
+reedline = "0.44.0"
+serde_json = "1.0.145"
+clap = { version = "4.5.48", features = ["derive", "wrap_help"] }
+regex = "1.11.2"

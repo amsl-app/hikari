@@ -1,0 +1,2 @@
+ALTER TABLE quiz_score
+    ALTER COLUMN score TYPE FLOAT USING score::FLOAT;

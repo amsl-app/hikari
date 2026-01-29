@@ -1,0 +1,43 @@
+[package]
+name = "hikari-worker"
+version = "0.3.10"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Sven Scheu <itssvens@gmail.com>"]
+
+[lints]
+workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.8.4", features = ["tracing"] }
+axum-prometheus = "0.10.0"
+chrono = "0.4.42"
+clap = { version = "4.5.48", features = ["derive"] }
+hikari-core = { path = "../hikari-core" }
+hikari-db = { path = "../hikari-db" }
+hikari-model = { path = "../hikari-model" }
+hikari-model-tools = { path = "../hikari-model-tools" }
+hikari-utils = { path = "../hikari-utils" }
+http = "1.3.1"
+log = "0.4.28"
+serde = "1.0.226"
+serde_derive = "1.0.226"
+serde_json = "1.0.145"
+sentry = { version = "0.46.0", features = ["tracing"] }
+sentry-tower = { version = "0.46.0", features = ["http", "axum-matched-path"] }
+sea-orm = { version = "1.1.16", features = ["macros", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "debug-print"] }
+thiserror = "2.0.16"
+tokio = { version = "1.47.1", features = ["full"] }
+tower = "0.5.2"
+tracing = "0.1.41"
+url = "2.5.7"
+uuid = { version = "1.18.1", features = ["v4", "fast-rng", "serde"] }
+utoipa = { version = "5.4.0", features = ["uuid", "axum_extras"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
+utoipa-redoc = { version = "6.0.0", features = ["axum"] }
+utoipa-rapidoc = { version = "6.0.0", features = ["axum"] }
+strum = { version = "0.27.2", features = ["derive"] }
+hikari-config = { path = "../hikari-config" }

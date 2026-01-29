@@ -1,0 +1,33 @@
+version: "0.1"
+assessment:
+  id: "SPA"
+  title: "Situative aktuelle Prüfungsangst"
+  scales:
+    - id: "SPA-W"
+      title: "Besorgtheit"
+      type: scale
+      body:
+        min: 1
+        max: 7
+      mode: average
+      items:
+        - id: "SPA-01"
+        - id: "SPA-07"
+        - id: "SPA-06"
+        - id: "SPA-04"
+        - id: "SPA-03"
+  questions:
+    - id: "SPA-01"
+      title: |-
+        Stellen Sie sich vor: Sie müssen gleich zur Prüfung antreten!
+        Im folgenden sollen Sie Angaben darüber machen, wie Sie sich im Augenblick fühlen.
+        Es kommt nicht darauf an, wie Sie sich im Allgemeinen oder gelegentlich fühlen, sondern,
+        wie gut die folgenden Worte Ihren Gefühlszustand zum jetzigen Zeitpunkt widerspiegeln.
+
+        Vor Prüfungen fühle ich mich: ___ ängstlich
+      type: scale
+      body:
+        min: 1
+        max: 7
+        hint-min: "überhaupt nicht" #optional
+        hint-max: "sehr" #optional

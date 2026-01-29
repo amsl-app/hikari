@@ -1,0 +1,7 @@
+version: "0.1"
+documents:
+  - file: path.pdf
+    id: test
+    metadata:
+      name: test
+      link: test

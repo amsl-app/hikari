@@ -1,0 +1,1 @@
+ALTER TABLE question DROP COLUMN ai_solution;  

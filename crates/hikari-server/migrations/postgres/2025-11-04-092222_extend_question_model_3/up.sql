@@ -1,0 +1,1 @@
+ALTER TABLE question ADD COLUMN ai_solution TEXT;

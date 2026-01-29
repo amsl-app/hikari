@@ -1,0 +1,1 @@
+DROP TABLE selected_module;

@@ -1,0 +1,4 @@
+ALTER TABLE llm_documents
+ADD COLUMN metadata JSONB,
+DROP COLUMN IF EXISTS link,
+DROP COLUMN IF EXISTS name;

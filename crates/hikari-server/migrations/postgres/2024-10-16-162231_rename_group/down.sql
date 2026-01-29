@@ -1,0 +1,1 @@
+ALTER TABLE "oidc_groups" RENAME TO "groups";

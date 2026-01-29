@@ -1,0 +1,369 @@
+version: "0.1"
+structure:
+  id: "test"
+  constants:
+    Test: "test"
+  action:
+    id: "main"
+    chain:
+      - id: weather
+        api-call:
+          url: "https://api.open-meteo.com/v1/forecast?latitude=49.008985386282504&longitude=8.409174911536239&current=temperature_2m"
+          method: "GET"
+          headers:
+            - key: "Content-Type"
+              value: "application/json"
+          response-path: "$.current.temperature_2m"
+          success:
+            action: continue
+          fail:
+            action: continue
+          target:
+            slot:
+              name: "weather"
+      - id: "sse-test"
+        sse-call:
+          url: "https://postman-echo.com/server-events/6"
+          method: "GET"
+      - id: welcome
+        llm:
+          model: gpt-4.1-mini
+          prompts:
+            - constant: LLM_TUTOR_ROLE
+            - system:
+                message: "
+                  <aufgabe>
+                  Generiere eine Willkommensnachricht, die folgendes beinhaltet:
+                  - Sage wie warm es gerade ist. Aktuell ist es {{weather}} °C.
+                  - Stelle dich bei dem Nutzer vor und sage dass du ein LLM-basierter Tutor bist, der keine Garantie auf Richtigkeit geben kann, im Zweifel sollen die Studenten an Tutoren wenden.
+                  - Sage, dass du Inhalte zusammen mit dem Nutzer reflektierst und vertiefst, um den Lernerfolg zu steigern.
+                  </aufgabe>"
+            - constant: LLM_FORMAT
+            - system:
+                message: "
+                  <beispielAntworten>
+                  - Hallo, ich bin ein LLM-basierter Tutor und werde mit dir die Inhalte der Vorlesung wiederholen. Beachte, dass ich keine Garantie auf Richtigkeit geben kann. Im Zweifel wende dich an die Tutoren.
+                  - Freut mich, dass du da bist. Ich bin ein LLM-basierter Tutor und werde mit dir die Inhalte der Vorlesung wiederholen. Beachte, dass ich keine Garantie auf Richtigkeit geben kann. Im Zweifel wende dich an die Tutoren.
+                  </beispielAntworten>"
+          skip-prefix: true
+          temperature: 0.2
+      - id: "name_chain"
+        chain:
+          - id: ask_name
+            llm:
+              model: gpt-4.1-mini
+              prompts:
+                - constant: LLM_TUTOR_ROLE
+                - system:
+                    message: "
+                      <aufgabe>
+                      Generiere eine Nachricht, die den Nutzer nach seinem Vornamen, Nachnamen, Alter und Geschlecht fragt. Nichts anders.
+                      Wenn der nutzer sicht weigert biete beispiele oder pseudonyme an.
+                      Du darfst nichts anderes machen als nach den Informationen zu fragen.
+                      </aufgabe>"
+                - constant: LLM_NO_WELCOME
+                - constant: LLM_FORMAT
+                - constant: ASK_NAME_Example
+              skip-prefix: true
+              hold: true
+              memory:
+                - selector: current
+              temperature: 0.2
+          - id: name_extractor
+            extractor:
+              model: gpt-4.1-mini
+              values:
+                - description: "Der Vorname des Nutzers."
+                  type: "string"
+                  target:
+                    slot:
+                      name: vorname
+                - description: "Der Nachname des Nutzers."
+                  target:
+                    slot:
+                      name: nachname
+                - description: "Das Alter des Nutzers."
+                  type: "number"
+                  target:
+                    slot:
+                      name: alter
+                - description: "Das Geschlecht des Nutzers."
+                  enum:
+                    - "männlich"
+                    - "weiblich"
+                    - "divers"
+                  target:
+                    slot:
+                      name: geschlecht
+                - description: "Begründung ob alles erfolgreich extrahiert wurde oder warum nicht."
+                  type: "string"
+                  target:
+                    slot:
+                      name: extraction_reason
+              prompts:
+                - system:
+                    message: "
+                      <aufgabe>
+                      Du bist ein präzises Analyse- und Entscheidungssystem. Dein eigener Name ist AMSL und du bist ein Tutor an einer Universität.
+                      Extrahiere den Namen des Nutzers aus der Konversation und gib es in das Tool das dir gegben wurde. Erfinde niemals einen Namen für den Nutzer. Wenn der Name nicht eindeutig hervorgeht, lass den Wert aus.
+                      Nutze nur das Tool nicht mehr und nicht weniger.
+                      </aufgabe>"
+              memory:
+                - from: "ask_name"
+              success:
+                action: continue
+              fail:
+                action: repeat
+              skip-prefix: true
+      - id: "self-regulation"
+        conditions:
+          - name: alter
+            condition:
+              less-than: 25
+        llm:
+          model: gpt-4.1-mini
+          prompts:
+            - constant: LLM_TUTOR_ROLE
+            - constant: LLM_NO_WELCOME
+            - system:
+                message: "
+                  <aufgabe>
+                  Generiere eine kurze Nachricht an {{vorname}}, die folgendes beinhaltet:
+                  - Da er erst {{alter}} Jahre alt ist, erkläre ihm, dass es wichtig ist, sich Ziele zu setzen und sich selbst zu regulieren.
+                  - Erkläre dem Nutzer, dass es beim lernen wichtig ist, sich Ziele zu setzen und sich selbst zu regulieren.
+                  - Erkläre, dass der Nutzer in der App Module finden kann, die ihm Mehr über das Selbstregulierte Lernen erzählen.
+                  - Erkläre, dass die App auch ein Lernjournalanbietet, in dem der Nutzer zusammen mit die sein Lernverhalten reflektieren kann.
+                  </aufgabe>"
+            - constant: LLM_FORMAT
+            - system:
+                message: "
+                  <beispielAntwort>
+                  - Alles klar {{name}}! Wichtig beim Lernen ist es, sich Ziele zu setzen und sich selbst zu regulieren. In der App findest du Module, die dir mehr dazu erzählen. Dort findest du auch ein Lernjournal, in dem du dein Lernverhalten reflektieren kannst.
+                  </beispielAntwort>"
+          skip-prefix: true
+          temperature: 0.2
+
+      - id: "content"
+        llm:
+          model: gpt-4.1-mini
+          prompts:
+            - constant: LLM_TUTOR_ROLE
+            - constant: LLM_NO_WELCOME
+            - system:
+                message: "
+                  <aufgabe>
+                  Generiere eine kurze Nachricht an den Nutzer, die folgendes beinhaltet:
+                  - Sage dem Nutzer, dass dies die Einführungseinheit zur Vorlesung {{title}} ist.
+                  - Sage, dass die nächsten Einheiten konkrete Inhalte behandeln wiederholen. Diese Einheit ist erstmal dafür da, dass der Nutzer Fragen stellen kann.
+                  - Biete dem Nutzer an, ihm bei Fragen zu helfen, die die erste Vorlesung und organisatorisches betreffen.
+                  </aufgabe>"
+            - constant: LLM_FORMAT
+            - system:
+                message: "
+                  <beispielAntwort>
+                  - Dies ist die Einführungseinheit zur Vorlesung {{title}}. Du kannst mir Fragen zur ersten Vorlesung oder zu organisatorischem stellen. In den nächsten Einheiten werde ich mit dir die Inhalte der foglenden Vorlesungen behandeln. Hast du direkt eine Frage für mich?
+                  </beispielAntwort>"
+          skip-prefix: true
+          temperature: 0.2
+          hold: true
+      - id: "first_question_extractor_summarizer"
+        combined:
+          - id: "first_summarizer"
+            summarizer:
+              model: gpt-4.1-mini
+              prompts:
+                - system:
+                    message: "
+                      <präzisierung>
+                      Fasse zusammen, ob bzw. welche Frage der Nutzer gestellt hat.
+                      </präzisierung>"
+                - system:
+                    message: "
+                      <format>
+                      Halte dich an dieses Schema:
+                      - Der Nutzer hatte keine Frage. /Der Nutzer hat die Frage (xy) gestellt. (xy = Frage des Nutzers)
+                      </format>"
+              memory:
+                - from: content
+              memory-limit: 2
+              type: append
+          - id: "first_question_extractor"
+            extractor:
+              model: gpt-4.1-mini
+              values:
+                - description: "Wenn der Nutzer eine Frage gestellt hat, die Frage des Nutzers. Wenn der Nutzer nichts fragen will, lasse den Wert aus"
+                  examples:
+                    - "Welche Themen werden in der Vorlesung behandelt? -> question: Welche Themen werden in der Vorlesung behandelt?"
+                    - "Ich möchte wissen, was in der Vorlesung behandelt wird. -> question: Was wird in der Vorlesung behandelt?"
+                    - "Was kann ich fragen? -> question: Was kann ich fragen?"
+                    - "Ich weiß es nicht -> question: Was kann ich fragen?"
+                    - "Ich habe keine Frage -> {}"
+                    - "Nein -> {}"
+                  target:
+                    slot:
+                      name: question
+              prompts:
+                - system:
+                    message: "
+                      <aufgabe>
+                      Du bist ein präzises Analyse- und Entscheidungssystem. Dein eigener Name ist AMSL und du bist ein Tutor an einer Universität.
+                      Extrahiere die Frage des Nutzers aus der Konversation und gib es in das Tool das dir gegben wurde. Erfinde niemals eine Frage. Wenn die Frage nicht eindeutig hervorgeht, lass den Wert aus.
+                      Nutze nur das Tool nicht mehr und nicht weniger. Bewerte keine Frage von dir selber.
+                      </aufgabe>"
+              memory:
+                - from: content
+              success:
+                goto: retriever
+              fail:
+                goto: conclusion
+              skip-prefix: true
+      - id: "chat_chain"
+        chain:
+          - id: "retriever"
+            retriever:
+              query:
+                name: question
+              target:
+                slot:
+                  name: chat_context
+
+          - id: "counter"
+            counter:
+              slot:
+                name: question_count
+          - id: "answer"
+            llm:
+              model: gpt-4.1-mini
+              prompts:
+                - constant: LLM_TUTOR_ROLE
+                - constant: LLM_NO_WELCOME
+                - system:
+                    message: "
+                      <aufgabe>
+                      Generiere eine Antwort oder Erklärung auf die Frage des Nutzers.
+                      Beachte was bereits gesagt wurde und knüpfe daran an.
+                      Stütze dich auf dieses Wissen: {{chat_context}} und {{content}}.
+                      Wenn der Nutzer keine Frage hat: Biete ihm an, eine Frage zu stellen.
+                      Wenn er eine Frage hat: Antwort auf die Frage
+                      Gebe UNBEDINGT diese Quellen als Markdownlinks an: {{chat_context_source}}
+                      Triff KEINE Aussage über die Relevanz von Themen für die Prüfung. Verweise dann auf die Vorlsung und die Tutorien.
+                      Biete an eine weitere Frage zu stellen.
+                      </aufgabe>"
+                - constant: LLM_FORMAT
+                - system:
+                    message: "
+                      <beispielAntwort>
+                      - In der Vorlesung behandeln wir die Themen: (xy). Möchtest du noch etwas anders wissen?
+                      </beispielAntwort> (mit xy als Inhalt)"
+                - user:
+                    message: "Unsere bisherige Konversation war: {{summary}}"
+              memory:
+                - from: content
+                - selector: current
+              memory-limit: 2
+              temperature: 0.2
+              hold: true
+          - id: "question_extractor_summarizer"
+            combined:
+              - id: "summarizer"
+                summarizer:
+                  prompts:
+                    - system:
+                        message: "
+                          <präzisierung>
+                          Fasse zusammen, was die AI geantwortet hat und ob bzw. welche Frage der Nutzer gestellt hat.
+                          </präzisierung>"
+                    - system:
+                        message: "
+                          <format>
+                          Halte dich an dieses Schema:
+                          - Die AI hat (xy) erklärt.  (xy = Erklärung der AI)
+                          - Der Nutzer hat alles verstanden/ hat keine Frage mehr/ hat die Frage (xy) gestellt. (xy = Frage des Nutzers)
+                          </format>"
+                  memory:
+                    - from: answer
+                  memory-limit: 2
+                  type: append
+              - id: "question_extractor"
+                extractor:
+                  model: gpt-4.1-mini
+                  values:
+                    - description: "Wenn der Nutzer eine Frage gestellt hat, die Frage des Nutzers. Wenn der Nutzer nichts fragen, lasse den Wert aus"
+                      examples:
+                        - "Welche Themen werden in der Vorlesung behandelt? -> question: Welche Themen werden in der Vorlesung behandelt?"
+                        - "Ich möchte wissen, was in der Vorlesung behandelt wird. -> question: Was wird in der Vorlesung behandelt?"
+                        - "Ich habe keine Frage -> {}"
+                        - "Nein -> {}"
+                        - "Danke, ne das war alles -> {}"
+                      target:
+                        slot:
+                          name: question
+                  prompts:
+                    - system:
+                        message: "
+                          <aufgabe>
+                          Du bist ein präzises Analyse- und Entscheidungssystem. Dein eigener Name ist AMSL und du bist ein Tutor an einer Universität.
+                          Extrahiere die Frage des Nutzers aus der Konversation und gib es in das Tool das dir gegben wurde. Erfinde niemals eine Frage. Wenn die Frage nicht eindeutig hervorgeht, lass den Wert aus.
+                          Nutze nur das Tool nicht mehr und nicht weniger. Bewerte keine Frage von dir selber.
+                          </aufgabe>"
+                  success:
+                    action: continue
+                  fail:
+                    action: continue
+                  memory:
+                    - from: answer
+                  memory-limit: 2
+                  skip-prefix: true
+
+          - id: "counter_condition"
+            conditions:
+              - name: question_count
+                condition:
+                  equals:
+                    number: 1
+            flow:
+              goto: retriever
+
+      - id: validator
+        validator:
+          goals:
+            - name: "all_questions_asked"
+              goal: "Der Nutzer hat keine Fragen mehr gestellt."
+          prompts:
+            - system:
+                message: "
+                  <aufgabe>
+                  Du bist ein präzises Analyse- und Entscheidungssystem. Dein eigener Name ist AMSL und du bist ein Tutor an einer Universität.
+                  Überprüfe, ob der Nutzer alle Fragen gestellt hat, die er zu dieser Vorlesung hat.
+                  </aufgabe>"
+          memory:
+            - from: questioning
+          memory-limit: 2
+          success:
+            goto: conclusion
+          fail:
+            action: continue
+          skip-prefix: true
+
+      - id: conclusion
+        llm:
+          model: gpt-4.1-mini
+          prompts:
+            - constant: LLM_TUTOR_ROLE
+            - constant: LLM_NO_WELCOME
+            - system:
+                message: "
+                  <aufgabe>
+                  Generiere eine Abschlussnachricht, die folgendes beinhaltet:
+                  - Schliesse die Konversation mit {{name}} ab
+                  - biete an, in Zukunft zur Verfügung zu stehen.
+                  </aufgabe>"
+            - constant: LLM_FORMAT
+            - system:
+                message: "
+                  <beispielAntwort>:
+                  - Super, das war es dann erstmal. Wenn du in Zukunft noch weitere Fragen hast, komm gerne auf mich zu.
+                  </beispielAntwort>"
+            - user:
+                message: "Unsere bisherige Konversation war: {{summary}}"
+          temperature: 0.2

@@ -1,0 +1,97 @@
+[package]
+name = "hikari-server"
+version = "0.3.10"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Sven Scheu <itssvens@gmail.com>"]
+description = "A bright bot"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0"
+async-openai = "0.29.3"
+axum = { version = "0.8.4", features = ["tracing", "ws"] }
+axum-auth = "0.8.1"
+axum-extra = { version = "0.12.2", features = ["cookie", "cookie-signed", "cached"] }
+protect-axum = "0.2.0"
+clap = { version = "4.5.48", features = ["derive"] }
+zip = "6.0.0"
+csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0", features = [
+    "postgresql-async",
+    "sea-orm",
+] }
+csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0" }
+csml_model = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0" }
+chrono = "0.4.42"
+diesel = { version = "2.3.4", features = ["chrono", "uuid"] }
+diesel_migrations = { version = "2.3.1" }
+futures = { version = "0.3.31", features = ["async-await"] }
+futures-util = "0.3.31"
+html-escape = "0.2.13"
+hikari-common = { path = "../hikari-common" }
+hikari-core = { path = "../hikari-core" }
+hikari-db = { path = "../hikari-db" }
+hikari-entity = { path = "../hikari-entity" }
+hikari-model = { path = "../hikari-model" }
+hikari-oidc = { path = "../hikari-oidc" }
+hikari-config = { path = "../hikari-config" }
+hikari-model-tools = { path = "../hikari-model-tools" }
+hikari-utils = { path = "../hikari-utils" }
+indexmap = { version = "2.11.4", features = ["serde", "rayon"] }
+hikari-llm = { path = "../hikari-llm" }
+jsonwebtoken = "10.2.0"
+log = "0.4.28"
+axum-prometheus = { version = "0.10.0" }
+num-traits = "0.2.19"
+rand = { version = "0.9.2", features = ["std"] }
+rayon = "1.11.0"
+reqwest = "0.12.23"
+reqwest-middleware = { version = "0.4.2", features = ["json"] }
+reqwest-tracing = { version = "0.5.8", features = ["opentelemetry_0_30"] }
+sea-orm = { version = "1.1.16", features = ["macros", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "debug-print"] }
+sentry = { version = "0.46.0", features = ["tracing"] }
+sentry-tower = { version = "0.46.0", features = ["http", "axum-matched-path"] }
+serde = "1.0.226"
+serde_derive = "1.0.226"
+serde_json = "1.0.145"
+serde_yml = "0.0.12"
+serde_with = "3.14.1"
+strum = { version = "0.27.2", features = ["derive"] }
+thiserror = "2.0.16"
+timeago = "0.5.0"
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["cors"] }
+tracing = "0.1.41"
+tungstenite = "0.28.0"
+r2d2 = "0.8.10"
+tokio = { version = "1.47.1", features = ["full"] }
+tokio-stream = "0.1.17"
+tokio-util = { version = "0.7.16", features = ["rt"] }
+url = "2.5.7"
+utoipa = { version = "5.4.0", features = ["indexmap", "uuid", "chrono", "axum_extras"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
+utoipa-redoc = { version = "6.0.0", features = ["axum"] }
+utoipa-rapidoc = { version = "6.0.0", features = ["axum"] }
+uuid = { version = "1.18.1", features = ["v4", "fast-rng", "serde"] }
+http = "1.3.1"
+mime = "0.3.17"
+pin-project = "1.1.10"
+bytes = "1.10.1"
+hashbrown = "0.16.1"
+
+[dev-dependencies]
+hikari-test-helpers = { path = "../hikari-test-helpers" }
+test-log = { version = "0.2.18", default-features = false, features = ["trace"] }
+serial_test = { version = "3.2.0", features = ["file_locks"] }
+
+[features]
+default = ["sqlite", "postgres"]
+sqlite = [
+    "diesel/sqlite",
+    "csml_engine/sqlite",
+    "diesel/returning_clauses_for_sqlite_3_35",
+]
+postgres = ["diesel/postgres", "csml_engine/postgresql"]

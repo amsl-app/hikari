@@ -1,0 +1,4 @@
+DROP INDEX idx_llm_conversation_session_id;
+DROP INDEX idx_llm_conversation_user_id;
+DROP TABLE llm_conversation;
+Drop type conversation_status_enum;

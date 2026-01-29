@@ -1,0 +1,43 @@
+version: "0.1"
+module:
+  id: "test"
+  title: "A very old title"
+  subtitle: "The dino wrote this bot with his feed"
+  description: "This module is about the dino that ran to his neighbor leaving us this great archive of transcripts"
+  icon: "https://cdn-icons-png.flaticon.com/512/2614/2614727.png" #optional
+  banner: "https://free4kwallpapers.com/uploads/originals/2021/12/01/the-good-dinosaur-wallpaper.jpg" #optional
+  default-session: "the-sniff-snuff"
+  hidden: false #optional
+  weight: 10 #optional
+  theme:
+    id: "red"
+  assessment: #optional
+    pre: "pre-id" #assessment-id
+    post: "post-id" #assessment-id
+
+  module-groups:
+    - "lecture"
+
+  sessions:
+    - id: "the-sniff-snuff"
+      title: "The sniff snuff dino"
+      subtitle: "This is all about the sniff snuff dino"
+      description: "This is about the dino, his relatives and all about his important things" #optional
+      icon: "https://img.freepik.com/free-vector/cute-astronaut-riding-dinosaur-with-space-gun-cartoon-vector-icon-illustration-science-animal-icon_138676-5942.jpg" #optional
+      banner: "https://wallpaper.dog/large/20472984.jpg" #optional
+      bot: "test/test-flow"
+      next-session: "the-dino-child" #optional
+      theme:
+        id: "green"
+    - id: "test2"
+      title: "the dino child"
+      bot: "test/test-flow-2"
+    - id: "app_endpoint"
+      title: "the dino child"
+      bot: "test2/app_endpoint-testflow"
+    - id: "test-config"
+      title: "test config"
+      bot: "test/test-config"
+    - id: "test-payload-json"
+      title: "test payload json"
+      bot: "test/test-payload-json"

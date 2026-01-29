@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS llm_embeddings;
+
+DROP EXTENSION IF EXISTS vector;
