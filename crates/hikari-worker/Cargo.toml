@@ -34,7 +34,7 @@ tokio = { version = "1.47.1", features = ["full"] }
 tower = "0.5.3"
 tracing = "0.1.41"
 url = "2.5.7"
-uuid = { version = "1.18.1", features = ["v4", "fast-rng", "serde"] }
+uuid = { version = "1.20.0", features = ["v4", "fast-rng", "serde"] }
 utoipa = { version = "5.4.0", features = ["uuid", "axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
 utoipa-redoc = { version = "6.0.0", features = ["axum"] }
