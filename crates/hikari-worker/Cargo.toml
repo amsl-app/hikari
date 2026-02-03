@@ -31,7 +31,7 @@ sentry-tower = { version = "0.46.0", features = ["http", "axum-matched-path"] }
 sea-orm = { version = "1.1.16", features = ["macros", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "debug-print"] }
 thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["full"] }
-tower = "0.5.2"
+tower = "0.5.3"
 tracing = "0.1.41"
 url = "2.5.7"
 uuid = { version = "1.18.1", features = ["v4", "fast-rng", "serde"] }
