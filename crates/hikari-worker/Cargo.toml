@@ -15,7 +15,7 @@ anyhow = "1.0"
 axum = { version = "0.8.4", features = ["tracing"] }
 axum-prometheus = "0.10.0"
 chrono = "0.4.42"
-clap = { version = "4.5.48", features = ["derive"] }
+clap = { version = "4.5.57", features = ["derive"] }
 hikari-core = { path = "../hikari-core" }
 hikari-db = { path = "../hikari-db" }
 hikari-model = { path = "../hikari-model" }
