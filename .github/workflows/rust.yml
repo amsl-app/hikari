@@ -57,7 +57,7 @@ jobs:
           components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all -- -Dwarnings
+        run: cargo clippy --all -- -D warnings
 
   test:
     name: Test

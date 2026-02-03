@@ -63,12 +63,6 @@ mod tests {
     #[derive(Clone, Default)]
     struct MockClient {}
 
-    impl MockClient {
-        fn new() -> Self {
-            Self {}
-        }
-    }
-
     impl JwkHttpClient<JwkError> for MockClient {
         async fn get<T: DeserializeOwned + 'static, U: IntoUrl>(&self, _: U) -> Result<T, JwkError> {
             let type_id = TypeId::of::<T>();
@@ -90,6 +84,6 @@ mod tests {
             .await
             .unwrap()
             .build();
-        let client: JwkClient<MockClient> = JwkClient::new(config.into()).await.unwrap();
+        let _: JwkClient<MockClient> = JwkClient::new(config.into()).await.unwrap();
     }
 }
