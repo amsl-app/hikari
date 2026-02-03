@@ -23,10 +23,6 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: csml-engine
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -48,10 +44,6 @@ jobs:
   check:
     name: Check (Clippy)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: csml-engine
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,12 +62,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: csml-engine
     env:
       RUST_LOG: trace,tokio_postgres=info
-
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -91,7 +79,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
