@@ -66,7 +66,7 @@ impl LlmStepTrait for TextMessage {
             };
             let stream = Box::pin(stream);
             let content = LlmStepContent::Message {
-                message: stream,
+                message: MessageStream::new(stream),
                 store: None,
             };
             Ok(LlmStepResponse::new(content, None))

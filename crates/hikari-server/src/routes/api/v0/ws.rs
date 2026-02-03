@@ -313,7 +313,11 @@ async fn handle_message_inner(
 
             let client = generate_client(user.id, bot.id.clone(), &session_entry.module, &session_entry.session);
             let mut csml_conn = AsyncDatabase::sea_orm(conn);
-            let ChatRequest { payload, metadata } = request;
+            let ChatRequest {
+                payload,
+                metadata,
+                chat_mode: _,
+            } = request;
             let payload = serde_json::to_value(payload)?;
             let metadata = serde_json::to_value(metadata)?;
             let chat_request = init_request(client.clone(), payload, metadata);

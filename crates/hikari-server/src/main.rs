@@ -179,15 +179,15 @@ async fn run(opt: Run) -> Result<()> {
     let tts_config: Option<TTSConfig> = opt.tts.map(Into::into);
     let loader_handler = LoaderHandler::new(s3_config);
     let llm_config: LlmConfig = opt.llm_services.into();
-    let llm_rag_documents_path = opt.llm_config.llm_collections;
+    let llm_rag_documents_path = opt.llm_collections;
 
     // ---- Load Bots
     let bots = load_bots(&opt.csml, &opt.worker_url, &loader_handler).await?;
 
     // ---- Load LLM
-    let llm_structure_config = load_llm_structures(&opt.llm_config.llm_structures, &loader_handler).await?;
+    let llm_structure_config = load_llm_structures(&opt.llm_structures, &loader_handler).await?;
     let document_collection = load_documents(&llm_rag_documents_path, &loader_handler).await?;
-    let constants = load_constants(opt.llm_config.constants.as_ref(), &loader_handler).await?;
+    let constants = load_constants(opt.constants.as_ref(), &loader_handler).await?;
 
     // ---- Load Assessments
     let assessment_config = load_assessments(opt.assessment.as_ref(), &loader_handler).await?;

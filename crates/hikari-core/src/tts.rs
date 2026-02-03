@@ -16,7 +16,7 @@ use crate::openai::streaming::MessageStream;
 use crate::tts::cache::{cache_speech, get_speech};
 use crate::tts::config::TTSConfig;
 use crate::tts::error::{CombinedError, TTSError};
-use crate::tts::streaming::{ArcMutexStream, CombinedStream, CombinedStreamItem, attach_text_stream};
+use crate::tts::streaming::{CombinedStream, CombinedStreamItem, attach_text_stream};
 
 pub mod cache;
 pub mod config;
@@ -85,10 +85,7 @@ fn text_stream_to_speech_stream(
     })
 }
 
-fn message_stream_to_combined_stream(
-    message_stream: ArcMutexStream<MessageStream>,
-    config: Arc<TTSConfig>,
-) -> CombinedStream {
+fn message_stream_to_combined_stream(message_stream: MessageStream, config: Arc<TTSConfig>) -> CombinedStream {
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<CombinedStreamItem, CombinedError>>(10);
     let (mut message_stream, text_stream) = attach_text_stream(message_stream);
     let text_sender = sender.clone();
@@ -142,7 +139,7 @@ where
 
 #[must_use]
 pub fn message_stream_to_combined_stream_cached(
-    message_stream: ArcMutexStream<MessageStream>,
+    message_stream: MessageStream,
     db: Arc<DatabaseConnection>,
     config: Arc<TTSConfig>,
 ) -> CombinedStream {
@@ -195,12 +192,12 @@ fn demoji(string: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::openai::Message;
+    use crate::openai::{Message, streaming::BoxedStream};
     use futures::lock::Mutex;
     use tokio::time::{Duration, sleep};
     use tokio_stream::StreamExt;
 
-    fn simulate_websocket_stream() -> MessageStream {
+    fn simulate_websocket_stream() -> BoxedStream {
         let stream = stream! {
             yield Ok(Message::new(Content::Text("Hellö, world! ".to_string()), None));
             sleep(Duration::from_secs(2)).await;
@@ -213,8 +210,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_attach_text_stream() {
-        let (mut message_stream, mut text_stream) =
-            attach_text_stream(ArcMutexStream::new(simulate_websocket_stream()));
+        let (mut message_stream, mut text_stream) = attach_text_stream(MessageStream::new(simulate_websocket_stream()));
 
         let combined_response = Arc::new(Mutex::new(String::new()));
 

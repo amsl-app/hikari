@@ -2,10 +2,9 @@ use std::net::IpAddr;
 
 use crate::data::opt::{NamedOptionalValue, NamedOptionalValueParser};
 use clap::{Args, Parser, Subcommand};
-use hikari_core::tts::config::TTSConfig;
-use hikari_utils::args::{
-    llm::{LlmConfig, LlmServices},
-    s3::S3Config,
+use hikari_utils::{
+    args::{llm::LlmServices, tts::TTSConfig},
+    loader::s3::S3Config,
 };
 use url::Url;
 

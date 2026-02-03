@@ -1,4 +1,5 @@
 use crate::builder::{error::LlmBuildingError, slot::paths::SlotPath};
+use hikari_core::tts::error::CombinedError;
 use sea_orm::DbErr;
 use std::str::ParseBoolError;
 use thiserror::Error;
@@ -41,6 +42,10 @@ pub enum LlmExecutionError {
     JsonError(#[from] serde_json::Error),
     #[error(transparent)]
     YamlError(#[from] serde_yml::Error),
+    #[error(transparent)]
+    CombinedError(#[from] CombinedError),
+    #[error("Text-to-Speech not configured")]
+    TextToSpeechNotConfigured,
     #[error("Unexpected response format")]
     UnexpectedResponseFormat,
     #[error(transparent)]

@@ -12,6 +12,8 @@ use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::Content;
 use hikari_core::tts::config::TTSConfig;
+use hikari_core::tts::message_stream_to_combined_stream_cached;
+use hikari_core::tts::streaming::{CombinedStream, CombinedStreamItem};
 use hikari_model::chat::{Direction, TextContent, TypeSafePayload};
 use hikari_model::llm::message::{ConversationMessage, MessageStatus};
 use hikari_model::llm::slot::Slot;
@@ -32,6 +34,7 @@ use super::steps::{LlmStep, LlmStepContent};
 pub mod response;
 
 const BUFFER_SIZE: usize = 16;
+const AUDIO_CHUNK_SIZE: usize = 4096;
 
 pub struct LlmAgent {
     user_id: Uuid,
@@ -85,6 +88,7 @@ impl LlmAgent {
         // We return the current action state to trigger the current step in the websocket if needed (if state is running / error)
         Ok(agent)
     }
+
     pub fn chat(
         &mut self,
         mut message: Option<TypeSafePayload>,
@@ -145,7 +149,7 @@ impl LlmAgent {
                         resp?
                     };
                     tracing::trace!(?response, "response");
-                    let mut handle = self.handle_response(response, step_id.as_str());
+                    let mut handle = self.handle_response(response, voice_mode, step_id.as_str());
                     while let Some(item) = handle.next().await {
                         let item = item?;
                         if let Some(item) = item {
@@ -159,6 +163,7 @@ impl LlmAgent {
     fn handle_response<'a>(
         &'a mut self,
         response: LlmStepContent,
+        voice_mode: bool,
         step_id: &'a str,
     ) -> Pin<Box<dyn Stream<Item = Result<Option<Response>, LlmExecutionError>> + 'a + Send>> {
         Box::pin(try_stream! {
@@ -172,99 +177,127 @@ impl LlmAgent {
                 }
                 LlmStepContent::Combined(combined_steps) => {
                     for step in combined_steps {
-                        let mut response = self.handle_response(step, step_id);
+                        let mut response = self.handle_response(step, voice_mode, step_id);
                         while let Some(item) = response.next().await {
                             yield item?;
                         }
                     }
                 }
-                LlmStepContent::Message{message, store} => {
+                LlmStepContent::Message{mut message, store} => {
+                     let mut combined_stream: CombinedStream = if voice_mode {
+                         let tts_config = self.tts_config.as_ref().ok_or(LlmExecutionError::TextToSpeechNotConfigured)?;
+                            message_stream_to_combined_stream_cached(message, Arc::new(self.conn.clone()), Arc::new(tts_config.clone()))
+                        } else {
+                            Box::pin(try_stream! {
+                                while let Some(data) = message.next().await {
+                                    let data = data?;
+                                    yield CombinedStreamItem::Message(data);
+                                }
+                              })
+                        };
                     let mut complete_message = String::new(); // Initialize a complete message buffer
-                    let mut offset: usize = 0;
+                    let mut message_offset: usize = 0;
+                    let mut complete_audio: Vec<u8> = Vec::new(); // Initialize a complete message buffer
+                    let mut audio_offset: usize = 0;
                     // Init a new message in the database
                     let mut id = None;
                     // Create streaming content with the current message chunk
-                    while let Some(result) = message.next().await {
+                    while let Some(result) = combined_stream.next().await {
                         match result {
-                            Ok(value) => {
-                                tracing::trace!(?value, "message chunk");
-                                let content = if let Content::Text(content) = &value.content {
-                                        Ok(content)
-                                } else {
-                                    Err(LlmExecutionError::UnexpectedResponseFormat)
-                                }?;
-                                complete_message.push_str(content);
-                                let usage = value.tokens.unwrap_or(0);
-                                tracing::trace!(?usage, "tokens used");
-                                add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
-
-                                if complete_message.len() > offset.saturating_add(BUFFER_SIZE) {
-                                    let payload = TypeSafePayload::Text(TextContent {
-                                        text: complete_message.clone(),
-                                    });
-                                    let id = match id {
-                                        None => {
-                                            // Only create a message, when we have something to send
-                                            let new_id = self
-                                                .add_message_to_memory(
-                                                    step_id.to_owned(),
-                                                    payload,
-                                                    Direction::Send,
-                                                    MessageStatus::Generating,
-                                                )
-                                                .await?
-                                                .message_order;
-                                            id = Some(new_id);
-                                            new_id
-                                        }
-                                        Some(id) => {
-                                            self.update_message(id, payload, Some(MessageStatus::Generating))
-                                                .await?;
-                                            id
-                                        }
-                                    };
-                                    yield Some(Response::Chat(ChatChunk::new(
-                                        complete_message[offset..].to_string(),
-                                        id,
-                                        step_id.to_owned(),
-                                    )));
-                                    offset = complete_message.len();
+                            Ok(message) => {
+                                tracing::trace!(?message, "message chunk");
+                                match message {
+                                    CombinedStreamItem::Message(message) => {
+                                        let content = if let Content::Text(content) = &message.content {
+                                                Ok(content)
+                                        } else {
+                                            Err(LlmExecutionError::UnexpectedResponseFormat)
+                                        }?;
+                                        complete_message.push_str(content.as_str());
+                                        let usage = message.tokens.unwrap_or(0);
+                                        tracing::trace!(?usage, "tokens used");
+                                        add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
+                                    },
+                                    CombinedStreamItem::Audio(audio) => {
+                                        complete_audio.extend(audio);
+                                    }
                                 }
+
+                                if complete_message.len() > message_offset.saturating_add(BUFFER_SIZE) || complete_audio.len() > audio_offset.saturating_add(AUDIO_CHUNK_SIZE) {
+                                        let payload = TypeSafePayload::Text(TextContent{ text: complete_message.clone()});
+                                        let id = match id {
+                                            None => {
+                                                // Only create a message, when we have something to send
+                                                let new_id = self
+                                                    .add_message_to_memory(
+                                                        step_id.to_owned(),
+                                                        payload,
+                                                        Direction::Send,
+                                                        MessageStatus::Generating,
+                                                    )
+                                                    .await?
+                                                    .message_order;
+                                                id = Some(new_id);
+                                                new_id
+                                            }
+                                            Some(id) => {
+                                                self.update_message(id, payload, Some(MessageStatus::Generating))
+                                                    .await?;
+                                                id
+                                            }
+                                        };
+                                        let chunk = ChatChunk::new(
+                                            complete_message[message_offset..].to_string(),
+                                            complete_audio[audio_offset..].to_owned(),
+                                            false,
+                                            id,
+                                            step_id.to_owned(),
+                                        );
+                                        yield Some(Response::Chat(chunk));
+                                        message_offset = complete_message.len();
+                                        audio_offset = complete_audio.len();
+                                    }
                             }
                             Err(error) => {
-                                tracing::error!(error = &*error as &dyn Error, "error sending streaming message");
+                                tracing::error!(error = &error as &dyn Error, "error sending streaming message");
                                 self.set_error(step_id).await?;
                                 Err(error)?;
                                 return;
                             }
                         }
                     }
+
+
                     match id {
                         Some(id) => {
-                            let chunk = complete_message[offset..].to_string();
-                            let payload = TypeSafePayload::Text(TextContent { text: complete_message.clone()});
+                            let message = complete_message[message_offset..].to_string();
+                            let audio = complete_audio[audio_offset..].to_owned();
+                            let payload = TypeSafePayload::Text(TextContent {
+                                text: complete_message.clone()
+                            });
                             self.update_message(id, payload, Some(MessageStatus::Completed)).await?;
-                            if !chunk.is_empty() {
-                                yield Some(Response::Chat(ChatChunk::new(chunk, id, step_id.to_owned())));
+                            // When we have voice_mode active, we always need to send a last chunk with audio_end = true
+                            if !message.is_empty()  || voice_mode {
+                                yield Some(Response::Chat(ChatChunk::new(message, audio, true, id, step_id.to_owned())));
                             }
                         }
                         None => {
                             if !complete_message.is_empty() {
-                                // We have some chars but didn't create a message yet.
-                                //  So create a message and send it.
-                                let id = self
-                                    .add_message_to_memory(
-                                        step_id.to_owned(),
-                                        TypeSafePayload::Text(TextContent {
-                                            text: complete_message.clone(),
-                                        }),
-                                        Direction::Send,
-                                        MessageStatus::Completed,
-                                    )
-                                    .await?
-                                    .message_order;
-                                yield Some(Response::Chat(ChatChunk::new(complete_message.clone(), id, step_id.to_owned())));
-                            }
+                                    // We have some chars but didn't create a message yet.
+                                    //  So create a message and send it.
+                                      let new_id = self
+                                        .add_message_to_memory(
+                                            step_id.to_owned(),
+                                            TypeSafePayload::Text(TextContent {
+                                                text: complete_message.clone()
+                                            }),
+                                            Direction::Send,
+                                            MessageStatus::Completed,
+                                        )
+                                        .await?
+                                        .message_order;
+                                    yield Some(Response::Chat(ChatChunk::new(complete_message.clone(), complete_audio.clone(), true, new_id,  step_id.to_owned())));
+                                }
                         }
                     }
                     if let Some(SaveTarget::Slot(slot_path)) = store {
@@ -301,6 +334,153 @@ impl LlmAgent {
             }
         })
     }
+
+    // fn handle_response<'a>(
+    //     &'a mut self,
+    //     response: LlmStepContent,
+    //     voice_mode: bool,
+    //     step_id: &'a str,
+    // ) -> Pin<Box<dyn Stream<Item = Result<Option<Response>, LlmExecutionError>> + 'a + Send>> {
+    //     Box::pin(try_stream! {
+    //             match response {
+    //             LlmStepContent::Skipped => {
+    //                 tracing::debug!("Skipped step");
+    //                 let mut current_action = self.current_action.as_ref().ok_or(LlmExecutionError::NoAction)?.lock().await;
+    //                 let state = current_action.set_status(LlmStepStatus::Completed);
+    //                 self.set_step_state(state).await?;
+    //                 yield None;
+    //             }
+    //             LlmStepContent::Combined(combined_steps) => {
+    //                 for step in combined_steps {
+    //                     let mut response = self.handle_response(step, voice_mode, step_id);
+    //                     while let Some(item) = response.next().await {
+    //                         yield item?;
+    //                     }
+    //                 }
+    //             }
+    //             LlmStepContent::Message{mut message, store} => {
+    //                 let mut complete_message = String::new(); // Initialize a complete message buffer
+    //                 let mut offset: usize = 0;
+    //                 // Init a new message in the database
+    //                 let mut id = None;
+    //                 // Create streaming content with the current message chunk
+    //                 while let Some(result) = message.next().await {
+    //                     match result {
+    //                         Ok(value) => {
+    //                             tracing::trace!(?value, "message chunk");
+    //                             let content = if let Content::Text(content) = &value.content {
+    //                                     Ok(content)
+    //                             } else {
+    //                                 Err(LlmExecutionError::UnexpectedResponseFormat)
+    //                             }?;
+    //                             complete_message.push_str(content.as_str());
+    //                             let usage = value.tokens.unwrap_or(0);
+    //                             tracing::trace!(?usage, "tokens used");
+    //                             add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
+
+    //                             if complete_message.len() > offset.saturating_add(BUFFER_SIZE) {
+    //                                 let payload = TypeSafePayload::Text(TextContent {
+    //                                     text: complete_message.clone(),
+    //                                 });
+    //                                 let id = match id {
+    //                                     None => {
+    //                                         // Only create a message, when we have something to send
+    //                                         let new_id = self
+    //                                             .add_message_to_memory(
+    //                                                 step_id.to_owned(),
+    //                                                 payload,
+    //                                                 Direction::Send,
+    //                                                 MessageStatus::Generating,
+    //                                             )
+    //                                             .await?
+    //                                             .message_order;
+    //                                         id = Some(new_id);
+    //                                         new_id
+    //                                     }
+    //                                     Some(id) => {
+    //                                         self.update_message(id, payload, Some(MessageStatus::Generating))
+    //                                             .await?;
+    //                                         id
+    //                                     }
+    //                                 };
+    //                                 yield Some(Response::Chat(ChatChunk::new(
+    //                                     complete_message[offset..].to_string(),
+    //                                     id,
+    //                                     step_id.to_owned(),
+    //                                 )));
+    //                                 offset = complete_message.len();
+    //                             }
+    //                         }
+    //                         Err(error) => {
+    //                             tracing::error!(error = &*error as &dyn Error, "error sending streaming message");
+    //                             self.set_error(step_id).await?;
+    //                             Err(error)?;
+    //                             return;
+    //                         }
+    //                     }
+    //                 }
+    //                 match id {
+    //                     Some(id) => {
+    //                         let chunk = complete_message[offset..].to_string();
+    //                         let payload = TypeSafePayload::Text(TextContent { text: complete_message.clone()});
+    //                         self.update_message(id, payload, Some(MessageStatus::Completed)).await?;
+    //                         if !chunk.is_empty() {
+    //                             yield Some(Response::Chat(ChatChunk::new(chunk, id, step_id.to_owned())));
+    //                         }
+    //                     }
+    //                     None => {
+    //                         if !complete_message.is_empty() {
+    //                             // We have some chars but didn't create a message yet.
+    //                             //  So create a message and send it.
+    //                             let id = self
+    //                                 .add_message_to_memory(
+    //                                     step_id.to_owned(),
+    //                                     TypeSafePayload::Text(TextContent {
+    //                                         text: complete_message.clone(),
+    //                                     }),
+    //                                     Direction::Send,
+    //                                     MessageStatus::Completed,
+    //                                 )
+    //                                 .await?
+    //                                 .message_order;
+    //                             yield Some(Response::Chat(ChatChunk::new(complete_message.clone(), id, step_id.to_owned())));
+    //                         }
+    //                     }
+    //                 }
+    //                 if let Some(SaveTarget::Slot(slot_path)) = store {
+    //                     let destination = slot_path.destination().clone();
+    //                     let slot = Slot {
+    //                         name: slot_path.name,
+    //                         value: Value::String(complete_message),
+    //                     };
+    //                     self.set_slot(slot, destination).await?;
+    //                 }
+    //                 self.set_finished(step_id).await?;
+    //             }
+    //             LlmStepContent::StepValue{values, next_step} => {
+    //                 for (target, value) in values {
+    //                     match target {
+    //                         SaveTarget::Slot(slot_path) => {
+    //                             let destination = slot_path.destination().clone();
+    //                             let slot = Slot {
+    //                                 name: slot_path.name,
+    //                                 value,
+    //                             };
+    //                             self.set_slot(slot, destination).await?;
+    //                         }
+    //                     }
+    //                 }
+    //                 self.set_finished(step_id).await?;
+
+    //                 if let Some(next_step) = next_step {
+    //                     self.goto(&next_step).await?;
+    //                 }
+
+    //                 yield None;
+    //             }
+    //         }
+    //     })
+    // }
 
     // Memory
     async fn add_message_to_memory(

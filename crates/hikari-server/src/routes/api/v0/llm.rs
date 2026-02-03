@@ -56,7 +56,7 @@ where
 
 type Documents = Vec<String>;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ResponseAction {
     SetFinished,
     Restart { chat_mode: ChatMode },
@@ -75,7 +75,7 @@ pub(crate) struct ConnectionInfo {
 #[derive(ToSchema, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub(crate) enum Request {
-    Chat(ChatRequest<Option<TypeSafePayload>>),
+    Chat(ChatRequest<TypeSafePayload>),
     ConnectionInfo(ConnectionInfo),
     Abort,
     Restart { chat_mode: ChatMode },
@@ -438,7 +438,7 @@ async fn handle_request(
             tracing::trace!("chat message received");
             let message = chat_message.payload;
             let voice_mode = chat_message.chat_mode.voice_mode;
-            generate_agent_response(llm_agent, sender, message.clone(), false, voice_mode).await
+            generate_agent_response(llm_agent, sender, Some(message.clone()), false, voice_mode).await
         }
         Request::ConnectionInfo(connection_info) => {
             tracing::trace!(
@@ -535,7 +535,7 @@ mod tests {
     #[test]
     fn test_response_serialization() {
         let id = 1;
-        let chat_chunk = Response::Chat(ChatChunk::new("...".to_owned(), id, "test".to_owned()));
+        let chat_chunk = Response::Chat(ChatChunk::new("...".to_owned(), vec![], false, id, "test".to_owned()));
         let serialized = serde_json::to_value(chat_chunk).unwrap();
         let expected = json!(
             {

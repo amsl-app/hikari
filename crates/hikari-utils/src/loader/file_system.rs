@@ -83,7 +83,13 @@ impl LoaderTrait for FileSystemLoader {
     }
 
     async fn store_file<P: AsRef<Path>>(&self, path: P, content: &[u8]) -> Result<(), LoadingError> {
-        todo!("Storing to local path")
+        let path = self.sub_path(path);
+        tracing::trace!(?path, "Storing file");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        fs::write(&path, content).await?;
+        Ok(())
     }
 
     async fn get_file_metadata<P: AsRef<Path>>(&self, path: P) -> Result<FileMetadata, LoadingError> {

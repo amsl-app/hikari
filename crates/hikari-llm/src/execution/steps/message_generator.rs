@@ -8,6 +8,7 @@ use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
+use hikari_core::openai::streaming::MessageStream;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
@@ -64,7 +65,7 @@ impl LlmStepTrait for MessageGenerator {
                 )
                 .await?;
             let content = LlmStepContent::Message {
-                message,
+                message: MessageStream::new(message),
                 store: self.store.clone(),
             };
             Ok(LlmStepResponse::new(content, None))

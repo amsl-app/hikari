@@ -1,6 +1,6 @@
 use crate::llm_config::LlmConfig;
 use crate::openai::error::{FunctionCallError, OpenAiError};
-use crate::openai::streaming::MessageStream;
+use crate::openai::streaming::BoxedStream;
 use crate::openai::tools::{Tool, ToolChoice};
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
@@ -219,7 +219,7 @@ fn check_function_call<T: FunctionResponse>(chat_completion: &CreateChatCompleti
 
 pub enum OpenAiCallResult {
     Message(Message),
-    Stream(MessageStream),
+    Stream(BoxedStream),
 }
 
 #[allow(clippy::too_many_arguments)]

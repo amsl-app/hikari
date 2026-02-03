@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use clap::{Parser, Subcommand};
-use hikari_utils::args::{llm::LlmServices, s3::S3Config};
+use hikari_utils::{args::llm::LlmServices, loader::s3::S3Config};
 use url::Url;
 
 #[derive(Debug, Parser)]

@@ -12,7 +12,7 @@ use crate::builder::{
 use async_openai::types::ChatCompletionRequestMessage;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::openai::{
-    CallConfig, Message, OpenAiCallResult, openai_call_with_timeout, streaming::MessageStream, tools::ToolChoice,
+    CallConfig, Message, OpenAiCallResult, openai_call_with_timeout, streaming::BoxedStream, tools::ToolChoice,
 };
 
 use hikari_core::llm_config::LlmConfig;
@@ -106,7 +106,7 @@ impl LlmCore {
         llm_service: LlmService,
         conn: DatabaseConnection,
         previous_response: Option<String>,
-    ) -> Result<MessageStream, LlmExecutionError> {
+    ) -> Result<BoxedStream, LlmExecutionError> {
         let (prompt, _) = self
             .inner(conversation_id, user_id, module_id, session_id, conn, previous_response)
             .await?;
