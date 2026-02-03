@@ -91,4 +91,4 @@ jobs:
           toolchain: ${{ env.RUST_VERSION }}
 
       - name: Run Tests
-        run: cargo test --workspace -F _dbtest
+        run: cargo test --workspace
