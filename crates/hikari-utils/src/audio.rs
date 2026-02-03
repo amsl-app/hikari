@@ -18,7 +18,7 @@ pub fn pcm16_to_wave(pcm_audio: &[u8], channels: u16, sample_rate: u32) -> Resul
 
     for sample in pcm_audio
         .chunks(2)
-        .map(|chunk| i16::from_le_bytes([chunk.get(0).copied().unwrap_or(0), chunk.get(1).copied().unwrap_or(0)]))
+        .map(|chunk| i16::from_le_bytes([chunk.first().copied().unwrap_or(0), chunk.get(1).copied().unwrap_or(0)]))
     {
         writer.write_sample(sample)?;
     }

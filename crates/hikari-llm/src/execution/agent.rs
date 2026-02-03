@@ -247,8 +247,8 @@ impl LlmAgent {
                                             }
                                         };
                                         let chunk = ChatChunk::new(
-                                            complete_message[message_offset..].to_string(),
-                                            complete_audio[audio_offset..].to_owned(),
+                                            complete_message.get(message_offset..).unwrap_or_default().to_string(),
+                                            complete_audio.get(audio_offset..).unwrap_or_default().to_owned(),
                                             false,
                                             id,
                                             step_id.to_owned(),
@@ -271,7 +271,7 @@ impl LlmAgent {
                     match id {
                         Some(id) => {
                             let message = complete_message[message_offset..].to_string();
-                            let audio = complete_audio[audio_offset..].to_owned();
+                            let audio = complete_audio.get(audio_offset..).unwrap_or_default().to_owned();
                             let payload = TypeSafePayload::Text(TextContent {
                                 text: complete_message.clone()
                             });

@@ -182,7 +182,7 @@ fn demoji(string: &str) -> String {
         "\u{0024C2}-\u{01F251}",
         "]+",
     ))
-    .unwrap();
+    .expect("Failed to compile emoji regex");
 
     let string = regex.replace_all(string, "").to_string();
 
