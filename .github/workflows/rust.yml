@@ -1,0 +1,107 @@
+name: Rust
+
+on:
+  push:
+    branches: ["main"]
+    tags-ignore: ["**"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.92.0
+  POSTGRES_DB: test_db
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: "totallysafepassword"
+  POSTGRES_HOST_AUTH_METHOD: trust
+  POSTGRES_URI: postgresql://postgres:totallysafepassword@localhost:5432/test_db
+  POSTGRESQL_URL: postgresql://postgres:totallysafepassword@localhost:5432/test_db
+  ENGINE_DB_TYPE: postgresql
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: csml-engine
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+
+      - name: Build Workspace
+        run: cargo build --workspace
+
+      - name: Build Tests
+        run: cargo build --tests --workspace
+
+  check:
+    name: Check (Clippy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: csml-engine
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+
+      - name: Run Clippy
+        run: cargo clippy --all -- -Dwarnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: csml-engine
+    env:
+      RUST_LOG: trace,tokio_postgres=info
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: "totallysafepassword"
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Run Tests
+        run: cargo test --workspace -F _dbtest
