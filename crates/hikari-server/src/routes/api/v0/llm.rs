@@ -69,6 +69,7 @@ pub(crate) enum ResponseAction {
 pub(crate) struct ConnectionInfo {
     pub history_needed: bool,
     pub current_sequence: u16,
+    #[serde(default)]
     pub chat_mode: ChatMode,
 }
 
@@ -78,7 +79,10 @@ pub(crate) enum Request {
     Chat(ChatRequest<TypeSafePayload>),
     ConnectionInfo(ConnectionInfo),
     Abort,
-    Restart { chat_mode: ChatMode },
+    Restart {
+        #[serde(default)]
+        chat_mode: ChatMode,
+    },
     ControllMessage,
 }
 
