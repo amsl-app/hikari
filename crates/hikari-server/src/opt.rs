@@ -74,7 +74,7 @@ pub(crate) struct Run {
     #[arg(long)]
     pub(crate) workers: Option<usize>,
 
-    #[arg(long, help = "The url were the csml files are stored")]
+    #[arg(long, help = "The url where the csml files are stored")]
     pub(crate) csml: Url,
 
     #[arg(short, long, help = "The url where module config file is stored")]
@@ -86,13 +86,13 @@ pub(crate) struct Run {
     #[arg(long, help = "The url where assessment config is stored")]
     pub(crate) assessment: Option<Url>,
 
-    #[arg(long, required = false, help = "The url were the structures are stored")]
+    #[arg(long, required = false, help = "The url where the structures are stored")]
     pub llm_structures: Url,
 
-    #[arg(long, required = false, help = "The url were the collections are stored")]
+    #[arg(long, required = false, help = "The url where the collections are stored")]
     pub llm_collections: Url,
 
-    #[arg(long, required = false, help = "The url were the constants are stored")]
+    #[arg(long, required = false, help = "The url where the constants are stored")]
     pub constants: Option<Url>,
 
     #[arg(long, help = "If set it is possible to delete a user and all his data")]

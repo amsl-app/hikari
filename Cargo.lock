@@ -2961,6 +2961,7 @@ dependencies = [
  "hikari-model-tools",
  "hikari-utils",
  "html-escape",
+ "lazy_static",
  "num-traits",
  "pdf-extract",
  "rand 0.9.2",

@@ -19,13 +19,13 @@ use url::Url;
 #[derive(Debug, Clone, Args)]
 #[allow(clippy::struct_field_names)]
 pub struct S3Config {
-    #[arg(long = "s3_endpoint", required = false)]
+    #[arg(long = "s3-endpoint", required = false)]
     pub endpoint: Url,
-    #[arg(long = "s3_region", required = false)]
+    #[arg(long = "s3-region", required = false)]
     pub region: String,
-    #[arg(long = "s3_access_key", required = false)]
+    #[arg(long = "s3-access_key", required = false)]
     pub access_key: String,
-    #[arg(long = "s3_secret_key", required = false)]
+    #[arg(long = "s3-secret_key", required = false)]
     pub secret_key: String,
 }
 

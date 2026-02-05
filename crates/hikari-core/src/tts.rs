@@ -171,8 +171,8 @@ pub fn message_stream_to_combined_stream_cached(
     })
 }
 
-fn demoji(string: &str) -> String {
-    let regex = Regex::new(concat!(
+lazy_static::lazy_static! {
+    static ref EMOJI_REGEX: Regex = Regex::new(concat!(
         "[",
         "\u{01F600}-\u{01F64F}",
         "\u{01F300}-\u{01F5FF}",
@@ -181,8 +181,11 @@ fn demoji(string: &str) -> String {
         "\u{002702}-\u{0027B0}",
         "\u{0024C2}-\u{01F251}",
         "]+",
-    ))
-    .expect("Failed to compile emoji regex");
+    )).expect("Failed to compile emoji regex");
+}
+
+fn demoji(string: &str) -> String {
+    let regex = &*EMOJI_REGEX;
 
     let string = regex.replace_all(string, "").to_string();
 
