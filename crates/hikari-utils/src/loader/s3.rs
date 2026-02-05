@@ -23,9 +23,9 @@ pub struct S3Config {
     pub endpoint: Url,
     #[arg(long = "s3-region", required = false)]
     pub region: String,
-    #[arg(long = "s3-access_key", required = false)]
+    #[arg(long = "s3-access-key", required = false)]
     pub access_key: String,
-    #[arg(long = "s3-secret_key", required = false)]
+    #[arg(long = "s3-secret-key", required = false)]
     pub secret_key: String,
 }
 

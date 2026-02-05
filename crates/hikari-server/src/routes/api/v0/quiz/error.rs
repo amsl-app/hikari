@@ -67,11 +67,9 @@ impl IntoResponse for QuizError {
                 format!("Session not found: {session_id}"),
             )
                 .into_response(),
-            QuizError::NoContentProvided => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "No content provided for question generation",
-            )
-                .into_response(),
+            QuizError::NoContentProvided => {
+                (StatusCode::BAD_REQUEST, "No content provided for question generation").into_response()
+            }
             QuizError::QuizError(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Quiz error: {e}")).into_response(),
             QuizError::SerializeError(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
