@@ -1,0 +1,28 @@
+{
+  "params": [
+    {
+      "title": {
+        "required": false,
+        "type": "String"
+      }
+    },
+    {
+      "placeholder": {
+        "required": false,
+        "type": "String"
+      }
+    },
+    {
+      "min": {
+        "required": false,
+        "type": "Number"
+      }
+    },
+    {
+      "max": {
+        "required": false,
+        "type": "Number"
+      }
+    }
+  ]
+}

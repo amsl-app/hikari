@@ -1,0 +1,107 @@
+services:
+  amsl-postgres:
+    image: ankane/pgvector
+    container_name: amsl-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./data/pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  hikari:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hikari
+    command:
+      - "hikari-server"
+      - "run"
+      - "--host=0.0.0.0"
+      - "--port=3030"
+      - "--oidc-issuer-url=${OIDC_ISSUER_URL}"
+      - "--aud=${AUD}"
+      - "--groups-claim=${GROUPS_CLAIM}"
+
+      - "--origins=${ORIGINS}"
+      - "--sentry-dsn=${SENTRY_DSN}"
+      - "--env=${ENV}"
+      - "--db-min-connections=${DB_MIN_CONNECTIONS}"
+      - "--db-max-connections=${DB_MAX_CONNECTIONS}"
+      - "--worker-url=${HIKARI_WORKER_URL}"
+
+      - "--openai-key=${OPENAI_KEY}"
+      - "--gwdg-key=${GWDG_KEY}"
+      - "--journaling-service=${JOURNALING_SERVICE}"
+      - "--journaling-model=${JOURNALING_MODEL}"
+      - "--embedding-service=${EMBEDDING_SERVICE}"
+      - "--embedding-model=${EMBEDDING_MODEL}"
+      - "--quiz-service=${QUIZ_SERVICE}"
+      - "--quiz-model=${QUIZ_MODEL}"
+
+      - "--s3-endpoint=${S3_ENDPOINT}"
+      - "--s3-region=${S3_REGION}"
+      - "--s3-access-key=${S3_ACCESS_KEY}"
+      - "--s3-secret-key=${S3_SECRET_KEY}"
+
+      - "--global-cfg=${GLOBAL_CFG_PATH}"
+      - "--config=${CONFIG_PATH}"
+      - "--assessment=${ASSESSMENT_PATH}"
+      - "--csml=${CSML_PATH}"
+      - "--llm-structures=${LLM_STRUCTURES_PATH}"
+      - "--llm-collections=${LLM_COLLECTIONS_PATH}"
+      - "--constants=${CONSTANTS_PATH}"
+    environment:
+      ENGINE_DB_TYPE: "postgresql"
+      POSTGRESQL_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+      RUST_LOG: "${RUST_LOG}"
+      RUST_BACKTRACE: ${RUST_BACKTRACE}
+      COMPONENTS_DIR: "/CSML/components"
+    ports:
+      - "3030:3030"
+    depends_on:
+      amsl-postgres:
+        condition: service_healthy
+  hikari-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hikari-worker
+    command:
+      - "hikari-worker"
+      - "run"
+      - "--host=0.0.0.0"
+      - "--port=3035"
+      - "--db-url=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+
+      - "--sentry-dsn=${WORKER_SENTRY_DSN}"
+      - "--env=${ENV}"
+      - "--db-min-connections=${DB_MIN_CONNECTIONS}"
+      - "--db-max-connections=${DB_MAX_CONNECTIONS}"
+
+      - "--openai-key=${OPENAI_KEY}"
+      - "--gwdg-key=${GWDG_KEY}"
+      - "--journaling-service=${JOURNALING_SERVICE}"
+      - "--journaling-model=${JOURNALING_MODEL}"
+
+      - "--s3-endpoint=${S3_ENDPOINT}"
+      - "--s3-region=${S3_REGION}"
+      - "--s3-access-key=${S3_ACCESS_KEY}"
+      - "--s3-secret-key=${S3_SECRET_KEY}"
+
+      - "--config=${GLOBAL_CFG_PATH}"
+
+    environment:
+      RUST_LOG: "${RUST_LOG}"
+      RUST_BACKTRACE: ${RUST_BACKTRACE}
+    ports:
+      - "3035:3035"
+    depends_on:
+      amsl-postgres:
+        condition: service_healthy
