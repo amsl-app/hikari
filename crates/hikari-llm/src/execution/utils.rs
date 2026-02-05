@@ -25,19 +25,6 @@ pub async fn get_memory(
     Ok(res)
 }
 
-pub async fn get_message(
-    conn: &DatabaseConnection,
-    conversation_id: &Uuid,
-    message_id: &i32,
-) -> Result<Option<ConversationMessage>, LlmExecutionError> {
-    let res: Option<ConversationMessage> =
-        hikari_db::llm::message::Query::get_message_from_id(conn, conversation_id, message_id)
-            .await?
-            .map(hikari_model_tools::convert::IntoModel::into_model);
-
-    Ok(res)
-}
-
 pub async fn get_slot(
     conn: &DatabaseConnection,
     conversation_id: &Uuid,
