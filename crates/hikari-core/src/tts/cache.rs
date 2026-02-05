@@ -58,7 +58,7 @@ pub(crate) async fn cache_speech(
             if path.is_some() {
                 return Ok(());
             }
-            let path = format!("{FOLDER}/{text_hash}.wav");
+            let path = format!("{FOLDER}/{text_hash}.bin");
             cache_loader.store_file(path.clone(), pcm_audio).await?;
             hikari_db::llm::tts::Mutation::insert_path(db, &text_hash, &path).await?;
         }

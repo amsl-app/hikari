@@ -382,4 +382,4 @@ CREATE TABLE tts_cache
     audio_path   TEXT
 );
 
-CREATE INDEX tts_cache_message_hash ON tts_cache (message_hash);--
+CREATE INDEX tts_cache_message_hash ON tts_cache (message_hash);

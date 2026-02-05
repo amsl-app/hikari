@@ -56,7 +56,7 @@ where
 
 type Documents = Vec<String>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ResponseAction {
     SetFinished,
     Restart { chat_mode: ChatMode },

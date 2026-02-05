@@ -42,7 +42,7 @@ pub(crate) fn attach_text_stream(mut message_stream: MessageStream) -> (BoxedStr
                             for word in words.iter().take(words.len() - 1) {
                                 let mut word = (*word).to_string();
                                 word.push(' ');
-                                tracing::debug!(sended = ?word,  "Send text to text stream");
+                                tracing::debug!(sent = ?word,  "Send text to text stream");
                                 send_to_stream(&text_tx, word.clone()).await;
                             }
                         }

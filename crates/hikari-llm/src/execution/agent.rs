@@ -223,6 +223,7 @@ impl LlmAgent {
                                     }
                                 }
 
+                                // TODO: Consider if AND condition would make more sense
                                 if complete_message.len() > message_offset.saturating_add(BUFFER_SIZE) || complete_audio.len() > audio_offset.saturating_add(AUDIO_CHUNK_SIZE) {
                                         let payload = TypeSafePayload::Text(TextContent{ text: complete_message.clone()});
                                         let id = match id {

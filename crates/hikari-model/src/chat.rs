@@ -248,7 +248,7 @@ pub struct Request {
     pub metadata: Option<RequestMetadata>,
 }
 
-#[derive(ToSchema, Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Default)]
+#[derive(ToSchema, Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct ChatMode {
     #[serde(default)]
