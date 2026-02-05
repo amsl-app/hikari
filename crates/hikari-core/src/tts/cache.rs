@@ -20,8 +20,8 @@ pub(crate) async fn get_speech(
     match &config.cache_config {
         Some(cache_config) => {
             let text_hash = hash_string(text);
-            let cache_loader_handler = LoaderHandler::new(Some(cache_config.clone()));
-            let cache_url = Url::parse("s3://amsl-audio")?;
+            let cache_loader_handler = LoaderHandler::new(Some(cache_config.s3_config.clone()));
+            let cache_url = Url::parse(&cache_config.bucket)?;
             let cache_loader = cache_loader_handler.loader(&cache_url)?;
 
             let cache = hikari_db::llm::tts::Query::get_path(db, &text_hash).await?;
@@ -51,8 +51,8 @@ pub(crate) async fn cache_speech(
 
     match &config.cache_config {
         Some(cache_config) => {
-            let cache_loader_handler = LoaderHandler::new(Some(cache_config.clone()));
-            let cache_url = Url::parse("s3://amsl-audio")?;
+            let cache_loader_handler = LoaderHandler::new(Some(cache_config.s3_config.clone()));
+            let cache_url = Url::parse(&cache_config.bucket)?;
             let cache_loader = cache_loader_handler.loader(&cache_url)?;
             let path = hikari_db::llm::tts::Query::get_path(db, &text_hash).await?;
             if path.is_some() {
