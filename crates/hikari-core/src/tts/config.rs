@@ -30,13 +30,13 @@ pub struct CacheConfig {
 impl From<TTSCacheConfig> for CacheConfig {
     fn from(value: TTSCacheConfig) -> Self {
         let s3 = S3Config {
-            endpoint: value.endpoint,
-            region: value.region,
-            access_key: value.access_key,
-            secret_key: value.secret_key,
+            endpoint: value.cache_endpoint,
+            region: value.cache_region,
+            access_key: value.cache_access_key,
+            secret_key: value.cache_secret_key,
         };
         CacheConfig {
-            bucket: value.bucket,
+            bucket: value.cache_bucket,
             s3_config: s3,
         }
     }
