@@ -67,6 +67,8 @@ services:
       RUST_BACKTRACE: ${RUST_BACKTRACE}
       COMPONENTS_DIR: "/CSML/components"
     volumes:
+      # When using local config files, make sure the configs are attachted as volumes
+      # - "./configs:/configs"
       - ./CSML:/CSML
     ports:
       - "3030:3030"
@@ -105,6 +107,9 @@ services:
     environment:
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
+    # When using local config files, make sure the configs are attachted as volumes
+    # volumes:
+    #   - "./configs:/configs"
     ports:
       - "3035:3035"
     depends_on:
