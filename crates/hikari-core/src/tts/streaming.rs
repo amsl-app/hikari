@@ -24,7 +24,7 @@ pub(crate) fn attach_text_stream(mut message_stream: MessageStream) -> (BoxedStr
 
     let local_message_stream: BoxedStream = Box::pin(stream! {
         let mut buffer = String::new();
-        while let Some(data) = message_stream.next().await {
+        while let Some(data) = message_stream.0.next().await {
             if let Ok(message) = data {
                 match &message.content {
                     Content::Text(text) => {

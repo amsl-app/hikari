@@ -189,7 +189,7 @@ impl LlmAgent {
                             message_stream_to_combined_stream_cached(message, Arc::new(self.conn.clone()), Arc::new(tts_config.clone()))
                         } else {
                             Box::pin(try_stream! {
-                                while let Some(data) = message.next().await {
+                                while let Some(data) = message.0.next().await {
                                     let data = data?;
                                     yield CombinedStreamItem::Message(data);
                                 }
