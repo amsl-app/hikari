@@ -1,0 +1,42 @@
+{
+  "params": [
+    {
+      "title": {
+        "required": false,
+        "type": "String"
+      }
+    },
+    {
+      "placeholder": {
+        "required": false,
+        "type": "String"
+      }
+    },
+    {
+      "step": {
+        "default": 60,
+        "required": false,
+        "type": "Number"
+      }
+    },
+    {
+      "default": {
+        "required": false,
+        "type": "Number"
+      }
+    },
+    {
+      "min": {
+        "default": 0,
+        "required": false,
+        "type": "Number"
+      }
+    },
+    {
+      "max": {
+        "required": false,
+        "type": "Number"
+      }
+    }
+  ]
+}

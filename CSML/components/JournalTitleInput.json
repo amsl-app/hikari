@@ -1,0 +1,10 @@
+{
+  "params": [
+    {
+      "prompt": {
+        "required": false,
+        "type": "String"
+      }
+    }
+  ]
+}
