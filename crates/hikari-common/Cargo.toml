@@ -18,7 +18,7 @@ serde_json = "1.0.145"
 thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
-uuid = {version = "1.18.1", features = ["v4", "fast-rng", "macro-diagnostics"]}
+uuid = {version = "1.20.0", features = ["v4", "fast-rng", "macro-diagnostics"]}
 
 [dev-dependencies]
 tracing-subscriber = "0.3.20"
