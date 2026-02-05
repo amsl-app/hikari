@@ -45,6 +45,14 @@ services:
       - "--quiz-service=${QUIZ_SERVICE}"
       - "--quiz-model=${QUIZ_MODEL}"
 
+      - "--elevenlabs-key=${ELEVENLABS_KEY}"
+      - "--elevenlabs-voice=${ELEVENLABS_VOICE_ID}"
+      - "--elevenlabs-model=${ELEVENLABS_MODEL}"
+      - "--caching-s3-endpoint=${CACHING_S3_ENDPOINT}"
+      - "--caching-s3-region=${CACHING_S3_REGION}"
+      - "--caching-s3-access-key=${CACHING_S3_ACCESS_KEY}"
+      - "--caching-s3-secret-key=${CACHING_S3_SECRET_KEY}"
+
       - "--s3-endpoint=${S3_ENDPOINT}"
       - "--s3-region=${S3_REGION}"
       - "--s3-access-key=${S3_ACCESS_KEY}"
