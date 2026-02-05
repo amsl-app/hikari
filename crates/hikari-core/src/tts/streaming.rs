@@ -1,7 +1,7 @@
 use crate::openai::streaming::{BoxedStream, MessageStream};
 use crate::openai::{Content, Message};
 use crate::tts::error::{CombinedError, TTSError};
-use crate::tts::{demoji, send_to_stream};
+use crate::tts::{prepare_text_for_voice, send_to_stream};
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
@@ -28,7 +28,7 @@ pub(crate) fn attach_text_stream(mut message_stream: MessageStream) -> (BoxedStr
             if let Ok(message) = data {
                 match &message.content {
                     Content::Text(text) => {
-                        let text = demoji(text);
+                        let text = prepare_text_for_voice(text);
                         buffer.push_str(&text);
                         let add_white_space = buffer.ends_with(' ');
                         tracing::debug!(?buffer, "Received message in text stream");

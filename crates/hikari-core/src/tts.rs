@@ -38,7 +38,7 @@ pub fn text_to_speech_stream(
     config: Arc<TTSConfig>,
 ) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, TTSError>> + Send>> {
     tracing::debug!("Converting text to speech");
-    let text = demoji(text);
+    let text = prepare_text_for_voice(text);
     Box::pin(try_stream! {
         let cached = get_speech(db.as_ref(), config.as_ref(), &text).await?;
 
@@ -172,24 +172,23 @@ pub fn message_stream_to_combined_stream_cached(
 }
 
 lazy_static::lazy_static! {
-    static ref EMOJI_REGEX: Regex = Regex::new(concat!(
-        "[",
-        "\u{01F600}-\u{01F64F}",
-        "\u{01F300}-\u{01F5FF}",
-        "\u{01F680}-\u{01F6FF}",
-        "\u{01F1E0}-\u{01F1FF}",
-        "\u{002702}-\u{0027B0}",
-        "\u{0024C2}-\u{01F251}",
-        "]+",
-    )).expect("Failed to compile emoji regex");
+    static ref EMOJI_REGEX: Regex = Regex::new(r"\p{Extended_Pictographic}").expect("Failed to compile emoji regex");
 }
 
 fn demoji(string: &str) -> String {
     let regex = &*EMOJI_REGEX;
+    regex.replace_all(string, "").to_string()
+}
 
-    let string = regex.replace_all(string, "").to_string();
-
+fn decode_html(string: &str) -> String {
     html_escape::decode_html_entities(&string).to_string()
+}
+
+fn prepare_text_for_voice(string: &str) -> String {
+    let formatted = demoji(string);
+    let formatted = decode_html(&formatted);
+    tracing::debug!(input = ?string, formatted, "prepared text for voice");
+    formatted
 }
 
 #[cfg(test)]
