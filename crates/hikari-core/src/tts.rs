@@ -8,7 +8,6 @@ use sea_orm::DatabaseConnection;
 use std::convert::Into;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::openai::Content;
@@ -88,53 +87,81 @@ fn text_stream_to_speech_stream(
 fn message_stream_to_combined_stream(message_stream: MessageStream, config: Arc<TTSConfig>) -> CombinedStream {
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<CombinedStreamItem, CombinedError>>(10);
     let (mut message_stream, text_stream) = attach_text_stream(message_stream);
-    let text_sender = sender.clone();
-    tokio::spawn(async move {
+    let message_sender_clone = sender.clone();
+    let audio_sender_clone = sender.clone();
+    let panic_sender_clone = sender.clone();
+
+    let message_task_handle = tokio::spawn(async move {
         while let Some(message) = message_stream.next().await {
-            match message {
-                Ok(message) => {
-                    tracing::debug!("Send message to combined stream");
-                    send_to_stream(&text_sender, Ok(CombinedStreamItem::Message(message))).await;
-                }
-                Err(err) => {
-                    tracing::error!(?err, "Failed to get message from message stream");
-                    send_to_stream(&text_sender, Err(err.into())).await;
-                }
+            let message_result = message
+                .map(CombinedStreamItem::Message)
+                .map_err(CombinedError::OpenAIStream);
+
+            let message_has_error = message_result.is_err();
+
+            let sent_result = message_sender_clone
+                .send(message_result)
+                .await
+                .inspect_err(|_| tracing::error!("Failed sending message to combined stream"));
+
+            if message_has_error || sent_result.is_err() {
+                break;
             }
         }
-        tracing::debug!("Text stream finished");
+        tracing::debug!("Message stream finished");
     });
 
-    tokio::spawn(async move {
+    let audio_task_handle = tokio::spawn(async move {
         let mut audio_stream = text_stream_to_speech_stream(text_stream, config);
         while let Some(audio) = audio_stream.next().await {
-            match audio {
-                Ok(audio) => {
-                    tracing::debug!("Send audio to combined stream");
-                    send_to_stream(&sender, Ok(CombinedStreamItem::Audio(audio))).await;
-                }
-                Err(err) => {
-                    tracing::error!(?err, "Failed to get audio from audio stream");
-                    send_to_stream(&sender, Err(err.into())).await;
-                }
+            let audio_result = audio.map(CombinedStreamItem::Audio).map_err(CombinedError::TTS);
+
+            let audio_has_error = audio_result.is_err();
+
+            let sent_result = audio_sender_clone
+                .send(audio_result)
+                .await
+                .inspect_err(|_| tracing::error!("Failed sending audio to combined stream"));
+
+            if audio_has_error || sent_result.is_err() {
+                break;
             }
         }
         tracing::debug!("Audio stream finished");
     });
 
-    Box::pin(ReceiverStream::new(receiver))
-}
+    tokio::spawn(async move {
+        let (message_task_result, audio_task_result) = tokio::join!(message_task_handle, audio_task_handle);
 
-async fn send_to_stream<T>(stream: &Sender<T>, item: T)
-where
-    T: std::fmt::Debug,
-{
-    match stream.send(item).await {
-        Ok(()) => {}
-        Err(err) => {
-            tracing::error!(?err, "Failed to send item to stream");
+        if let Err(join_error) = message_task_result {
+            tracing::error!(?join_error, "Message task panicked");
+
+            let _ = panic_sender_clone
+                .send(Err(join_error.into()))
+                .await
+                .inspect_err(|error| {
+                    tracing::error!(
+                        error = error as &dyn std::error::Error,
+                        "failed to send panic error to stream"
+                    )
+                });
         }
-    }
+
+        if let Err(join_error) = audio_task_result {
+            tracing::error!(?join_error, "Audio task panicked");
+            let _ = panic_sender_clone
+                .send(Err(join_error.into()))
+                .await
+                .inspect_err(|error| {
+                    tracing::error!(
+                        error = error as &dyn std::error::Error,
+                        "failed to send panic error to stream"
+                    )
+                });
+        }
+    });
+
+    Box::pin(ReceiverStream::new(receiver))
 }
 
 #[must_use]

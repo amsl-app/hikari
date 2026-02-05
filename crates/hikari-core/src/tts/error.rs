@@ -13,8 +13,6 @@ pub enum TTSError {
     InvalidPath(#[from] url::ParseError),
     #[error("Undefined Elevenlabs error: {0}")]
     Undefined(#[from] Box<dyn Error + Send + Sync>),
-    // #[error(transparent)]
-    // AudioConvert(#[from] hikari_utils::audio::error::AudioError),
 }
 
 #[derive(Error, Debug)]
@@ -23,4 +21,6 @@ pub enum CombinedError {
     TTS(#[from] TTSError),
     #[error(transparent)]
     OpenAIStream(#[from] crate::openai::error::StreamingError),
+    #[error(transparent)]
+    TokioJoin(#[from] tokio::task::JoinError),
 }
