@@ -5,8 +5,6 @@ use crate::execution::error::LlmExecutionError;
 use futures_util::future::try_join4;
 use hikari_model::llm::message::ConversationMessage;
 use hikari_model::llm::slot::Slot;
-
-use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingQueryResult;
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 

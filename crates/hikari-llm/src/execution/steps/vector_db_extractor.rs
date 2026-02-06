@@ -139,7 +139,7 @@ impl LlmStepTrait for VectorDBExtractor {
 
             let content: String = context
                 .iter()
-                .map(|e| format!("**Source: {}**\n{}", e.source.to_string(), e.content))
+                .map(|e| format!("**Source: {}**\n{}", e.source, e.content))
                 .collect::<Vec<_>>()
                 .join("\n\n");
 
