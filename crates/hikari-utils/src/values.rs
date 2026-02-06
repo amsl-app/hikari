@@ -46,9 +46,9 @@ pub trait ValueDecoder {
 impl ValueDecoder for Value {
     fn decode(str: &str) -> Value {
         // FIX: Sometimes the value cannot be parsed and panics (e.g. bad indentation or incomplete structure)
-        if let Ok(parsed) =
-            panic::catch_unwind(|| serde_yml::from_str(str).unwrap_or_else(|_| panic!("failed to decode value: {}", str)))
-        {
+        if let Ok(parsed) = panic::catch_unwind(|| {
+            serde_yml::from_str(str).unwrap_or_else(|_| panic!("failed to decode value: {}", str))
+        }) {
             parsed
         } else {
             Value::String(str.to_string())
