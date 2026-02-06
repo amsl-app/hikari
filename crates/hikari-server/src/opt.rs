@@ -2,8 +2,9 @@ use std::net::IpAddr;
 
 use crate::data::opt::{NamedOptionalValue, NamedOptionalValueParser};
 use clap::{Args, Parser, Subcommand};
+
 use hikari_utils::{
-    args::{llm::LlmServices, tts::TTSConfig},
+    args::{cache::CacheConfig, llm::LlmServices, tts::TTSConfig},
     loader::s3::S3Config,
 };
 use url::Url;
@@ -68,8 +69,12 @@ pub(crate) struct Run {
 
     #[command(flatten)]
     pub(crate) s3: Option<S3Config>,
+
     #[command(flatten)]
     pub(crate) tts: Option<TTSConfig>,
+
+    #[command(flatten)]
+    pub(crate) cache: Option<CacheConfig>,
 
     #[arg(long)]
     pub(crate) workers: Option<usize>,

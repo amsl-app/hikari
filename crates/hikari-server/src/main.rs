@@ -176,7 +176,7 @@ async fn run(opt: Run) -> Result<()> {
     let seaorm_pool_options = build_connect_options(&opt.db, db_url);
     let seaorm_pool = Database::connect(seaorm_pool_options).await?;
     let s3_config: Option<S3Config> = opt.s3;
-    let tts_config: Option<TTSConfig> = opt.tts.map(Into::into);
+    let tts_config: Option<TTSConfig> = opt.tts.map(|t| (t, opt.cache).into());
     let loader_handler = LoaderHandler::new(s3_config);
     let llm_config: LlmConfig = opt.llm_services.into();
     let llm_rag_documents_path = opt.llm_collections;

@@ -372,7 +372,7 @@ fn convert_message(message: Result<WsMessage, axum::Error>) -> Result<Request, L
             // We just close the connection if we receive a binary message because we don't
             // expect any binary messages
             tracing::error!("received unexpected binary message");
-            return Err(LlmError::RequestError("unexpected binary message".to_string()));
+            Err(LlmError::RequestError("unexpected binary message".to_string()))
         }
         WsMessage::Close(_) | WsMessage::Ping(_) | WsMessage::Pong(_) => Ok(Request::ControllMessage),
     }
