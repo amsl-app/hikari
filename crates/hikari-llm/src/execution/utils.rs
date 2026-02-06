@@ -180,7 +180,7 @@ pub async fn add_usage(
     tokens: u32,
     step: String,
 ) -> Result<(), LlmExecutionError> {
-    tracing::info!(?tokens, "Tokens used");
+    tracing::debug!(?tokens, "Tokens used");
     hikari_db::llm::usage::Mutation::add_usage(conn, user_id, tokens, step).await?;
     Ok(())
 }

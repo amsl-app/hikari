@@ -366,7 +366,7 @@ fn convert_message(message: Result<WsMessage, axum::Error>) -> Result<Request, L
             return Ok(Request::ControllMessage);
         }
         WsMessage::Ping(_) | WsMessage::Pong(_) => {
-            tracing::info!("received control message");
+            tracing::debug!("received control message");
             return Ok(Request::ControllMessage);
         }
     };
