@@ -184,11 +184,3 @@ pub async fn add_usage(
     hikari_db::llm::usage::Mutation::add_usage(conn, user_id, tokens, step).await?;
     Ok(())
 }
-
-#[must_use]
-pub fn format_content_and_sources(context: Vec<LlmEmbeddingQueryResult>) -> Vec<String> {
-    context
-        .into_iter()
-        .map(|c| format!("{} ({})", c.content, c.source))
-        .collect()
-}
