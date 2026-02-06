@@ -95,7 +95,12 @@ impl LlmAgent {
         history_needed: bool,
         voice_mode: bool,
     ) -> Pin<Box<dyn Stream<Item = Result<Response, LlmExecutionError>> + '_ + Send>> {
-        tracing::debug!("starting chat with LLM agent");
+        tracing::info!(
+            conversation_id = %self.conversation_id,
+            history_needed = %history_needed,
+            voice_mode = %voice_mode,
+            "Chat with LLM agent"
+        );
         Box::pin(try_stream! {
                 if history_needed {
                     let messages = get_memory(&self.conn, &self.conversation_id, None, None).await?;
