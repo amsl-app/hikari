@@ -363,26 +363,19 @@ fn convert_message(message: Result<WsMessage, axum::Error>) -> Result<Request, L
             return Err(LlmError::ReceiveError(error));
         }
     };
-    let message = match message {
-        WsMessage::Text(message) => message,
+    match message {
+        WsMessage::Text(message) => {
+            let message = serde_json::from_str(&message)?;
+            Ok(message)
+        }
         WsMessage::Binary(_) => {
             // We just close the connection if we receive a binary message because we don't
             // expect any binary messages
             tracing::error!("received unexpected binary message");
             return Err(LlmError::RequestError("unexpected binary message".to_string()));
         }
-        WsMessage::Close(close) => {
-            tracing::info!(?close, "received close message");
-            // The library handles control messages
-            return Ok(Request::ControllMessage);
-        }
-        WsMessage::Ping(_) | WsMessage::Pong(_) => {
-            tracing::debug!("received control message");
-            return Ok(Request::ControllMessage);
-        }
-    };
-    let message = serde_json::from_str(&message)?;
-    Ok(message)
+        WsMessage::Close(_) | WsMessage::Ping(_) | WsMessage::Pong(_) => Ok(Request::ControllMessage),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -434,19 +427,21 @@ async fn handle_request(
     sender: &mut SplitSink<WebSocket, WsMessage>,
     request: Request,
 ) -> Result<ResponseAction, LlmError> {
-    tracing::debug!(request = ?request, "received request");
     // TODO we currently block the websocket connection until the message is processed
     // TODO consider moving the processing to a separate task
     match request {
         Request::Chat(chat_message) => {
-            tracing::trace!("chat message received");
+            tracing::trace!(
+                chat_message = ?chat_message,
+                "chat message received"
+            );
             let message = chat_message.payload;
             let voice_mode = chat_message.chat_mode.voice_mode;
             generate_agent_response(llm_agent, sender, Some(message.clone()), false, voice_mode).await
         }
         Request::ConnectionInfo(connection_info) => {
             tracing::trace!(
-                current_sequence = connection_info.current_sequence,
+                connection_info = ?connection_info,
                 "connection info received"
             );
             send_connection_info(
@@ -465,7 +460,10 @@ async fn handle_request(
             tracing::trace!("restart message received");
             Ok(ResponseAction::Restart { chat_mode })
         }
-        Request::ControllMessage => Ok(ResponseAction::Nothing),
+        Request::ControllMessage => {
+            tracing::trace!("control message received");
+            Ok(ResponseAction::Nothing)
+        }
     }
 }
 
