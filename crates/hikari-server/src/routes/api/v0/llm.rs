@@ -431,7 +431,7 @@ async fn handle_request(
     // TODO consider moving the processing to a separate task
     match request {
         Request::Chat(chat_message) => {
-            tracing::trace!(
+            tracing::debug!(
                 chat_message = ?chat_message,
                 "chat message received"
             );
@@ -440,7 +440,7 @@ async fn handle_request(
             generate_agent_response(llm_agent, sender, Some(message.clone()), false, voice_mode).await
         }
         Request::ConnectionInfo(connection_info) => {
-            tracing::trace!(
+            tracing::debug!(
                 connection_info = ?connection_info,
                 "connection info received"
             );
@@ -453,11 +453,11 @@ async fn handle_request(
             .await
         }
         Request::Abort => {
-            tracing::trace!("abort message received");
+            tracing::debug!("abort message received");
             Ok(ResponseAction::Abort)
         }
         Request::Restart { chat_mode } => {
-            tracing::trace!("restart message received");
+            tracing::debug!("restart message received");
             Ok(ResponseAction::Restart { chat_mode })
         }
         Request::ControllMessage => {
