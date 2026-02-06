@@ -3,11 +3,7 @@ use crate::{
         slot::{SaveTarget, paths::SlotPath},
         steps::Condition,
     },
-    execution::{
-        error::LlmExecutionError,
-        steps::LlmStepContent,
-        utils::{format_content_and_sources, get_slot},
-    },
+    execution::{error::LlmExecutionError, steps::LlmStepContent, utils::get_slot},
 };
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
@@ -141,15 +137,18 @@ impl LlmStepTrait for VectorDBExtractor {
 
             tracing::trace!(?context, "retriever context");
 
-            let content = format_content_and_sources(context.into_iter().collect());
-            let formatted_content = content.join("\n---\n");
+            let content: String = context
+                .iter()
+                .map(|e| format!("**Source: {}**\n{}", e.source.to_string(), e.content))
+                .collect::<Vec<_>>()
+                .join("\n\n");
 
-            tracing::trace!(content = formatted_content, "formatted content and sources");
+            tracing::trace!(content, "formatted content and sources");
 
             let mut values = HashMap::new();
 
             if !content.is_empty() {
-                values.insert(self.target.clone(), formatted_content.into());
+                values.insert(self.target.clone(), content.into());
             }
 
             tracing::debug!("Retriever Values: {:?}", values);

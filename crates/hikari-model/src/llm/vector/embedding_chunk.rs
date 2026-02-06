@@ -56,6 +56,6 @@ impl Display for Source {
             }
         }
 
-        write!(f, "{name}{page_string}")
+        write!(f, "({}{})[{}]", name, page_string, self.link)
     }
 }
