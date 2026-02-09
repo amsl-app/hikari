@@ -1,8 +1,8 @@
-use rand::RngExt;
 use hikari_entity::{
     user_handle,
     user_handle::{Entity, Model},
 };
+use rand::RngExt;
 
 use crate::util::FlattenTransactionResultExt;
 use sea_orm::prelude::*;
