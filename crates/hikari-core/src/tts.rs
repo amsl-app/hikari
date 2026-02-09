@@ -8,6 +8,7 @@ use sea_orm::DatabaseConnection;
 use std::convert::Into;
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio::task::JoinError;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::openai::Content;
@@ -133,32 +134,23 @@ fn message_stream_to_combined_stream(message_stream: MessageStream, config: Arc<
     tokio::spawn(async move {
         let (message_task_result, audio_task_result) = tokio::join!(message_task_handle, audio_task_handle);
 
-        if let Err(join_error) = message_task_result {
-            tracing::error!(?join_error, "Message task panicked");
+        let send_panic = async move |kind, task: Result<_, JoinError>| {
+            if let Err(join_error) = task {
+                tracing::error!(?join_error, "{kind} task panicked");
 
-            let _ = panic_sender_clone
-                .send(Err(join_error.into()))
-                .await
-                .inspect_err(|error| {
-                    tracing::error!(
-                        error = error as &dyn std::error::Error,
-                        "failed to send panic error to stream"
-                    )
-                });
-        }
-
-        if let Err(join_error) = audio_task_result {
-            tracing::error!(?join_error, "Audio task panicked");
-            let _ = panic_sender_clone
-                .send(Err(join_error.into()))
-                .await
-                .inspect_err(|error| {
-                    tracing::error!(
-                        error = error as &dyn std::error::Error,
-                        "failed to send panic error to stream"
-                    )
-                });
-        }
+                let _ = panic_sender_clone
+                    .send(Err(join_error.into()))
+                    .await
+                    .inspect_err(|error| {
+                        tracing::error!(
+                            error = error as &dyn std::error::Error,
+                            "failed to send panic error to stream"
+                        )
+                    });
+            }
+        };
+        send_panic("message", message_task_result).await;
+        send_panic("audio", audio_task_result).await;
     });
 
     Box::pin(ReceiverStream::new(receiver))
