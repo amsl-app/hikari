@@ -28,8 +28,10 @@ impl PostgresqlDb {
     pub async fn new() -> Result<Self, PgError> {
         let postgres_db = std::env::var("POSTGRES_URI");
         let db = if let Ok(postgres_db) = postgres_db {
+            tracing::info!("using postgres db from env var");
             Self::new_native(postgres_db)
         } else {
+            tracing::info!("using embedded postgres db");
             Self::new_embedded().await?
         };
         Ok(db)

@@ -92,3 +92,9 @@ jobs:
 
       - name: Run Tests
         run: cargo test --workspace
+
+      # Rerun the tests to make sure they work with the local postgres instance
+      - name: Run Local Tests
+        run: |
+          unset POSTGRES_URI
+          cargo test -p hikari-server
