@@ -56,7 +56,7 @@ impl PostgresqlDb {
 
         let pg_settings = Settings {
             releases_url: postgresql_archive::configuration::theseus::URL.to_string(),
-            version: VersionReq::default(),
+            version: VersionReq::parse("~16.11.0")?,
             installation_dir,
             password_file,
             data_dir,
@@ -72,6 +72,15 @@ impl PostgresqlDb {
         let mut pg = PostgreSQL::new(pg_settings);
         tracing::info!("setting up db");
         pg.setup().await?;
+
+        postgresql_extensions::install(
+            pg.settings(),
+            "portal-corp",
+            "pgvector_compiled",
+            &VersionReq::default(),
+        )
+        .await
+        .unwrap();
 
         Ok(pg)
     }
