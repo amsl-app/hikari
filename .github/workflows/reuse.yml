@@ -1,0 +1,19 @@
+name: reuse.yml
+on:
+  push:
+    branches: [ "main" ]
+    tags-ignore: [ "**" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Reuse lint
+        uses: fsfe/reuse-action@v6
