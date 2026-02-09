@@ -25,16 +25,16 @@ pub enum PgError {
 }
 
 impl PostgresqlDb {
-    pub async fn new() -> Result<Self, PgError> {
+    pub async fn new() -> Self {
         let postgres_db = std::env::var("POSTGRES_URI");
-        let db = if let Ok(postgres_db) = postgres_db {
+
+        if let Ok(postgres_db) = postgres_db {
             tracing::info!("using postgres db from env var");
             Self::new_native(postgres_db)
         } else {
             tracing::info!("using embedded postgres db");
-            Self::new_embedded().await?
-        };
-        Ok(db)
+            Self::new_embedded().await
+        }
     }
 
     #[must_use]
@@ -42,23 +42,27 @@ impl PostgresqlDb {
         Self::Native(db_uri)
     }
 
-    pub async fn new_embedded() -> Result<Self, PgError> {
-        let temp_dir = TempDir::with_prefix("test-pg-db")?;
+    pub async fn new_embedded() -> Self {
+        let database_dir = TempDir::with_prefix("test-pg-db").unwrap();
+        let pg = Self::start_db(database_dir.path().to_path_buf()).await;
 
-        let pg = Self::start_db(temp_dir.path().to_path_buf()).await?;
-
-        Ok(Self::Embedded(Box::new(pg), temp_dir))
+        Self::Embedded(Box::new(pg), database_dir)
     }
 
-    async fn setup_db(database_dir: PathBuf) -> Result<PostgreSQL, Error> {
-        let installation_dir = database_dir.join("installation");
+    async fn setup_db(database_dir: PathBuf) -> PostgreSQL {
+        let installation_dir = tempfile::env::temp_dir().join("test-pg-installation");
+        match std::fs::create_dir(&installation_dir) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => panic!("failed to create installation dir: {}", e),
+        };
         let data_dir = database_dir.join("data");
         let password_file = database_dir.join(".pgpass");
         let configuration = HashMap::default();
 
         let pg_settings = Settings {
             releases_url: postgresql_archive::configuration::theseus::URL.to_string(),
-            version: VersionReq::parse("=16.11.0")?,
+            version: VersionReq::parse("=16.11.0").unwrap(),
             installation_dir,
             password_file,
             data_dir,
@@ -73,7 +77,7 @@ impl PostgresqlDb {
         };
         let mut pg = PostgreSQL::new(pg_settings);
         tracing::info!("setting up db");
-        pg.setup().await?;
+        pg.setup().await.unwrap();
 
         postgresql_extensions::install(
             pg.settings(),
@@ -84,28 +88,28 @@ impl PostgresqlDb {
         .await
         .unwrap();
 
-        Ok(pg)
+        pg
     }
 
-    async fn start_db(database_dir: PathBuf) -> Result<PostgreSQL, Error> {
+    async fn start_db(database_dir: PathBuf) -> PostgreSQL {
         const MAX_TRIES: u32 = 5;
         let mut retry = 0;
         loop {
             let port = {
-                let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
-                listener.into_std()?.local_addr()?.port()
+                let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+                listener.into_std().unwrap().local_addr().unwrap().port()
             };
 
             tracing::info!(retry, port, "staring db");
-            let mut pg = Self::setup_db(database_dir.clone()).await?;
+            let mut pg = Self::setup_db(database_dir.clone()).await;
 
             let res = pg.start().await;
             match res {
-                Ok(()) => return Ok(pg),
+                Ok(()) => return pg,
                 Err(error) => {
                     retry += 1;
                     if retry >= MAX_TRIES {
-                        return Err(error);
+                        panic!("{:?}", error);
                     }
                 }
             }
@@ -130,7 +134,7 @@ mod tests {
     #[test(tokio::test)]
     async fn test_start_stop() {
         tracing::info!("starting db");
-        let db = PostgresqlDb::new().await.unwrap();
+        let db = PostgresqlDb::new().await;
         tracing::info!("stopping db");
         drop(db);
         tracing::info!("stopped db");

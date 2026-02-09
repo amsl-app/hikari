@@ -42,7 +42,7 @@ impl Drop for Db {
 
 async fn setup_db(run_migrations: bool) -> Db {
     let db = Db {
-        pg: PostgresqlDb::new().await.unwrap(),
+        pg: PostgresqlDb::new().await,
     };
 
     let db_uri = db.db_uri();
