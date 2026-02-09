@@ -58,7 +58,7 @@ impl PostgresqlDb {
 
         let pg_settings = Settings {
             releases_url: postgresql_archive::configuration::theseus::URL.to_string(),
-            version: VersionReq::parse("~16.11.0")?,
+            version: VersionReq::parse("=16.11.0")?,
             installation_dir,
             password_file,
             data_dir,
