@@ -3043,7 +3043,7 @@ dependencies = [
  "nonempty",
  "num-traits",
  "regex",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "schemars 1.2.1",
  "sea-orm",
  "serde",

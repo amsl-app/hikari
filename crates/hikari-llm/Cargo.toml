@@ -37,7 +37,7 @@ utoipa = "5.4.0"
 num-traits = "0.2.19"
 regex = "1.11.2"
 async-openai = "0.29.3"
-reqwest = "0.12.23"
+reqwest = "0.13.2"
 eventsource-stream = "0.2.3"
 schemars = { version = "1.1.0", features = ["raw_value"] }
 
