@@ -34,7 +34,7 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tracing-opentelemetry = "0.31.0"
 typed-builder = "0.23.2"
 clap = { version = "4.5.57", features = ["derive"] }
-sysinfo = "0.37.0"
+sysinfo = "0.38.0"
 sentry = { version = "0.46.0", features = ["tracing"] }
 sentry-tracing = "0.46.0"
 tokio = "1.47.1"
