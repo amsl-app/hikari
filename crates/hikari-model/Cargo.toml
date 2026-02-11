@@ -20,3 +20,6 @@ utoipa = { version = "5.4.0", features = ["indexmap", "uuid", "chrono"] }
 strum = { version = "0.27.2", features = ["derive"] }
 uuid = { version = "1.20.0", features = ["serde", "v4"] }
 http = "1.3.1"
+thiserror = "2.0.16"
+schemars = { version = "1.1.0", features = ["chrono04"] }
+anyhow = "1.0"

@@ -2,9 +2,10 @@ use std::net::IpAddr;
 
 use crate::data::opt::{NamedOptionalValue, NamedOptionalValueParser};
 use clap::{Args, Parser, Subcommand};
-use hikari_utils::args::{
-    llm::{LlmConfig, LlmServices},
-    s3::S3,
+
+use hikari_utils::{
+    args::{cache::CacheConfig, llm::LlmServices, tts::TTSConfig},
+    loader::s3::S3Config,
 };
 use url::Url;
 
@@ -64,28 +65,40 @@ pub(crate) struct Run {
     pub(crate) auth: Auth,
 
     #[command(flatten)]
-    pub(crate) llm_config: LlmConfig,
-
-    #[command(flatten)]
     pub(crate) llm_services: LlmServices,
 
     #[command(flatten)]
-    pub(crate) s3: Option<S3>,
+    pub(crate) s3: Option<S3Config>,
+
+    #[command(flatten)]
+    pub(crate) tts: Option<TTSConfig>,
+
+    #[command(flatten)]
+    pub(crate) cache: Option<CacheConfig>,
 
     #[arg(long)]
     pub(crate) workers: Option<usize>,
 
-    #[arg(long, help = "The url were the csml files are stored")]
+    #[arg(long, help = "The url where the csml files are stored")]
     pub(crate) csml: Url,
 
-    #[arg(short, long, help = "The url were config files are stored")]
+    #[arg(short, long, help = "The url where module config file is stored")]
     pub(crate) config: Url,
 
-    #[arg(short, long, help = "The url were the global config is stored")]
+    #[arg(short, long, help = "The url where the global config is stored")]
     pub(crate) global_cfg: Option<Url>,
 
-    #[arg(long, help = "The url were assessment config is stored")]
+    #[arg(long, help = "The url where assessment config is stored")]
     pub(crate) assessment: Option<Url>,
+
+    #[arg(long, required = false, help = "The url where the structures are stored")]
+    pub llm_structures: Url,
+
+    #[arg(long, required = false, help = "The url where the collections are stored")]
+    pub llm_collections: Url,
+
+    #[arg(long, required = false, help = "The url where the constants are stored")]
+    pub constants: Option<Url>,
 
     #[arg(long, help = "If set it is possible to delete a user and all his data")]
     pub(crate) deletable: bool,

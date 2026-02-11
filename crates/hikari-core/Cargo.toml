@@ -56,3 +56,12 @@ rand = { version = "0.10.0", features = ["std"] }
 reqwest = "0.12.23"
 backoff = "0.4.0"
 num-traits = "0.2.19"
+elevenlabs_rs = { version = "0.6.0", features = [
+    "ws",
+    "genai",
+    "admin"
+], default-features = false }
+url = "2.5.7"
+tokio-stream = "0.1.17"
+lazy_static="1.5.0"
+shared_stream = "0.2.1"

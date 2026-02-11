@@ -3,7 +3,7 @@ mod error;
 use crate::AppConfig;
 use crate::data::modules::session::get_session;
 use crate::permissions::Permission;
-use crate::routes::api::v0::modules::messaging::{ChatRequest, generate_client};
+use crate::routes::api::v0::modules::messaging::generate_client;
 use crate::user::ExtractUser;
 use axum::extract::WebSocketUpgrade;
 use axum::extract::ws::{Message, WebSocket};
@@ -20,7 +20,7 @@ use futures_util::{FutureExt, select, select_biased};
 use futures_util::{SinkExt, StreamExt};
 use hikari_common::csml_utils::init_request;
 use hikari_db::module::session::status;
-use hikari_model::chat::{MessageResponse, Payload};
+use hikari_model::chat::{ChatRequest, MessageResponse, Payload};
 use hikari_model::user::User;
 use pin_project::pin_project;
 use protect_axum::protect;
@@ -313,7 +313,11 @@ async fn handle_message_inner(
 
             let client = generate_client(user.id, bot.id.clone(), &session_entry.module, &session_entry.session);
             let mut csml_conn = AsyncDatabase::sea_orm(conn);
-            let ChatRequest { payload, metadata } = request;
+            let ChatRequest {
+                payload,
+                metadata,
+                chat_mode: _,
+            } = request;
             let payload = serde_json::to_value(payload)?;
             let metadata = serde_json::to_value(metadata)?;
             let chat_request = init_request(client.clone(), payload, metadata);
