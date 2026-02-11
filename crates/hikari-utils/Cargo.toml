@@ -10,7 +10,7 @@ workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-aws-sdk-s3 = "1.106.0"
+aws-sdk-s3 = "1.122.0"
 aws-config = "1.8.6"
 aws-smithy-types = "1.3.2"
 chrono = "0.4.42"
@@ -34,7 +34,7 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tracing-opentelemetry = "0.31.0"
 typed-builder = "0.23.2"
 clap = { version = "4.5.57", features = ["derive"] }
-sysinfo = "0.38.0"
+sysinfo = "0.38.1"
 sentry = { version = "0.46.0", features = ["tracing"] }
 sentry-tracing = "0.46.0"
 tokio = "1.47.1"

@@ -8,8 +8,14 @@ authors = ["Sven Scheu <itssvens@gmail.com>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-postgresql_archive = { version = "0.20.0" }
-postgresql_embedded = { version = "0.20.0", features = ["tokio", "bundled"] }
+postgresql_archive = { version = "=0.20.0" }
+postgresql_embedded = { version = "=0.20.0", features = ["tokio"] }
+# Currently can't update to 0.20.1 because it's broken:
+#   0.20.1 depends on zip 7.4.0
+#   zip 7.4.0 depends on typed-path 0.12.0
+#   typed-path 0.12.0 breaks utoipa
+#   see also https://github.com/zip-rs/zip2/issues/556
+postgresql_extensions = { version = "=0.20.0" }
 tempfile = "3.23.0"
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
