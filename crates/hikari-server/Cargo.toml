@@ -48,7 +48,7 @@ num-traits = "0.2.19"
 rand = { version = "0.10.0", features = ["std"] }
 rayon = "1.11.0"
 reqwest = "0.12.23"
-reqwest-middleware = { version = "0.4.2", features = ["json"] }
+reqwest-middleware = { version = "0.5.1", features = ["json"] }
 reqwest-tracing = { version = "0.5.8", features = ["opentelemetry_0_30"] }
 sea-orm = { version = "1.1.16", features = ["macros", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "debug-print"] }
 sentry = { version = "0.46.0", features = ["tracing"] }

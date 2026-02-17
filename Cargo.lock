@@ -3154,7 +3154,7 @@ dependencies = [
  "rand 0.10.0",
  "rayon",
  "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest-middleware 0.5.1",
  "reqwest-tracing",
  "sea-orm",
  "sentry",
@@ -5151,7 +5151,7 @@ dependencies = [
  "num-format",
  "regex-lite",
  "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest-middleware 0.4.2",
  "reqwest-retry",
  "reqwest-tracing",
  "semver",
@@ -5888,6 +5888,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqwest-middleware"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "199dda04a536b532d0cc04d7979e39b1c763ea749bf91507017069c00b96056f"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http 1.4.0",
+ "reqwest 0.13.2",
+ "serde",
+ "thiserror 2.0.18",
+ "tower-service",
+]
+
+[[package]]
 name = "reqwest-retry"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5901,7 +5916,7 @@ dependencies = [
  "hyper 1.8.1",
  "parking_lot 0.11.2",
  "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest-middleware 0.4.2",
  "retry-policies 0.4.0",
  "thiserror 1.0.69",
  "tokio",
@@ -5922,7 +5937,7 @@ dependencies = [
  "matchit",
  "opentelemetry",
  "reqwest 0.12.28",
- "reqwest-middleware",
+ "reqwest-middleware 0.4.2",
  "tracing",
  "tracing-opentelemetry",
 ]
