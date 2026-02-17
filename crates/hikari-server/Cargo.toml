@@ -27,7 +27,7 @@ csml_model = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0" }
 chrono = "0.4.42"
 diesel = { version = "2.3.4", features = ["chrono", "uuid"] }
 diesel_migrations = { version = "2.3.1" }
-futures = { version = "0.3.31", features = ["async-await"] }
+futures = { version = "0.3.32", features = ["async-await"] }
 futures-util = "0.3.31"
 html-escape = "0.2.13"
 hikari-common = { path = "../hikari-common" }
