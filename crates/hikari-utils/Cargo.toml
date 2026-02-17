@@ -46,7 +46,7 @@ url = "2.5.7"
 async-stream = "0.3.6"
 async-walkdir = "2.1.0"
 serde_yml = "0.0.12"
-futures = "0.3.31"
+futures = "0.3.32"
 pdf-extract = "0.10.0"
 xxhash-rust = {version="0.8.15", features = ["xxh3"]}
 serde_json_path = "0.7.2"
