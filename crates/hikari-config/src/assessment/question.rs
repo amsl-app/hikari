@@ -90,10 +90,11 @@ impl QuestionExt for Question {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, ToSchema, strum::Display, strum::IntoStaticStr)]
+#[derive(Debug, Clone, Deserialize, ToSchema, strum::Display, strum::IntoStaticStr, PartialEq, Eq)]
 #[schema(example = json!({"value": true}))]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[strum(serialize_all = "snake_case")]
+#[serde(untagged)]
 pub enum AnswerValue {
     Bool { value: bool },
     Text { value: String },
@@ -177,5 +178,13 @@ mod tests {
         assert_eq!(actual_type, "bool");
         let value = AnswerValue::SmallInt { value: 3 };
         assert!(q.validate(&value).is_ok());
+    }
+
+    #[test]
+    fn test_question_deserialize() {
+        let answer_value_str = r#"{"value": 3}"#;
+        let answer_value = serde_json::from_str::<AnswerValue>(answer_value_str).unwrap();
+
+        assert_eq!(answer_value, AnswerValue::SmallInt { value: 3 });
     }
 }
