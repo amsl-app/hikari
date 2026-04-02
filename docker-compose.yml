@@ -77,7 +77,7 @@ services:
       COMPONENTS_DIR: "/CSML/components"
     volumes:
       # When using local config files, make sure the configs are attachted as volumes
-      # - "./configs:/configs"
+      - "./config:/config"
       - ./CSML:/CSML
     ports:
       - "3030:3030"
