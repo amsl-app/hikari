@@ -184,7 +184,22 @@ mod tests {
     fn test_question_deserialize() {
         let answer_value_str = r#"{"value": 3}"#;
         let answer_value = serde_json::from_str::<AnswerValue>(answer_value_str).unwrap();
-
         assert_eq!(answer_value, AnswerValue::SmallInt { value: 3 });
+
+        let answer_value_str = r#"{"value": true}"#;
+        let answer_value = serde_json::from_str::<AnswerValue>(answer_value_str).unwrap();
+        assert_eq!(answer_value, AnswerValue::Bool { value: true });
+
+        let answer_value_str = r#"{"value": "freeform"}"#;
+        let answer_value = serde_json::from_str::<AnswerValue>(answer_value_str).unwrap();
+        assert_eq!(
+            answer_value,
+            AnswerValue::Text {
+                value: "freeform".to_string(),
+            }
+        );
+
+        let answer_value_str = r#"{"value": 3, "extra": true}"#;
+        assert!(serde_json::from_str::<AnswerValue>(answer_value_str).is_err());
     }
 }
