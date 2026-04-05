@@ -137,7 +137,7 @@ pub(crate) async fn list_assessments(Extension(app_config): Extension<AppConfig>
 
 #[utoipa::path(
     get,
-    path = "/api/v0/assessments/sessions", 
+    path = "/api/v0/assessments/sessions",
     responses(
         (status = OK, body = [AssessmentSession], description = "Returns all assessments started by the current user"),
     ),
