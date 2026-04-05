@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn test_question_deserialize() {
+    fn test_answer_value_deserialize() {
         let answer_value_str = r#"{"value": 3}"#;
         let answer_value = serde_json::from_str::<AnswerValue>(answer_value_str).unwrap();
         assert_eq!(answer_value, AnswerValue::SmallInt { value: 3 });
