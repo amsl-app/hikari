@@ -69,7 +69,6 @@ services:
     volumes:
       # When using local config files, make sure the configs are attachted as volumes
       # - "./configs:/configs"
-      - ./CSML:/CSML
     ports:
       - "3030:3030"
     depends_on:
