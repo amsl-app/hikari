@@ -31,7 +31,7 @@ const COMPONENTS: [(&str, &str); 4] = [
 
 static COMP: LazyLock<serde_json::Map<String, serde_json::Value>> = LazyLock::new(|| {
     //TODO: Change to load_native_components() when we have that function in csml to avoid the unwrap here
-    let mut components = load_components().unwrap();
+    let mut components = load_components().expect("failed to load default components");
     for (name, content) in COMPONENTS {
         // Unwrapping here should be fine as this is a static value - should be caught in tests
         components.insert(
