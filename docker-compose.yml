@@ -8,9 +8,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DATABASE}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - ./data/pg_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+      - amsl-postgres-data:/var/lib/postgresql/data
+    # Uncomment the following lines to expose the database port to the host machine (useful for development and debugging, but not recommended for production)
+    # ports:
+    #   - "5432:5432"
     healthcheck:
       test:
         ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}"]
@@ -67,7 +68,7 @@ services:
       RUST_BACKTRACE: ${RUST_BACKTRACE}
       COMPONENTS_DIR: "/CSML/components"
     volumes:
-      # When using local config files, make sure the configs are attachted as volumes
+      # When using local config files, make sure the configs are attached as volumes
       # - "./configs:/configs"
     ports:
       - "3030:3030"
@@ -105,7 +106,7 @@ services:
     environment:
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
-    # When using local config files, make sure the configs are attachted as volumes
+    # When using local config files, make sure the configs are attached as volumes
     # volumes:
     #   - "./configs:/configs"
     ports:
@@ -113,3 +114,6 @@ services:
     depends_on:
       amsl-postgres:
         condition: service_healthy
+
+volumes:
+  amsl-postgres-data:
