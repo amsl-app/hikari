@@ -5,12 +5,43 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::DirEntry;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::{fs, io};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
 use crate::error::BotError;
+
+const COMPONENTS: [(&str, &str); 4] = [
+    (
+        "JournalContentInput",
+        include_str!("../components/JournalContentInput.json"),
+    ),
+    (
+        "JournalFocusInput",
+        include_str!("../components/JournalFocusInput.json"),
+    ),
+    ("JournalMoodInput", include_str!("../components/JournalMoodInput.json")),
+    (
+        "JournalTitleInput",
+        include_str!("../components/JournalTitleInput.json"),
+    ),
+];
+
+static COMP: LazyLock<serde_json::Map<String, serde_json::Value>> = LazyLock::new(|| {
+    //TODO: Change to load_native_components() when we have that function in csml to avoid the unwrap here
+    let mut components = load_components().unwrap();
+    for (name, content) in COMPONENTS {
+        // Unwrapping here should be fine as this is a static value - should be caught in tests
+        components.insert(
+            name.to_string(),
+            serde_json::from_str(content).expect("component is invalid"),
+        );
+    }
+
+    components
+});
 
 pub fn init_bot(name: String, flows: Vec<CsmlFlow>, endpoint: Option<String>) -> Result<CsmlBot, BotError> {
     let default_flow = flows.first().ok_or(BotError::Empty)?.name.clone();
@@ -26,7 +57,7 @@ pub fn init_bot(name: String, flows: Vec<CsmlFlow>, endpoint: Option<String>) ->
         //  to the default handling if needed. This way we won't have to ship a components folder.
         //  In addition we can persist the components with the bot so when they change we don't
         //  run into issues with components suddenly not existing.
-        native_components: Some(load_components()?),
+        native_components: Some(COMP.clone()),
         custom_components: None,
         default_flow,
         bot_ast: None,
