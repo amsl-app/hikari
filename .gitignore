@@ -15,5 +15,5 @@
 /*.sql
 /config/
 run-local.sh
-schemas/
-tools
+/schemas/
+/tools/
