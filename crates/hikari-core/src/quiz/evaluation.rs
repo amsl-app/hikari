@@ -75,9 +75,10 @@ pub async fn evaluate_answer(
 
     let sources_string: String = sources
         .iter()
-        .map(|e| e.content.clone())
+        .enumerate()
+        .map(|(i, e)| format!("# Source {}\n{}", i + 1, e.content))
         .collect::<Vec<_>>()
-        .join("\n---\n");
+        .join("\n\n");
 
     let mut prompt_messages: Vec<ChatCompletionRequestMessage> = vec![ChatCompletionRequestMessage::System(
         ChatCompletionRequestSystemMessage {

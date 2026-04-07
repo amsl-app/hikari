@@ -14,5 +14,6 @@
 *.db
 /*.sql
 /config/
+run-local.sh
 schemas/
 tools

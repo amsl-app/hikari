@@ -9,7 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_VERSION: 1.92.0
+  RUST_VERSION: 1.93.0
   POSTGRES_DB: test_db
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: "totallysafepassword"
@@ -92,3 +92,9 @@ jobs:
 
       - name: Run Tests
         run: cargo test --workspace
+
+      # Rerun the tests to make sure they work with the local postgres instance
+      - name: Run Local Tests
+        run: |
+          unset POSTGRES_URI
+          cargo test -p hikari-server

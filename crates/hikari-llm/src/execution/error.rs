@@ -55,8 +55,8 @@ pub enum APIExecutionError {
     InvalidResponseFormat(String),
     #[error(transparent)]
     ReqwestError(#[from] reqwest::Error),
-    #[error("ReqwestSseEventError: {0}")]
-    ReqwestSseEventError(reqwest_sse::error::EventError),
-    #[error("ReqwestSseEventSourceError: {0}")]
-    ReqwestSseEventSourceError(reqwest_sse::error::EventSourceError),
+    #[error("{0}")]
+    ProtocolError(String),
+    #[error(transparent)]
+    EventSource(eventsource_stream::EventStreamError<reqwest::Error>),
 }

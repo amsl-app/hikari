@@ -5,8 +5,6 @@ use crate::execution::error::LlmExecutionError;
 use futures_util::future::try_join4;
 use hikari_model::llm::message::ConversationMessage;
 use hikari_model::llm::slot::Slot;
-
-use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingQueryResult;
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
@@ -180,15 +178,7 @@ pub async fn add_usage(
     tokens: u32,
     step: String,
 ) -> Result<(), LlmExecutionError> {
-    tracing::info!(?tokens, "Tokens used");
+    tracing::debug!(?tokens, "Tokens used");
     hikari_db::llm::usage::Mutation::add_usage(conn, user_id, tokens, step).await?;
     Ok(())
-}
-
-#[must_use]
-pub fn format_content_and_sources(context: Vec<LlmEmbeddingQueryResult>) -> Vec<String> {
-    context
-        .into_iter()
-        .map(|c| format!("{} ({})", c.content, c.source))
-        .collect()
 }

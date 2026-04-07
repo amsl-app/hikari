@@ -8,6 +8,7 @@ use crate::execution::steps::LlmStepContent;
 use crate::execution::utils::get_slots;
 use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 use async_stream::try_stream;
+use eventsource_stream::Eventsource;
 use futures_core::future::BoxFuture;
 use futures_util::{FutureExt, StreamExt};
 use hikari_config::module::llm_agent::LlmService;
@@ -16,7 +17,7 @@ use hikari_core::openai::streaming::MessageStream;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use hikari_utils::values::{JsonToYaml, QueryJson, ValueDecoder, YamlToJson};
-use reqwest_sse::EventSource;
+use reqwest::header::{CONTENT_TYPE, HeaderValue};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
@@ -109,13 +110,25 @@ impl LlmStepTrait for SseCall {
                 request
             };
 
-            let mut events = request
-                .send()
-                .await
-                .map_err(APIExecutionError::ReqwestError)?
-                .events()
-                .await
-                .map_err(APIExecutionError::ReqwestSseEventSourceError)?;
+            let response = request.send().await.map_err(APIExecutionError::ReqwestError)?;
+            if response.status() != reqwest::StatusCode::OK {
+                return Err(APIExecutionError::ProtocolError(format!(
+                    "Expected status 200, got {}",
+                    response.status()
+                ))
+                .into());
+            }
+            const EVENT_STREAM_TXT: &str = "text/event-stream";
+            const EVENT_STREAM: HeaderValue = HeaderValue::from_static(EVENT_STREAM_TXT);
+            if response.headers().get(CONTENT_TYPE) != Some(&EVENT_STREAM) {
+                return Err(APIExecutionError::ProtocolError(format!(
+                    "Expected content type {EVENT_STREAM_TXT}, got {:?}",
+                    response.headers().get(CONTENT_TYPE)
+                ))
+                .into());
+            }
+
+            let mut events = response.bytes_stream().eventsource();
 
             let response_path = self.response_path.clone();
             let result = try_stream! {

@@ -2,10 +2,24 @@ version = 1
 
 [[annotations]]
 path = [
+    ".github/**",
+    ".env.example"
+]
+precedence = "override"
+SPDX-FileCopyrightText = [
+    "Amsl Contributors",
+]
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = [
     "crates/hikari/**",
     "crates/hikari-cli/**",
     "crates/hikari-common/**",
+    "CSML/components/**",
     ".gitignore",
+    ".dockerignore",
+    "Dockerfile",
     "Cargo.lock",
     "Cargo.toml",
     "README.md"
@@ -57,6 +71,17 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = [
     "2024 Sven Scheu",
+    "Amsl Contributors",
+]
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = [
+    "docker-compose.yml",
+]
+precedence = "override"
+SPDX-FileCopyrightText = [
+    "2024 Linus Bierhoff",
     "Amsl Contributors",
 ]
 SPDX-License-Identifier = "MIT OR Apache-2.0"

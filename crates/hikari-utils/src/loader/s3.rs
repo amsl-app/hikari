@@ -242,7 +242,7 @@ pub(crate) fn build_client(config: S3Config) -> Client {
     let credentials = Credentials::new(config.access_key, config.secret_key, None, None, "s3");
 
     let s3_config = aws_config::SdkConfig::builder()
-        .behavior_version(BehaviorVersion::v2025_08_07())
+        .behavior_version(BehaviorVersion::v2026_01_12())
         .region(region)
         .endpoint_url(config.endpoint.as_str())
         .credentials_provider(SharedCredentialsProvider::new(credentials))
