@@ -30,7 +30,7 @@ impl Mutation {
                     .exec(conn)
                     .await?;
                 if !groups.is_empty() {
-                    Entity::insert_many(groups).exec(conn).await?;
+                    Entity::insert_many(groups).on_conflict_do_nothing().exec(conn).await?;
                 }
                 Result::<_, DbErr>::Ok(())
             })
