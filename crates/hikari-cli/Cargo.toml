@@ -14,7 +14,7 @@ workspace = true
 anyhow = "1.0"
 csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0", features = ["sea-orm"] }
 csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0" }
-futures = { version = "0.3.31", features = ["async-await"] }
+futures = { version = "0.3.32", features = ["async-await"] }
 hikari-common = { path = "../hikari-common" }
 hikari-utils = { path = "../hikari-utils" }
 tokio = "1.47.1"
