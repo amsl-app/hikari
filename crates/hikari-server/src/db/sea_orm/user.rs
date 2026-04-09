@@ -33,8 +33,7 @@ pub async fn create_user_id<C: ConnectionTrait + TransactionTrait>(conn: &C, sub
         })
         .await;
     let user_id = match res {
-        Ok(user_id) => user_id,
-        Err(TransactionError::Transaction(UserCreationError::UserExists { user_id })) => user_id,
+        Ok(user_id) | Err(TransactionError::Transaction(UserCreationError::UserExists { user_id })) => user_id,
         Err(TransactionError::Connection(error) | TransactionError::Transaction(UserCreationError::DbErr(error))) => {
             return Err(error);
         }

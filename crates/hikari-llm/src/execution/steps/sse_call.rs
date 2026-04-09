@@ -76,6 +76,8 @@ impl LlmStepTrait for SseCall {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
+            const EVENT_STREAM_TXT: &str = "text/event-stream";
+            const EVENT_STREAM: HeaderValue = HeaderValue::from_static(EVENT_STREAM_TXT);
             let values = get_slots(
                 &conn,
                 conversation_id,
@@ -118,8 +120,6 @@ impl LlmStepTrait for SseCall {
                 ))
                 .into());
             }
-            const EVENT_STREAM_TXT: &str = "text/event-stream";
-            const EVENT_STREAM: HeaderValue = HeaderValue::from_static(EVENT_STREAM_TXT);
             if response.headers().get(CONTENT_TYPE) != Some(&EVENT_STREAM) {
                 return Err(APIExecutionError::ProtocolError(format!(
                     "Expected content type {EVENT_STREAM_TXT}, got {:?}",
