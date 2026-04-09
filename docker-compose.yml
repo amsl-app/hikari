@@ -9,9 +9,8 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - amsl-postgres-data:/var/lib/postgresql/data
-    # Uncomment the following lines to expose the database port to the host machine (useful for development and debugging, but not recommended for production)
-    # ports:
-    #   - "5432:5432"
+    ports:
+      - "5432:5432"
     healthcheck:
       test:
         ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}"]
@@ -37,7 +36,7 @@ services:
       - "--env=${ENV}"
       - "--db-min-connections=${DB_MIN_CONNECTIONS}"
       - "--db-max-connections=${DB_MAX_CONNECTIONS}"
-      - "--worker-url=${WORKER_URL}"
+      - "--worker-url=http://hikari-worker:3035"
 
       - "--openai-key=${OPENAI_KEY}"
       - "--gwdg-key=${GWDG_KEY}"
@@ -66,10 +65,9 @@ services:
       POSTGRESQL_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}"
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
-      COMPONENTS_DIR: "/CSML/components"
     volumes:
       # When using local config files, make sure the configs are attached as volumes
-      # - "./configs:/configs"
+      - "./config:/config"
     ports:
       - "3030:3030"
     depends_on:
@@ -107,8 +105,8 @@ services:
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
     # When using local config files, make sure the configs are attached as volumes
-    # volumes:
-    #   - "./configs:/configs"
+    volumes:
+      - "./config:/config"
     ports:
       - "3035:3035"
     depends_on:
