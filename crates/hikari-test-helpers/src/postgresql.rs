@@ -74,6 +74,7 @@ impl PostgresqlDb {
             timeout: Some(Duration::from_secs(10)),
             configuration,
             trust_installation_dir: false,
+            socket_dir: None,
         };
         let mut pg = PostgreSQL::new(pg_settings);
         tracing::info!("setting up db");
