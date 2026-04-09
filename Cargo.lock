@@ -1680,7 +1680,7 @@ dependencies = [
 [[package]]
 name = "csml_engine"
 version = "1.11.2"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.1#5f2c27deed674a982fdd92f2c250a86576536723"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.2#6d7103ce278cceea9eae26092724b7672da97325"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -1715,7 +1715,7 @@ dependencies = [
 [[package]]
 name = "csml_engine_db"
 version = "0.1.0"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.1#5f2c27deed674a982fdd92f2c250a86576536723"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.2#6d7103ce278cceea9eae26092724b7672da97325"
 dependencies = [
  "csml_engine_entity",
  "sea-orm",
@@ -1724,7 +1724,7 @@ dependencies = [
 [[package]]
 name = "csml_engine_entity"
 version = "0.1.0"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.1#5f2c27deed674a982fdd92f2c250a86576536723"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.2#6d7103ce278cceea9eae26092724b7672da97325"
 dependencies = [
  "chrono",
  "sea-orm",
@@ -1735,7 +1735,7 @@ dependencies = [
 [[package]]
 name = "csml_interpreter"
 version = "1.11.2"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.1#5f2c27deed674a982fdd92f2c250a86576536723"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.2#6d7103ce278cceea9eae26092724b7672da97325"
 dependencies = [
  "base64 0.22.1",
  "bincode",
@@ -1769,7 +1769,7 @@ dependencies = [
 [[package]]
 name = "csml_model"
 version = "0.1.0"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.1#5f2c27deed674a982fdd92f2c250a86576536723"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.2#6d7103ce278cceea9eae26092724b7672da97325"
 dependencies = [
  "serde",
  "utoipa",
