@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::error::BotError;
 
-const COMPONENTS: [(&str, &str); 4] = [
+const COMPONENTS: [(&str, &str); 8] = [
     (
         "JournalContentInput",
         include_str!("../components/JournalContentInput.json"),
@@ -27,6 +27,10 @@ const COMPONENTS: [(&str, &str); 4] = [
         "JournalTitleInput",
         include_str!("../components/JournalTitleInput.json"),
     ),
+    ("DateInput", include_str!("../components/DateInput.json")),
+    ("DurationInput", include_str!("../components/DurationInput.json")),
+    ("NumberInput", include_str!("../components/NumberInput.json")),
+    ("QuickReply", include_str!("../components/QuickReply.json")),
 ];
 
 static COMP: LazyLock<serde_json::Map<String, serde_json::Value>> = LazyLock::new(|| {
