@@ -1,6 +1,6 @@
 use csml_engine::data::models::CsmlRequest;
 use csml_interpreter::data::{CsmlBot, CsmlFlow};
-use csml_interpreter::load_components;
+use csml_interpreter::load_native_components;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::DirEntry;
@@ -30,8 +30,7 @@ const COMPONENTS: [(&str, &str); 4] = [
 ];
 
 static COMP: LazyLock<serde_json::Map<String, serde_json::Value>> = LazyLock::new(|| {
-    //TODO: Change to load_native_components() when we have that function in csml to avoid the unwrap here
-    let mut components = load_components().expect("failed to load default components");
+    let mut components = load_native_components();
     for (name, content) in COMPONENTS {
         // Unwrapping here should be fine as this is a static value - should be caught in tests
         components.insert(

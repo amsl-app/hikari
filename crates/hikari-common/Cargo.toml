@@ -12,8 +12,8 @@ workspace = true
 
 [dependencies]
 futures = { version = "0.3.31", features = ["async-await"] }
-csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0", features = [] }
-csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.0" }
+csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.1", features = [] }
+csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.1" }
 serde_json = "1.0.145"
 thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["full"] }
