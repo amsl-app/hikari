@@ -16,5 +16,5 @@
 /config/
 CSML
 run-local.sh
-schemas/
-tools
+/schemas/
+/tools/
