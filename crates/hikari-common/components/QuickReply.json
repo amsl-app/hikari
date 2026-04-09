@@ -1,0 +1,31 @@
+{
+  "params": [
+    {
+      "title": {
+        "required": false,
+        "type": "String",
+        "default_value": [
+        ],
+        "add_value": [
+        ]
+      }
+    },
+    {
+      "button_type": {
+        "required": false,
+        "type": "String",
+        "default_value": [
+          {
+            "$_set": "quick_reply"
+          }
+        ]
+      }
+    },
+    {
+      "buttons": {
+        "required": true,
+        "type": "Array"
+      }
+    }
+  ]
+}
