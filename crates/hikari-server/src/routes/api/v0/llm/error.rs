@@ -38,8 +38,6 @@ pub(crate) enum LlmError {
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error(transparent)]
-    ZipError(#[from] zip::result::ZipError),
-    #[error(transparent)]
     ModuleDataError(#[from] crate::data::modules::error::ModuleError),
 }
 

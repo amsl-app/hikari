@@ -1,4 +1,4 @@
-FROM rust:1.92.0-bookworm AS base
+FROM rust:1.93.0-bookworm AS base
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN cargo build --release --package hikari-server --package hikari-worker --pack
 
 RUN find . -name hikari-server && find . -name hikari-worker && find . -name hikari-cli
 
-FROM debian:bookworm-20251208-slim AS runtime
+FROM debian:bookworm-20260202-slim AS runtime
 
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y install sqlite3 libpq-dev ca-certificates tini
 

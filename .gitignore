@@ -14,5 +14,7 @@
 *.db
 /*.sql
 /config/
-schemas/
-tools
+CSML
+run-local.sh
+/schemas/
+/tools/

@@ -8,7 +8,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DATABASE}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - ./data/pg_data:/var/lib/postgresql/data
+      - amsl-postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -36,7 +36,7 @@ services:
       - "--env=${ENV}"
       - "--db-min-connections=${DB_MIN_CONNECTIONS}"
       - "--db-max-connections=${DB_MAX_CONNECTIONS}"
-      - "--worker-url=${WORKER_URL}"
+      - "--worker-url=http://hikari-worker:3035"
 
       - "--openai-key=${OPENAI_KEY}"
       - "--gwdg-key=${GWDG_KEY}"
@@ -74,11 +74,9 @@ services:
       POSTGRESQL_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}"
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
-      COMPONENTS_DIR: "/CSML/components"
+    # When using local config files, make sure the configs are attached as volumes
     volumes:
-      # When using local config files, make sure the configs are attachted as volumes
       - "./config:/config"
-      - ./CSML:/CSML
     ports:
       - "3030:3030"
     depends_on:
@@ -94,8 +92,7 @@ services:
       - "run"
       - "--host=0.0.0.0"
       - "--port=3035"
-      - "--db-url=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}"
-
+      - "--db-url=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@amsl-postgres:5432/${POSTGRES_DATABASE}"
       - "--sentry-dsn=${WORKER_SENTRY_DSN}"
       - "--env=${ENV}"
       - "--db-min-connections=${DB_MIN_CONNECTIONS}"
@@ -116,11 +113,14 @@ services:
     environment:
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
-    # When using local config files, make sure the configs are attachted as volumes
-    # volumes:
-    #   - "./configs:/configs"
+    # When using local config files, make sure the configs are attached as volumes
+    volumes:
+      - "./config:/config"
     ports:
       - "3035:3035"
     depends_on:
       amsl-postgres:
         condition: service_healthy
+
+volumes:
+  amsl-postgres-data:

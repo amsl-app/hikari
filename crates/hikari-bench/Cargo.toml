@@ -21,7 +21,7 @@ thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "fs"] }
 tokio-stream = { version = "0.1.17", features = ["fs"] }
 hikari = { path = "../hikari" }
-futures = "0.3.31"
+futures = "0.3.32"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["registry", "std"] }
 url = "2.5.7"
