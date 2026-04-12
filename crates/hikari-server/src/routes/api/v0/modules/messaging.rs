@@ -69,7 +69,7 @@ where
     Router::new()
         .route("/chat", post(chat_session))
         .route("/chat_v2", post(chat_session_v2))
-        .route("/chat/ws", post(chat_session_ws))
+        .route("/chat/ws", get(chat_session_ws))
         .route("/start", post(start_session))
         .route("/reset", post(reset_session))
         .route("/abort", post(abort_session))
