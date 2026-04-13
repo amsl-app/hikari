@@ -201,6 +201,10 @@ pub(crate) async fn run(opt: Run) -> Result<(), Error> {
                 println!("\nAborted!");
                 break;
             }
+            _ => {
+                eprintln!("Unknown signal {sig:?}. Aborting!");
+                break;
+            }
         }
     }
 
