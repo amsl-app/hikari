@@ -1,10 +1,10 @@
-use jsonwebtoken::errors::ErrorKind;
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use hikari_oidc::{JwkClient, JwkError, ValidationOptions};
 use jsonwebtoken::TokenData;
+use jsonwebtoken::errors::ErrorKind;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
