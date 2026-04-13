@@ -89,7 +89,7 @@ where
                     })?;
                     let user_id = user.id;
                     let user = User::try_from_db_model((user, groups, custom_groups)).map_err(|error| {
-                        tracing::error!(error = &error as &dyn Error, %user_id, "failed to create user");
+                        tracing::error!(error = &error as &dyn Error, %user_id, "failed to decode db user");
                         (StatusCode::INTERNAL_SERVER_ERROR, "Error to decode db user")
                     })?;
                     return Ok(Self { user });
