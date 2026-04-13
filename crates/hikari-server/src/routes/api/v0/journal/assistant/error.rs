@@ -20,7 +20,7 @@ pub(crate) enum AssistantError {
     DbError(#[from] DbErr),
 
     #[error(transparent)]
-    Request(#[from] reqwest::Error),
+    Request(#[from] reqwest_middleware::reqwest::Error),
 
     #[error(transparent)]
     RequestMiddleware(#[from] reqwest_middleware::Error),
