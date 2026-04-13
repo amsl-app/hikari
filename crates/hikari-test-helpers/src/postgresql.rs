@@ -52,10 +52,10 @@ impl PostgresqlDb {
     async fn setup_db(database_dir: PathBuf) -> PostgreSQL {
         let installation_dir = tempfile::env::temp_dir().join("test-pg-installation");
         match std::fs::create_dir(&installation_dir) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(e) => panic!("failed to create installation dir: {}", e),
-        };
+            Err(e) => panic!("failed to create installation dir: {e}"),
+        }
         let data_dir = database_dir.join("data");
         let password_file = database_dir.join(".pgpass");
         let configuration = HashMap::default();
@@ -74,6 +74,7 @@ impl PostgresqlDb {
             timeout: Some(Duration::from_secs(10)),
             configuration,
             trust_installation_dir: false,
+            socket_dir: None,
         };
         let mut pg = PostgreSQL::new(pg_settings);
         tracing::info!("setting up db");
@@ -108,9 +109,7 @@ impl PostgresqlDb {
                 Ok(()) => return pg,
                 Err(error) => {
                     retry += 1;
-                    if retry >= MAX_TRIES {
-                        panic!("{:?}", error);
-                    }
+                    assert!(retry < MAX_TRIES, "{error:?}");
                 }
             }
         }

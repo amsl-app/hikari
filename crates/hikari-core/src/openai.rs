@@ -207,7 +207,7 @@ fn check_function_call<T: FunctionResponse>(chat_completion: &CreateChatCompleti
 
     let mut res: T = serde_json::from_str(&function_call.function.arguments).map_err(|error| {
         tracing::warn!(
-            erorr = &error as &dyn Error,
+            error = &error as &dyn Error,
             arguments = function_call.function.arguments,
             "failed to parse function call arguments"
         );

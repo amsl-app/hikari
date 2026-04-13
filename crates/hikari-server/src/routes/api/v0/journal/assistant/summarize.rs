@@ -29,8 +29,8 @@ pub(crate) struct WorkerSummaryOptions {
 }
 
 fn build_client() -> Result<reqwest_middleware::ClientWithMiddleware, AssistantError> {
-    let builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+    let builder = reqwest_middleware::reqwest::Client::builder()
+        .redirect(reqwest_middleware::reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(125));
 
     let client = builder.build()?;

@@ -29,7 +29,7 @@ async fn get_worker_status(base_url: &Url) -> ComponentStatus {
     };
     // We unwrap here because this can only fail if the TLS backend can't be initialized
     // Timeout is 10 seconds because the db timeout of the worker is 5 seconds
-    let client = reqwest::Client::builder()
+    let client = reqwest_middleware::reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .expect("Failed to build reqwest client");
