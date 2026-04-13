@@ -46,7 +46,7 @@ async fn run(opt: Run) -> Result<()> {
     }
     seaorm_pool_options.sqlx_logging_level(log::LevelFilter::Debug);
 
-    let s3_config: Option<S3Config> = opt.s3.map(Into::into);
+    let s3_config: Option<S3Config> = opt.s3;
 
     let loader_handler = hikari_utils::loader::LoaderHandler::new(s3_config);
 

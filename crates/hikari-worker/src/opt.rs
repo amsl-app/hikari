@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use clap::{Parser, Subcommand};
-use hikari_utils::args::{llm::LlmServices, s3::S3};
+use hikari_utils::{args::llm::LlmServices, loader::s3::S3Config};
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -41,7 +41,7 @@ pub(crate) struct Run {
     pub(crate) llm_services: LlmServices,
 
     #[command(flatten)]
-    pub(crate) s3: Option<S3>,
+    pub(crate) s3: Option<S3Config>,
 
     #[arg(long)]
     pub(crate) db_url: Url,

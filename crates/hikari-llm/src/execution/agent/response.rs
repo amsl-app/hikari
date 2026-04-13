@@ -22,11 +22,21 @@ pub struct ChatChunk {
     pub content: String,
     pub id: i32,
     pub step: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub audio: Vec<u8>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub audio_end: bool,
 }
 
 impl ChatChunk {
     #[must_use]
-    pub fn new(content: String, id: i32, step: String) -> Self {
-        Self { content, id, step }
+    pub fn new(content: String, audio: Vec<u8>, audio_end: bool, id: i32, step: String) -> Self {
+        Self {
+            content,
+            audio,
+            audio_end,
+            id,
+            step,
+        }
     }
 }

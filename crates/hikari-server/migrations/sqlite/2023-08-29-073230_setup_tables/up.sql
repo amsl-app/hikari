@@ -326,7 +326,7 @@ CREATE TABLE quiz (
     module_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status TEXT NOT NULL,
-    
+
     FOREIGN KEY (user_id) references users (id) ON DELETE cascade
 );
 
@@ -355,7 +355,7 @@ CREATE TABLE question (
     level SMALLINT NOT NULL DEFAULT 0,
     feedback TEXT,
     feedback_explanation TEXT,
-    
+
     FOREIGN KEY (quiz_id) REFERENCES quiz (id) ON DELETE CASCADE
 );
 
@@ -375,3 +375,11 @@ CREATE TABLE quiz_score (
 
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
+
+CREATE TABLE tts_cache
+(
+    message_hash TEXT PRIMARY KEY,
+    audio_path   TEXT
+);
+
+CREATE INDEX tts_cache_message_hash ON tts_cache (message_hash);

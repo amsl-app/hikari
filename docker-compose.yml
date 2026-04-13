@@ -47,6 +47,15 @@ services:
       - "--quiz-service=${QUIZ_SERVICE}"
       - "--quiz-model=${QUIZ_MODEL}"
 
+      - "--elevenlabs-key=${ELEVENLABS_KEY}"
+      - "--elevenlabs-voice=${ELEVENLABS_VOICE_ID}"
+      - "--elevenlabs-model=${ELEVENLABS_MODEL}"
+      - "--cache-s3-endpoint=${CACHE_S3_ENDPOINT}"
+      - "--cache-s3-region=${CACHE_S3_REGION}"
+      - "--cache-s3-bucket=${CACHE_S3_BUCKET}"
+      - "--cache-s3-access-key=${CACHE_S3_ACCESS_KEY}"
+      - "--cache-s3-secret-key=${CACHE_S3_SECRET_KEY}"
+
       - "--s3-endpoint=${S3_ENDPOINT}"
       - "--s3-region=${S3_REGION}"
       - "--s3-access-key=${S3_ACCESS_KEY}"
@@ -65,8 +74,8 @@ services:
       POSTGRESQL_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}"
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
+    # When using local config files, make sure the configs are attached as volumes
     volumes:
-      # When using local config files, make sure the configs are attached as volumes
       - "./config:/config"
     ports:
       - "3030:3030"

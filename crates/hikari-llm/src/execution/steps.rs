@@ -475,7 +475,7 @@ impl LlmStepTrait for LlmStep {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct LlmStepResponse {
     content: LlmStepContent,
     tokens: Option<u32>,
@@ -488,7 +488,7 @@ impl LlmStepResponse {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum LlmStepContent {
     Message {
         message: MessageStream,

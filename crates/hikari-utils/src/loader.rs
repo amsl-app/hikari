@@ -1,9 +1,8 @@
 use crate::loader::error::{LoadingError, ParseError};
 use crate::loader::file::{File, FileMetadata};
 use crate::loader::file_system::FileSystemLoader;
-use crate::loader::s3::S3Loader;
+use crate::loader::s3::{S3Config, S3Loader};
 use futures::Stream;
-use s3::S3Config;
 use std::path::Path;
 use std::pin::Pin;
 use url::Url;
@@ -100,6 +99,13 @@ impl LoaderTrait for Loader {
         }
     }
 
+    async fn store_file<P: AsRef<Path>>(&self, path: P, content: &[u8]) -> Result<(), LoadingError> {
+        match self {
+            Loader::S3(loader) => loader.store_file(path, content).await,
+            Loader::FileSystem(loader) => loader.store_file(path, content).await,
+        }
+    }
+
     async fn get_file_metadata<P: AsRef<Path>>(&self, path: P) -> Result<FileMetadata, LoadingError> {
         match self {
             Loader::S3(loader) => loader.get_file_metadata(path).await,
@@ -115,5 +121,7 @@ pub trait LoaderTrait {
         filter: Filter,
     ) -> Pin<Box<dyn Stream<Item = Result<File, LoadingError>> + Send + 'a>>;
     fn load_file<P: AsRef<Path>>(&self, path: P) -> impl Future<Output = Result<File, LoadingError>>;
+    fn store_file<P: AsRef<Path>>(&self, path: P, content: &[u8]) -> impl Future<Output = Result<(), LoadingError>>;
+
     fn get_file_metadata<P: AsRef<Path>>(&self, path: P) -> impl Future<Output = Result<FileMetadata, LoadingError>>;
 }
