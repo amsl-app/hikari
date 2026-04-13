@@ -1,6 +1,6 @@
 use jsonwebtoken::errors::ErrorKind;
 use std::collections::{HashMap, HashSet};
-
+use std::error::Error;
 use hikari_oidc::{JwkClient, JwkError, ValidationOptions};
 use jsonwebtoken::TokenData;
 use serde::{Deserialize, Serialize};
@@ -103,6 +103,7 @@ pub(crate) async fn validate_jwt(
             return Ok(Some((claims.sub, claims_groups)));
         }
         Err(error) => {
+            tracing::warn!(error = &error as &dyn Error, "failed to decode jwt");
             if let JwkError::Jwk(error) = error
                 && !matches!(
                     error.kind(),
