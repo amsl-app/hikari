@@ -46,7 +46,7 @@ log = "0.4.28"
 axum-prometheus = { version = "0.10.0" }
 num-traits = "0.2.19"
 rand = { version = "0.10.0", features = ["std"] }
-rayon = "1.11.0"
+rayon = "1.12.0"
 reqwest-middleware = { version = "0.5.1", features = ["json"] }
 reqwest-tracing = { version = "0.7.0", features = ["opentelemetry_0_31"] }
 sea-orm = { version = "1.1.16", features = ["macros", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "debug-print"] }
