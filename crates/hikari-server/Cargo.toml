@@ -15,7 +15,7 @@ anyhow = "1.0"
 async-openai = "0.29.3"
 axum = { version = "0.8.4", features = ["tracing", "ws"] }
 axum-auth = "0.8.1"
-axum-extra = { version = "0.12.2", features = ["cookie", "cookie-signed", "cached"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "cookie-signed", "cached"] }
 protect-axum = "0.2.0"
 clap = { version = "4.5.57", features = ["derive"] }
 csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.3", features = [
