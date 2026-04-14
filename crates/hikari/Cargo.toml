@@ -22,7 +22,7 @@ thiserror = "2.0.16"
 tokio = "1.47.1"
 url = "2.5.7"
 openidconnect = { version = "4.0.1", default-features = true }
-retry-policies = "0.2.1"
+retry-policies = "0.5.1"
 futures-retry-policies = { version = "0.3.1" }
 tracing = "0.1.41"
 uri-url = "0.3.0"
