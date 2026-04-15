@@ -4,7 +4,7 @@ use crate::openai::{CallConfig, Content, OpenAiCallResult, openai_call_with_time
 use crate::pgvector::search;
 use crate::quiz::error::QuizError;
 use crate::quiz::max_five_random_exam_questions;
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
     ChatCompletionRequestUserMessageContent,
