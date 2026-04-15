@@ -27,4 +27,4 @@ indexing_slicing = "deny"
 [profile.release]
 lto = "thin"
 strip = "none"
-
+debug = "full"
