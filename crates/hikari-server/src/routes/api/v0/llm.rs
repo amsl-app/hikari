@@ -253,6 +253,35 @@ async fn handler(
     ws.on_upgrade(|socket| handle_socket(socket, user, app_config, module_id, session_id, conn))
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn process_message(
+    conn: &DatabaseConnection,
+    sender: &mut SplitSink<WebSocket, WsMessage>,
+    message: WsMessage,
+    user: &User,
+    config: &AppConfig,
+    module_id: &str,
+    session_id: &str,
+    llm_config: &LlmConfig,
+    constants: &HashMap<String, serde_yml::Value>,
+    llm_agent: &mut Option<Mutex<LlmAgent>>,
+) -> Result<(), LlmError> {
+    let request_message = convert_message(message)?;
+    handle_message(
+        user,
+        config,
+        module_id,
+        session_id,
+        conn,
+        sender,
+        llm_config,
+        constants,
+        llm_agent,
+        request_message,
+    )
+    .await
+}
+
 pub async fn handle_socket(
     socket: WebSocket,
     user: User,
@@ -312,20 +341,27 @@ pub async fn handle_socket(
             message = receiver.next() => {
                 match message {
                     Some(msg) => {
-                        let reqeust_message = convert_message(msg);
-                        let res = handle_message(
+                        let msg = match msg {
+                            Ok(msg) => msg,
+                            Err(error) => {
+                                // The receiver returns the first error it encounters and then closes the connection.
+                                // There is nothing we con do here anymore (incl. responding)
+                                tracing::debug!(error = &error as &dyn Error, user_id = %user.id, module_id, session_id, "receiver error. stopping processing");
+                                break
+                            }
+                        };
+                        let res = process_message(
+                            &conn,
+                            &mut sender,
+                            msg,
                             &user,
                             &config,
                             &module_id,
                             &session_id,
-                            &conn,
-                            &mut sender,
                             &llm_config,
                             constants,
                             &mut llm_agent,
-                            reqeust_message,
-                        )
-                        .await;
+                        ).await;
                         if let Err(e) = res {
                             send_error(&mut sender, e).await;
                         }
@@ -344,14 +380,7 @@ pub async fn handle_socket(
     tracing::debug!("closing websocket connection");
 }
 
-fn convert_message(message: Result<WsMessage, axum::Error>) -> Result<Request, LlmError> {
-    let message = match message {
-        Ok(message) => message,
-        Err(error) => {
-            tracing::warn!(warning = &error as &dyn Error, "received error message");
-            return Err(LlmError::ReceiveError(error));
-        }
-    };
+fn convert_message(message: WsMessage) -> Result<Request, LlmError> {
     let message = match message {
         WsMessage::Text(message) => message,
         WsMessage::Binary(_) => {
@@ -385,9 +414,8 @@ async fn handle_message(
     llm_config: &LlmConfig,
     constants: &HashMap<String, serde_yml::Value>,
     llm_agent: &mut Option<Mutex<LlmAgent>>,
-    message: Result<Request, LlmError>,
+    message: Request,
 ) -> Result<(), LlmError> {
-    let message = message?;
     let action = handle_request(llm_agent.as_ref(), sender, message).await?;
     match action {
         ResponseAction::Abort => {

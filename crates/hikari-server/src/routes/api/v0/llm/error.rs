@@ -17,8 +17,6 @@ pub(crate) enum LlmError {
     Serialization(#[from] serde_json::Error),
     #[error("Failed to send response")]
     SendError(axum::Error),
-    #[error("Failed to receive message")]
-    ReceiveError(axum::Error),
     #[error(transparent)]
     ModuleError(#[from] ModuleError),
     #[error("Module not found: {0}")]
