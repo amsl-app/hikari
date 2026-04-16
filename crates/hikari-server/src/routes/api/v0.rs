@@ -6,5 +6,6 @@ pub(crate) mod modules;
 pub(crate) mod quiz;
 pub(crate) mod status;
 pub(crate) mod user;
+pub(crate) mod websocket;
 
 pub(crate) mod ws;

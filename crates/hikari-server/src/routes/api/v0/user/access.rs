@@ -9,6 +9,7 @@ use axum::{Extension, Json, Router};
 use hikari_config::global::access::GroupAccess;
 use hikari_db::groups::{self, groups_token};
 use hikari_db::sea_orm::DatabaseConnection;
+use hikari_db::util::FlattenTransactionResultExt;
 use protect_axum::protect;
 use rand::rng;
 use rand::seq::IndexedRandom;
@@ -92,38 +93,46 @@ pub(crate) async fn add_access(
     Json(GroupToken { token }): Json<GroupToken>,
 ) -> Result<impl IntoResponse, UserError> {
     let access_config = config.config().access();
-    let access = access_config.iter().find(|group| group.token == token);
-    let Some(access) = access else {
+    let Some(access_index) = access_config.iter().position(|group| group.token == token) else {
         tracing::warn!(token = %token, "invalid token");
         return Err(UserError::InvalidToken);
     };
-    let txn = conn.begin().await?;
 
-    // Add token and check if it already exists
-    let res = groups_token::Mutation::add(&txn, user.id, token.clone()).await;
-    if let Err(error) = res {
-        tracing::warn!(error = &error as &dyn Error, "error adding group");
-        if DbErr::RecordNotInserted == error {
-            // Token already exists, but it's not a problem
-            return Ok(http::status::StatusCode::OK);
-        }
-        txn.rollback().await?;
-        return Err(UserError::from(error))?;
-    }
+    let res = conn
+        .transaction::<_, http::status::StatusCode, UserError>(|txn| {
+            Box::pin(async move {
+                // Doing the lookup here avoids having to clone the groups
+                // The index access is safe because we just found it above
+                let groups = &config
+                    .config()
+                    .access()
+                    .get(access_index)
+                    .expect("index lookup - this is a bug")
+                    .groups;
+                // Add token and check if it already exists
+                let res = groups_token::Mutation::add(txn, user.id, token.clone()).await;
+                if let Err(error) = res {
+                    tracing::warn!(error = &error as &dyn Error, "error adding group");
+                    if DbErr::RecordNotInserted == error {
+                        // Token already exists, but it's not a problem
+                        return Ok(http::status::StatusCode::OK);
+                    }
+                    return Err(UserError::from(error));
+                }
 
-    for group in &access.groups {
-        let name = match group {
-            GroupAccess::Single(value) => value,
-            GroupAccess::Random { random } => select_group(random.as_slice())?,
-        };
-        let res = groups::custom_groups::Mutation::add(&txn, user.id, name.to_owned()).await;
-        if let Err(e) = res {
-            txn.rollback().await?;
-            return Err(UserError::from(e))?;
-        }
-    }
-    txn.commit().await?;
-    Ok(http::status::StatusCode::OK)
+                for group in groups {
+                    let name = match group {
+                        GroupAccess::Single(value) => value,
+                        GroupAccess::Random { random } => select_group(random.as_slice())?,
+                    };
+                    groups::custom_groups::Mutation::add(txn, user.id, name.to_owned()).await?;
+                }
+                Ok(http::status::StatusCode::OK)
+            })
+        })
+        .await;
+
+    res.flatten_res()
 }
 
 fn select_group(groups: &[String]) -> Result<&str, UserError> {

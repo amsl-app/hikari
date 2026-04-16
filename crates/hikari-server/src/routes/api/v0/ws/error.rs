@@ -2,6 +2,8 @@ use axum::extract::ws::{CloseFrame, Message};
 use thiserror::Error;
 use tungstenite::protocol::frame::coding::CloseCode;
 
+use crate::routes::api::v0::websocket;
+
 #[derive(Debug, Error)]
 pub enum WsError {
     #[error(transparent)]
@@ -33,5 +35,11 @@ impl WsError {
             code,
             reason: self.to_string().into(),
         }
+    }
+}
+
+impl From<websocket::Error> for WsError {
+    fn from(error: websocket::Error) -> Self {
+        Self::RequestError(error.to_string())
     }
 }

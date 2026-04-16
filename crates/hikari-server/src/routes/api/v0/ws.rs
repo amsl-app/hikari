@@ -4,6 +4,7 @@ use crate::AppConfig;
 use crate::data::modules::session::get_session;
 use crate::permissions::Permission;
 use crate::routes::api::v0::modules::messaging::{ChatRequest, generate_client};
+use crate::routes::api::v0::websocket::{IncomingMessage, decode_message};
 use crate::user::ExtractUser;
 use axum::extract::WebSocketUpgrade;
 use axum::extract::ws::{Message, WebSocket};
@@ -272,19 +273,15 @@ async fn handle_message_inner(
     // TODO consider moving the processing to a separate task
 
     tracing::debug!(message = ?message, "handling message");
-    let message = match message {
-        Message::Text(message) => message,
-        Message::Binary(_) => {
-            // We just close the connection if we receive a binary message because we don't
-            // expect any binary messages
-            return Err(WsError::RequestError("unexpected binary message".to_string()));
-        }
-        Message::Close(_) | Message::Ping(_) | Message::Pong(_) => {
+    let message = match decode_message(message) {
+        Ok(IncomingMessage::Text(message)) => message,
+        Ok(IncomingMessage::Control) => {
             // The library handles control messages
             return Ok(());
         }
+        Err(error) => return Err(error.into()),
     };
-    let message = serde_json::from_str(&message)?;
+    let message = serde_json::from_str(message.as_str())?;
 
     match message {
         WsMessage::ChatRequest {
