@@ -20,7 +20,6 @@ use hikari_core::openai::streaming::MessageStream;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus, StateValue};
 use message_generator::MessageGenerator;
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use set_slot::SetSlot;
 use std::collections::HashMap;
 use std::error::Error;
@@ -29,6 +28,7 @@ use thiserror::Error;
 use uuid::Uuid;
 use value_extractor::ValueExtractor;
 use vector_db_extractor::VectorDBExtractor;
+use yaml_serde::Value;
 
 pub mod api_call;
 pub mod combined_step;

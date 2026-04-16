@@ -27,7 +27,7 @@ pub struct Session {
     pub contents: Vec<Content>,
     #[serde(flatten)]
     pub llm_agent: Option<LlmAgent>,
-    pub custom: Option<HashMap<String, serde_yml::Value>>,
+    pub custom: Option<HashMap<String, yaml_serde::Value>>,
 }
 
 impl Session {

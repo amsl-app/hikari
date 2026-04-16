@@ -19,12 +19,12 @@ use hikari_model_tools::convert::llm::split_payload_for_database;
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use std::error::Error;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use yaml_serde::Value;
 
 use super::steps::{LlmStep, LlmStepContent};
 

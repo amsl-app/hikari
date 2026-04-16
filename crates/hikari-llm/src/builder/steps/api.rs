@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
+use yaml_serde::Value;
 
 use super::{Condition, IntoLlmStep, ParentStep};
 use crate::{

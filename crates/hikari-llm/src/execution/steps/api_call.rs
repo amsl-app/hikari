@@ -17,8 +17,8 @@ use hikari_core::llm_config::LlmConfig;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use hikari_utils::values::{JsonToYaml, QueryJson, YamlToJson};
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use uuid::Uuid;
+use yaml_serde::Value;
 
 #[derive(Clone)]
 pub struct ApiCall {

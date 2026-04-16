@@ -12,7 +12,7 @@ use crate::{
 use super::{Condition, IntoLlmStep, ParentStep};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
+use yaml_serde::Value;
 
 #[derive(Deserialize, Debug, Clone, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]

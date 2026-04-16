@@ -48,7 +48,7 @@ pub(crate) struct SessionV01 {
     #[serde(rename = "next-session")]
     /// # Next session for quick navigation after completing this session
     pub(crate) next_session: Option<String>,
-    /// # Theme of the session  
+    /// # Theme of the session
     pub(crate) theme: Option<Theme>,
     /// # Estimated time to complete the session in minutes
     pub(crate) time: Option<i32>,
@@ -71,7 +71,7 @@ pub(crate) struct SessionV01 {
     /// References to content IDs defined in the module
     pub(crate) contents: Vec<String>,
     #[schemars(with = "Option<HashMap<String, serde_json::Value>>")]
-    pub(crate) custom: Option<HashMap<String, serde_yml::Value>>,
+    pub(crate) custom: Option<HashMap<String, yaml_serde::Value>>,
 }
 
 impl ItemId for SessionV01 {

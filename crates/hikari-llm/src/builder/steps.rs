@@ -21,12 +21,12 @@ use num_traits::cast::ToPrimitive;
 use regex::Regex;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
 use set_slot::SetSlotBuilder;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
+use yaml_serde::Value;
 
 pub mod api;
 pub mod counter;

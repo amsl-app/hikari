@@ -8,14 +8,14 @@ use hikari_model::user::User;
 use hikari_utils::values::{QueryYaml, ValueDecoder};
 use sea_orm::DatabaseConnection;
 use serde::Serialize;
-use serde_yml::Value;
 use uuid::Uuid;
+use yaml_serde::Value;
 
 macro_rules! gen_match_user_fields {
     ($x:expr, $t:ident, $( $idents:ident ),*) => {
         match $x {
             $(
-                stringify!($idents) => serde_yml::to_value(&$t.$idents)?,
+                stringify!($idents) => yaml_serde::to_value(&$t.$idents)?,
             )*
             _ => Err(LlmExecutionError::Unexpected($x.to_string()))?,
         }
@@ -43,10 +43,10 @@ pub async fn load_slots<'a>(
     let current_module_id = &module.id;
     let current_session_id = &session.id;
 
-    let mut module_map = HashMap::from([(current_module_id.to_owned(), serde_yml::to_value(module)?)]);
+    let mut module_map = HashMap::from([(current_module_id.to_owned(), yaml_serde::to_value(module)?)]);
     let mut session_map = HashMap::from([(
         session_key(current_module_id, current_session_id),
-        serde_yml::to_value(session)?,
+        yaml_serde::to_value(session)?,
     )]);
 
     for LoadToSlot { name, source } in slots {
@@ -113,13 +113,13 @@ fn get_or_insert<'a, T>(
     map: &'a mut hashbrown::HashMap<String, Value>,
     key: &str,
     value: T,
-) -> Result<&'a Value, serde_yml::Error>
+) -> Result<&'a Value, yaml_serde::Error>
 where
     T: Serialize,
 {
     let value = match map.entry_ref(key) {
         EntryRef::Occupied(entry) => entry.into_mut(),
-        EntryRef::Vacant(entry) => entry.insert(serde_yml::to_value(value)?),
+        EntryRef::Vacant(entry) => entry.insert(yaml_serde::to_value(value)?),
     };
     Ok(value)
 }

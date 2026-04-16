@@ -12,9 +12,9 @@ use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
+use yaml_serde::Value;
 
 #[derive(Clone)]
 pub struct ValueExtractor {
@@ -95,7 +95,7 @@ impl LlmStepTrait for ValueExtractor {
                 for target in &self.slots {
                     let value = match target {
                         SaveTarget::Slot(SlotPath { name, .. }) => {
-                            let value = values.get(name).map(serde_yml::to_value).transpose()?;
+                            let value = values.get(name).map(yaml_serde::to_value).transpose()?;
 
                             match value {
                                 Some(Value::String(str_value))

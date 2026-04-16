@@ -1,6 +1,6 @@
 use serde_json_path::JsonPath;
-use serde_yml::Value;
 use std::panic;
+use yaml_serde::Value;
 
 use crate::values::error::ValuesError;
 
@@ -14,7 +14,7 @@ impl QueryYaml for Value {
     fn query(&self, path: &str) -> Result<Value, ValuesError> {
         let json_value = serde_json::to_value(self)?;
         let value = json_value.query(path)?;
-        let yaml_value = serde_yml::to_value(&value)?;
+        let yaml_value = yaml_serde::to_value(&value)?;
         Ok(yaml_value)
     }
 }
@@ -46,9 +46,9 @@ pub trait ValueDecoder {
 impl ValueDecoder for Value {
     fn decode(str: &str) -> Value {
         // FIX: Sometimes the value cannot be parsed and panics (e.g. bad indentation or incomplete structure)
-        if let Ok(parsed) =
-            panic::catch_unwind(|| serde_yml::from_str(str).unwrap_or_else(|_| panic!("failed to decode value: {str}")))
-        {
+        if let Ok(parsed) = panic::catch_unwind(|| {
+            yaml_serde::from_str(str).unwrap_or_else(|_| panic!("failed to decode value: {str}"))
+        }) {
             parsed
         } else {
             Value::String(str.to_string())
@@ -61,7 +61,7 @@ impl ValueDecoder for Value {
             Value::Number(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Null => "null".to_string(),
-            other => serde_yml::to_string(other).unwrap_or_default(),
+            other => yaml_serde::to_string(other).unwrap_or_default(),
         }
     }
 }
@@ -78,7 +78,7 @@ pub trait JsonToYaml {
 impl JsonToYaml for serde_json::Value {
     fn to_yaml(&self) -> Result<Value, ValuesError> {
         // Convert Json Value to Yaml Value
-        let yaml_value: Value = serde_yml::to_value(self.clone())?;
+        let yaml_value: Value = yaml_serde::to_value(self.clone())?;
         Ok(yaml_value)
     }
 }

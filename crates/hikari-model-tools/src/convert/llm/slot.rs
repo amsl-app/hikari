@@ -4,7 +4,7 @@ use hikari_entity::llm::slot::module_slot::Model as ModuleSlotModel;
 use hikari_entity::llm::slot::session_slot::Model as SessionSlotModel;
 use hikari_model::llm::slot::Slot;
 use hikari_utils::values::ValueDecoder;
-use serde_yml::Value;
+use yaml_serde::Value;
 
 use crate::convert::FromDbModel;
 

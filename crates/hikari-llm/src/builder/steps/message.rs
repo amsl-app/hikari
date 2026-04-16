@@ -5,8 +5,8 @@ use crate::execution::steps::LlmStep;
 use crate::execution::steps::text_message::TextMessage;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
 use std::collections::HashMap;
+use yaml_serde::Value;
 
 #[derive(Deserialize, Debug, Clone, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]

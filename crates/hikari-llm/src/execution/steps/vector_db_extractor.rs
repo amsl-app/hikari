@@ -13,9 +13,9 @@ use hikari_core::pgvector::search;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use yaml_serde::Value;
 
 use super::{LlmStepResponse, LlmStepTrait};
 

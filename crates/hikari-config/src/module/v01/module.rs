@@ -77,5 +77,5 @@ pub struct ModuleV01 {
     /// If the user has at least one of the groups in the blacklist, the module is not accessible
     pub(crate) groups_blacklist: Vec<String>,
     #[schemars(with = "Option<HashMap<String, serde_json::Value>>")]
-    pub(crate) custom: Option<HashMap<String, serde_yml::Value>>,
+    pub(crate) custom: Option<HashMap<String, yaml_serde::Value>>,
 }

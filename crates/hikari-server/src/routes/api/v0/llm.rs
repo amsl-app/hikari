@@ -180,7 +180,7 @@ async fn create_agent(
     session_id: &str,
     conn: &DatabaseConnection,
     llm_config: &LlmConfig,
-    constants: &HashMap<String, serde_yml::Value>,
+    constants: &HashMap<String, yaml_serde::Value>,
     force: bool,
 ) -> Result<LlmAgent, LlmError> {
     let session_instances: Vec<_> = hikari_db::module::session::status::Query::for_module(conn, user.id, module_id)
@@ -264,7 +264,7 @@ async fn process_message(
     module_id: &str,
     session_id: &str,
     llm_config: &LlmConfig,
-    constants: &HashMap<String, serde_yml::Value>,
+    constants: &HashMap<String, yaml_serde::Value>,
     llm_agent: &mut Option<Mutex<LlmAgent>>,
 ) -> Result<(), LlmError> {
     let request_message = convert_message(message)?;
@@ -400,7 +400,7 @@ async fn handle_message(
     conn: &DatabaseConnection,
     sender: &mut SplitSink<WebSocket, Message>,
     llm_config: &LlmConfig,
-    constants: &HashMap<String, serde_yml::Value>,
+    constants: &HashMap<String, yaml_serde::Value>,
     llm_agent: &mut Option<Mutex<LlmAgent>>,
     message: Request,
 ) -> Result<(), LlmError> {

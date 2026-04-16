@@ -15,7 +15,7 @@ csml_model = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.3" }
 chrono = { version = "0.4.42", features = ["serde"] }
 serde = "1.0.226"
 serde_json = "1.0.145"
-serde_yml = "0.0.12"
+yaml_serde = "0.10.4"
 utoipa = { version = "5.4.0", features = ["indexmap", "uuid", "chrono"] }
 strum = { version = "0.28.0", features = ["derive"] }
 uuid = { version = "1.21.0", features = ["serde", "v4"] }

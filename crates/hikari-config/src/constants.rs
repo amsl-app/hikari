@@ -27,7 +27,7 @@ pub async fn load(loader: Loader) -> Result<ConstantCollection, LoadingError> {
     let mut all_constants = ConstantCollection::default();
 
     while let Some(Ok(file)) = stream.next().await {
-        let VersionConfig::V01 { constants } = serde_yml::from_slice::<VersionConfig>(&file.content)?;
+        let VersionConfig::V01 { constants } = yaml_serde::from_slice::<VersionConfig>(&file.content)?;
         let constant_collection: ConstantCollection = constants.into();
         all_constants.constants.extend(constant_collection.constants);
     }
@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_constants_loading() {
         let constants_file = read_to_string("test_configs/test.constants.yaml").unwrap();
-        let VersionConfig::V01 { constants } = serde_yml::from_str::<VersionConfig>(&constants_file).unwrap();
+        let VersionConfig::V01 { constants } = yaml_serde::from_str::<VersionConfig>(&constants_file).unwrap();
         assert_eq!(constants.constants.len(), 1);
     }
 }

@@ -14,8 +14,8 @@ use crate::execution::steps::value_extractor::ValueExtractor;
 use hikari_core::openai::tools::{AsOpenApiField, OpenApiField};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
 use std::collections::HashMap;
+use yaml_serde::Value;
 
 const PROMPT_KEY: &str = "EXTRACTOR_PREFIX";
 const TEMPERATURE_KEY: &str = "EXTRACTOR_TEMPERATURE";

@@ -15,9 +15,9 @@ use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
+use yaml_serde::Value;
 
 #[derive(Clone)]
 pub struct ConversationSummarizer {

@@ -1,6 +1,6 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
+use yaml_serde::Value;
 
 #[derive(Default, Debug, Clone, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]

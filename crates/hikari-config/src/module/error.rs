@@ -6,7 +6,7 @@ pub enum ModuleError {
     ContentNotFound,
 
     #[error(transparent)]
-    ParseError(#[from] serde_yml::Error),
+    ParseError(#[from] yaml_serde::Error),
 
     #[error("Source not found: {0}")]
     SourceNotFound(String),
