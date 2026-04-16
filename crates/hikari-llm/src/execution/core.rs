@@ -9,7 +9,7 @@ use crate::builder::{
     steps::{InjectionTrait, LlmModel, llm::PromptType},
     tools::Tool,
 };
-use async_openai::types::ChatCompletionRequestMessage;
+use async_openai::types::chat::ChatCompletionRequestMessage;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::openai::{
     CallConfig, Message, OpenAiCallResult, openai_call_with_timeout, streaming::MessageStream, tools::ToolChoice,

@@ -4,11 +4,11 @@ use crate::openai::streaming::MessageStream;
 use crate::openai::tools::{Tool, ToolChoice};
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
-use async_openai::types::{
-    ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionNamedToolChoice,
-    ChatCompletionRequestMessage, ChatCompletionTool, ChatCompletionToolChoiceOption, ChatCompletionToolType,
-    CreateChatCompletionRequestArgs, CreateChatCompletionResponse, FunctionCall, FunctionCallStream, FunctionName,
-    FunctionObject,
+use async_openai::types::chat::{
+    ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionMessageToolCalls,
+    ChatCompletionNamedToolChoice, ChatCompletionRequestMessage, ChatCompletionTool, ChatCompletionToolChoiceOption,
+    ChatCompletionTools, CreateChatCompletionRequestArgs, CreateChatCompletionResponse, FunctionCall,
+    FunctionCallStream, FunctionName, FunctionObject,
 };
 use async_stream::try_stream;
 use backoff::ExponentialBackoffBuilder;
@@ -83,6 +83,17 @@ impl TryFrom<ChatCompletionMessageToolCall> for ToolCallResponse {
     }
 }
 
+impl TryFrom<ChatCompletionMessageToolCalls> for ToolCallResponse {
+    type Error = OpenAiError;
+
+    fn try_from(value: ChatCompletionMessageToolCalls) -> Result<Self, Self::Error> {
+        match value {
+            ChatCompletionMessageToolCalls::Function(tool_call) => tool_call.try_into(),
+            ChatCompletionMessageToolCalls::Custom(_) => Err(OpenAiError::EmptyResponse),
+        }
+    }
+}
+
 impl TryFrom<ChatCompletionMessageToolCallChunk> for ToolCallResponse {
     type Error = OpenAiError;
 
@@ -139,19 +150,19 @@ pub async fn openai_call_function_with_timeout<T: FunctionResponse>(
         .model(llm_config.get_journaling_model())
         .messages(messages)
         .max_tokens(1024u16)
-        .tools(vec![ChatCompletionTool {
-            r#type: ChatCompletionToolType::Function,
+        .tools(vec![ChatCompletionTools::Function(ChatCompletionTool {
             function: FunctionObject {
                 name: name.to_string(),
                 description: Some(T::function_description().to_string()),
                 parameters: Some(T::function_definition()),
                 strict: None,
             },
-        }])
-        .tool_choice(ChatCompletionToolChoiceOption::Named(ChatCompletionNamedToolChoice {
-            r#type: ChatCompletionToolType::Function,
-            function: FunctionName { name: name.to_string() },
-        }))
+        })])
+        .tool_choice(ChatCompletionToolChoiceOption::Function(
+            ChatCompletionNamedToolChoice {
+                function: FunctionName { name: name.to_string() },
+            },
+        ))
         .build()?;
 
     let http_client = reqwest::Client::builder()
@@ -195,6 +206,11 @@ fn check_function_call<T: FunctionResponse>(chat_completion: &CreateChatCompleti
         .ok_or(FunctionCallError::Missing)?
         .first()
         .ok_or(FunctionCallError::Missing)?;
+
+    let function_call = match function_call {
+        ChatCompletionMessageToolCalls::Function(function_call) => function_call,
+        ChatCompletionMessageToolCalls::Custom(_) => return Err(FunctionCallError::Missing.into()),
+    };
 
     if function_call.function.name != T::function_name() {
         tracing::warn!(
@@ -243,7 +259,7 @@ pub async fn openai_call_with_timeout(
     let tools_defs = tools
         .iter()
         .map(|tool| tool.as_openai_tool())
-        .collect::<Result<Vec<ChatCompletionTool>, OpenAiError>>()?;
+        .collect::<Result<Vec<ChatCompletionTools>, OpenAiError>>()?;
 
     request.tools(tools_defs);
 
