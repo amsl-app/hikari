@@ -6,7 +6,7 @@ use crate::builder::steps::{Condition, Documents, InjectionTrait, IntoLlmStep, P
 use crate::execution::core::LlmCore;
 use crate::execution::steps::LlmStep;
 use crate::execution::steps::message_generator::MessageGenerator;
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestAssistantMessageContent,
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestSystemMessageContent,
     ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,

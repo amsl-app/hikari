@@ -1,6 +1,6 @@
-use async_openai::types::{
-    ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolChoiceOption,
-    ChatCompletionToolType, FunctionName, FunctionObjectArgs,
+use async_openai::types::chat::{
+    ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolChoiceOption, ChatCompletionTools,
+    FunctionName, FunctionObjectArgs, ToolChoiceOptions,
 };
 use async_trait::async_trait;
 use serde_json::Value;
@@ -17,12 +17,11 @@ pub enum ToolChoice {
 impl From<ToolChoice> for ChatCompletionToolChoiceOption {
     fn from(choice: ToolChoice) -> Self {
         match choice {
-            ToolChoice::Auto => ChatCompletionToolChoiceOption::Auto,
-            ToolChoice::Named(name) => ChatCompletionToolChoiceOption::Named(ChatCompletionNamedToolChoice {
-                r#type: ChatCompletionToolType::Function,
+            ToolChoice::Auto => ChatCompletionToolChoiceOption::Mode(ToolChoiceOptions::Auto),
+            ToolChoice::Named(name) => ChatCompletionToolChoiceOption::Function(ChatCompletionNamedToolChoice {
                 function: FunctionName { name: name.clone() },
             }),
-            ToolChoice::Required => ChatCompletionToolChoiceOption::Required,
+            ToolChoice::Required => ChatCompletionToolChoiceOption::Mode(ToolChoiceOptions::Required),
         }
     }
 }
@@ -33,7 +32,7 @@ pub trait Tool: Send + Sync {
     fn description(&self) -> &str;
     fn parameters(&self) -> Value;
 
-    fn as_openai_tool(&self) -> Result<ChatCompletionTool, OpenAiError> {
+    fn as_openai_tool(&self) -> Result<ChatCompletionTools, OpenAiError> {
         let call = FunctionObjectArgs::default()
             .name(self.name().to_string())
             .description(self.description().to_string())
@@ -41,8 +40,7 @@ pub trait Tool: Send + Sync {
             .strict(false)
             .build()?;
 
-        let res = ChatCompletionToolArgs::default().function(call).build()?;
-        Ok(res)
+        Ok(ChatCompletionTools::Function(ChatCompletionTool { function: call }))
     }
 }
 
