@@ -2,6 +2,7 @@ use crate::data;
 use crate::data::modules;
 use crate::db::error::DbError;
 use crate::routes::api::v0::{assessment, bots};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use csml_engine::data::EngineError;
 use sea_orm::DbErr;
@@ -129,38 +130,43 @@ impl From<data::modules::error::ModuleError> for MessagingError {
 
 impl IntoResponse for MessagingError {
     fn into_response(self) -> Response {
-        match self {
-            Self::Message(e) => e.into_response(),
-            Self::Module(e) => e.into_response(),
-            Self::NoBot(_) => http::status::StatusCode::BAD_REQUEST.into_response(),
-            Self::NotRunning | Self::Exclusivity | Self::AlreadyStarted => {
-                http::status::StatusCode::CONFLICT.into_response()
-            }
-            _ => http::status::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        }
+        let status = match self {
+            Self::Message(e) => return e.into_response(),
+            Self::Module(e) => module_error_status(&e),
+            Self::NoBot(_) => StatusCode::BAD_REQUEST,
+            Self::NotRunning | Self::Exclusivity | Self::AlreadyStarted => StatusCode::CONFLICT,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        status.into_response()
     }
 }
 
 impl IntoResponse for ModuleError {
     fn into_response(self) -> Response {
-        match self {
-            ModuleError::DataError(_)
-            | ModuleError::SourceNotFound(_)
-            | Self::DBError(DbError::QueryError(diesel::result::Error::NotFound)) => {
-                http::status::StatusCode::NOT_FOUND.into_response()
-            }
-            _ => http::status::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        }
+        module_error_status(&self).into_response()
     }
 }
 
 impl IntoResponse for UserError {
     fn into_response(self) -> Response {
-        match self {
-            Self::InvalidKey => http::status::StatusCode::BAD_REQUEST.into_response(),
-            Self::NotFound => http::status::StatusCode::NOT_FOUND.into_response(),
-            Self::InvalidToken => http::status::StatusCode::NOT_ACCEPTABLE.into_response(),
-            _ => http::status::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        }
+        user_error_status(&self).into_response()
+    }
+}
+
+fn module_error_status(error: &ModuleError) -> StatusCode {
+    match error {
+        ModuleError::DataError(_)
+        | ModuleError::SourceNotFound(_)
+        | ModuleError::DBError(DbError::QueryError(diesel::result::Error::NotFound)) => StatusCode::NOT_FOUND,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+fn user_error_status(error: &UserError) -> StatusCode {
+    match error {
+        UserError::InvalidKey => StatusCode::BAD_REQUEST,
+        UserError::NotFound => StatusCode::NOT_FOUND,
+        UserError::InvalidToken => StatusCode::NOT_ACCEPTABLE,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
