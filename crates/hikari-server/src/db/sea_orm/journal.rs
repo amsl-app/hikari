@@ -98,8 +98,10 @@ fn create_journal_entities(conversation_id: Uuid, messages: Vec<Message>) -> Jou
                             && mood_value_f32.is_finite()
                         {
                             mood = Some(mood_value_f32);
+                        } else {
+                            tracing::error!(%conversation_id, %message_id, mood_value, "mood value out of range");
+                            continue;
                         }
-                        tracing::error!(%conversation_id, %message_id, mood_value, "mood value out of range");
                     }
                     "journal-content" => {
                         let content_string = match display_type {
