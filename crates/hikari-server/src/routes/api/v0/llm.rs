@@ -8,6 +8,7 @@ use crate::permissions::Permission;
 use crate::routes::api::v0::llm::error::LlmError;
 use crate::routes::api::v0::llm::load_slots::load_slots;
 use crate::routes::api::v0::modules::error::ModuleError;
+use crate::routes::api::v0::websocket::{IncomingMessage, decode_message};
 use crate::user::ExtractUser;
 use axum::Extension;
 use axum::extract::ws::{Message as WsMessage, Message, WebSocket};
@@ -352,25 +353,12 @@ fn convert_message(message: Result<WsMessage, axum::Error>) -> Result<Request, L
             return Err(LlmError::ReceiveError(error));
         }
     };
-    let message = match message {
-        WsMessage::Text(message) => message,
-        WsMessage::Binary(_) => {
-            // We just close the connection if we receive a binary message because we don't
-            // expect any binary messages
-            tracing::error!("received unexpected binary message");
-            return Err(LlmError::RequestError("unexpected binary message".to_string()));
-        }
-        WsMessage::Close(close) => {
-            tracing::info!(?close, "received close message");
-            // The library handles control messages
-            return Ok(Request::ControllMessage);
-        }
-        WsMessage::Ping(_) | WsMessage::Pong(_) => {
-            tracing::debug!("received control message");
-            return Ok(Request::ControllMessage);
-        }
+    let message = match decode_message(message) {
+        Ok(IncomingMessage::Text(message)) => message,
+        Ok(IncomingMessage::Control) => return Ok(Request::ControllMessage),
+        Err(error) => return Err(error.into()),
     };
-    let message = serde_json::from_str(&message)?;
+    let message = serde_json::from_str(message.as_str())?;
     Ok(message)
 }
 

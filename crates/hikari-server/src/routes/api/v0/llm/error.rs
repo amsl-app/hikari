@@ -8,6 +8,7 @@ use thiserror::Error;
 use tungstenite::protocol::frame::coding::CloseCode;
 
 use crate::routes::api::v0::modules::error::ModuleError;
+use crate::routes::api::v0::websocket;
 
 #[derive(Error, Debug)]
 pub(crate) enum LlmError {
@@ -83,5 +84,11 @@ impl IntoResponse for LlmError {
             }
             _ => http::status::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
+    }
+}
+
+impl From<websocket::Error> for LlmError {
+    fn from(error: websocket::Error) -> Self {
+        Self::RequestError(error.to_string())
     }
 }
