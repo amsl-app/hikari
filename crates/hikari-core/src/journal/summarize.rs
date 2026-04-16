@@ -11,7 +11,7 @@ use hikari_db::journal::journal_summary;
 use hikari_model::journal::MetaJournalEntryWithMetaContent;
 use hikari_utils::date::get_day_bounds;
 
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
 };
 use sea_orm::prelude::Uuid;

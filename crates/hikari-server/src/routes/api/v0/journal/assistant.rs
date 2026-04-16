@@ -5,7 +5,7 @@ use crate::AppConfig;
 use crate::permissions::Permission;
 use crate::routes::api::v0::journal::assistant::error::{AssistantError, AssistantErrorType};
 use crate::routes::error::ErrorData;
-use async_openai::types::{
+use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
     ChatCompletionRequestUserMessageArgs,
 };

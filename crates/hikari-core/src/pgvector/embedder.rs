@@ -1,7 +1,7 @@
 use async_openai::{
     Client,
     config::OpenAIConfig,
-    types::{CreateEmbeddingRequestArgs, EmbeddingInput},
+    types::embeddings::{CreateEmbeddingRequestArgs, EmbeddingInput},
 };
 
 use crate::pgvector::error::PgVectorError;

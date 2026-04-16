@@ -8,6 +8,7 @@ use thiserror::Error;
 use tungstenite::protocol::frame::coding::CloseCode;
 
 use crate::routes::api::v0::modules::error::ModuleError;
+use crate::routes::api::v0::websocket;
 
 #[derive(Error, Debug)]
 pub(crate) enum LlmError {
@@ -17,8 +18,6 @@ pub(crate) enum LlmError {
     Serialization(#[from] serde_json::Error),
     #[error("Failed to send response")]
     SendError(axum::Error),
-    #[error("Failed to receive message")]
-    ReceiveError(axum::Error),
     #[error(transparent)]
     ModuleError(#[from] ModuleError),
     #[error("Module not found: {0}")]
@@ -83,5 +82,11 @@ impl IntoResponse for LlmError {
             }
             _ => http::status::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
+    }
+}
+
+impl From<websocket::Error> for LlmError {
+    fn from(error: websocket::Error) -> Self {
+        Self::RequestError(error.to_string())
     }
 }
