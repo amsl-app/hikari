@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde_yml::Value;
+use yaml_serde::Value;
 
 use crate::constants::v01::collection::ConstantCollectionV01;
 

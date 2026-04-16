@@ -61,7 +61,7 @@ pub struct Module<'a> {
     pub metadata: Option<Metadata>,
     pub groups_whitelist: Vec<String>,
     pub groups_blacklist: Vec<String>,
-    pub custom: Option<HashMap<String, serde_yml::Value>>,
+    pub custom: Option<HashMap<String, yaml_serde::Value>>,
     pub self_learning: bool,
     pub quizzable: bool,
 }
@@ -265,7 +265,7 @@ pub async fn load_config(loader: Loader, llm_rag_documents: &DocumentCollection)
 }
 
 fn load(content: &[u8], llm_rag_documents: &DocumentCollection) -> Result<Module<'static>, ModuleError> {
-    let VersionConfig::V01 { module } = serde_yml::from_slice::<VersionConfig>(content)?;
+    let VersionConfig::V01 { module } = yaml_serde::from_slice::<VersionConfig>(content)?;
 
     let module = Module::from_v01(module, llm_rag_documents)?;
     tracing::debug!("Loaded Module is {:?}", module);
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn test_module_loading() {
         let module_file = read_to_string("test_configs/test.module.yaml").unwrap();
-        let VersionConfig::V01 { module } = serde_yml::from_str::<VersionConfig>(&module_file).unwrap();
+        let VersionConfig::V01 { module } = yaml_serde::from_str::<VersionConfig>(&module_file).unwrap();
         assert_eq!(module.id, "test");
         let ModuleAssessment { pre, post } = module.assessment.clone().unwrap();
         assert_eq!(pre, "pre-id");

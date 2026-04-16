@@ -32,7 +32,7 @@ async-stream = "0.3.6"
 futures-core = "0.3.31"
 uuid = { version = "1.21.0", features = ["v4"] }
 tracing = "0.1.41"
-serde_yml = "0.0.12"
+yaml_serde = "0.10.4"
 utoipa = "5.4.0"
 num-traits = "0.2.19"
 regex = "1.11.2"

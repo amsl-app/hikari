@@ -73,7 +73,7 @@ pub async fn load(loader: Loader) -> Result<AssessmentConfig, LoadingError> {
     let mut res = IndexMap::new();
     let mut stream = loader.load_dir("", Filter::Yaml);
     while let Some(Ok(file)) = stream.next().await {
-        let VersionConfig::V01 { assessment } = serde_yml::from_slice::<VersionConfig>(&file.content)?;
+        let VersionConfig::V01 { assessment } = yaml_serde::from_slice::<VersionConfig>(&file.content)?;
         let assessment: Assessment = assessment.into();
         res.insert(assessment.assessment_id.clone(), assessment);
     }
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn test_assessment_loading() {
         let assessment_file = read_to_string("test_configs/test.assessment.yaml").unwrap();
-        let VersionConfig::V01 { assessment } = serde_yml::from_str::<VersionConfig>(&assessment_file).unwrap();
+        let VersionConfig::V01 { assessment } = yaml_serde::from_str::<VersionConfig>(&assessment_file).unwrap();
         let assessment: Assessment = assessment.into();
         assert_eq!(assessment.questions.len(), 1);
     }

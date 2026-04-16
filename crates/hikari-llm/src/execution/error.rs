@@ -40,7 +40,7 @@ pub enum LlmExecutionError {
     #[error(transparent)]
     JsonError(#[from] serde_json::Error),
     #[error(transparent)]
-    YamlError(#[from] serde_yml::Error),
+    YamlError(#[from] yaml_serde::Error),
     #[error("Unexpected response format")]
     UnexpectedResponseFormat,
     #[error(transparent)]

@@ -24,7 +24,7 @@ pub async fn load(loader: Loader) -> Result<DocumentCollection, LoadingError> {
     let mut stream = loader.load_dir("", Filter::Yaml);
     let mut all_documents = DocumentCollection::default();
     while let Some(Ok(file)) = stream.next().await {
-        let VersionConfig::V01 { documents } = serde_yml::from_slice::<VersionConfig>(&file.content)?;
+        let VersionConfig::V01 { documents } = yaml_serde::from_slice::<VersionConfig>(&file.content)?;
         let collection: DocumentCollection = documents.into();
         for (id, mut doc) in collection.documents {
             let file = loader.get_file_metadata(&doc.file).await?;
@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn test_collection_loading() {
         let collection_file = read_to_string("test_configs/test.collection.yaml").unwrap();
-        let VersionConfig::V01 { documents } = serde_yml::from_str::<VersionConfig>(&collection_file).unwrap();
+        let VersionConfig::V01 { documents } = yaml_serde::from_str::<VersionConfig>(&collection_file).unwrap();
         let collection: DocumentCollection = documents.into();
         assert_eq!(collection.documents.len(), 1);
     }

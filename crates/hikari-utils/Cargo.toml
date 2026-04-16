@@ -45,7 +45,7 @@ num-traits = "0.2.19"
 url = "2.5.7"
 async-stream = "0.3.6"
 async-walkdir = "2.1.0"
-serde_yml = "0.0.12"
+yaml_serde = "0.10.4"
 futures = "0.3.32"
 pdf-extract = "0.10.0"
 xxhash-rust = {version="0.8.15", features = ["xxh3"]}

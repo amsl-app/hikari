@@ -14,9 +14,9 @@ use crate::execution::steps::conversation_validator::ConversationValidator;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
-use serde_yml::Value;
 use std::collections::HashMap;
 use std::hash::BuildHasher;
+use yaml_serde::Value;
 
 const PROMPT_KEY: &str = "VALIDATOR_PREFIX";
 const TEMPERATURE_KEY: &str = "VALIDATOR_TEMPERATURE";

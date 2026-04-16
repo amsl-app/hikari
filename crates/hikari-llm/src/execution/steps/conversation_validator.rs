@@ -13,9 +13,9 @@ use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use sea_orm::DatabaseConnection;
-use serde_yml::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
+use yaml_serde::Value;
 
 pub type NextStep = Option<String>;
 

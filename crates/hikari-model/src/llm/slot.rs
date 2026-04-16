@@ -1,4 +1,4 @@
-use serde_yml::Value;
+use yaml_serde::Value;
 
 #[derive(Debug, Clone)]
 pub struct Slot {

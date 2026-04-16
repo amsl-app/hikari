@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
 use std::collections::HashMap;
+use yaml_serde::Value;
 
 use crate::builder::build_memory_filter;
 use crate::builder::error::LlmBuildingError;

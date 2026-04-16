@@ -8,10 +8,10 @@ use hikari_utils::loader::{Filter, Loader, LoaderTrait, error::LoadingError};
 use indexmap::IndexMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_yml::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use yaml_serde::Value;
 
 pub mod slot;
 pub mod steps;
@@ -44,7 +44,7 @@ pub async fn load(loader: Loader) -> Result<LlmStructureConfig, LoadingError> {
     let mut res = IndexMap::new();
     let mut stream = loader.load_dir("", Filter::Yaml);
     while let Some(Ok(file)) = stream.next().await {
-        let config = serde_yml::from_slice::<VersionConfig>(&file.content);
+        let config = yaml_serde::from_slice::<VersionConfig>(&file.content);
         match config {
             Ok(VersionConfig::V01 { structure }) => {
                 if res.contains_key(&structure.id) {
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn test_structure_loading() {
         let structure_file = read_to_string("test_configs/test.agemt.yaml").unwrap();
-        let VersionConfig::V01 { structure } = serde_yml::from_str::<VersionConfig>(&structure_file).unwrap();
+        let VersionConfig::V01 { structure } = yaml_serde::from_str::<VersionConfig>(&structure_file).unwrap();
         assert_eq!(structure.slots.len(), 0);
         assert_eq!(structure.constants.len(), 1);
     }

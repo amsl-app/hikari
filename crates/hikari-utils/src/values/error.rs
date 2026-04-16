@@ -7,5 +7,5 @@ pub enum ValuesError {
     #[error(transparent)]
     JsonParse(#[from] serde_json::Error),
     #[error(transparent)]
-    YamlParse(#[from] serde_yml::Error),
+    YamlParse(#[from] yaml_serde::Error),
 }

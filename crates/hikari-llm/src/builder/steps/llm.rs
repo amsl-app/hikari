@@ -14,8 +14,8 @@ use async_openai::types::{
 use hikari_model::llm::message::ConversationMessage;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_yml::Value;
 use std::collections::HashMap;
+use yaml_serde::Value;
 
 use super::{LlmModel, Memory};
 

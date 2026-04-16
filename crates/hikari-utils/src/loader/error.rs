@@ -46,7 +46,7 @@ pub enum ParseError {
     #[error(transparent)]
     Url(#[from] url::ParseError),
     #[error(transparent)]
-    Yaml(#[from] serde_yml::Error),
+    Yaml(#[from] yaml_serde::Error),
     #[error(transparent)]
     Utf8(#[from] std::string::FromUtf8Error),
     #[error(transparent)]
@@ -61,8 +61,8 @@ impl From<url::ParseError> for LoadingError {
     }
 }
 
-impl From<serde_yml::Error> for LoadingError {
-    fn from(e: serde_yml::Error) -> Self {
+impl From<yaml_serde::Error> for LoadingError {
+    fn from(e: yaml_serde::Error) -> Self {
         ParseError::Yaml(e).into()
     }
 }

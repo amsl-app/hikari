@@ -93,7 +93,7 @@ impl GlobalConfig {
 pub async fn load(loader: Loader) -> Result<GlobalConfig, LoadingError> {
     tracing::debug!("Loading config");
     let file = loader.load_file("").await?;
-    let VersionConfig::V01 { hikari } = serde_yml::from_slice::<VersionConfig>(&file.content)?;
+    let VersionConfig::V01 { hikari } = yaml_serde::from_slice::<VersionConfig>(&file.content)?;
 
     Ok(hikari.into())
 }
@@ -109,7 +109,7 @@ mod tests {
     fn test_config_loading() {
         let global_config_file = read_to_string("test_configs/test.global.yaml").unwrap();
         let VersionConfig::V01 { hikari: config_v01 } =
-            serde_yml::from_str::<VersionConfig>(&global_config_file).unwrap();
+            yaml_serde::from_str::<VersionConfig>(&global_config_file).unwrap();
         let config: GlobalConfig = config_v01.into();
 
         assert_eq!(config.onboarding.module, Some("onboarding".to_string()));
