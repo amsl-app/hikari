@@ -22,10 +22,7 @@ macro_rules! gen_match_user_fields {
     };
 }
 
-async fn get_user_config(
-    conn: &DatabaseConnection,
-    user: &User,
-) -> Result<Value, LlmExecutionError> {
+async fn get_user_config(conn: &DatabaseConnection, user: &User) -> Result<Value, LlmExecutionError> {
     let config = hikari_db::config::Query::get_user_config(conn, user.id).await?;
     let config_map = config
         .into_iter()
@@ -36,7 +33,6 @@ async fn get_user_config(
         .collect();
     Ok(Value::Mapping(config_map))
 }
-
 
 pub async fn load_slots<'a>(
     conn: &DatabaseConnection,

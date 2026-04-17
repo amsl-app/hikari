@@ -148,7 +148,7 @@ impl LlmStepTrait for VectorDBExtractor {
             let mut values = HashMap::new();
 
             if !content.is_empty() {
-                values.insert(self.target.clone(), content.into());
+                values.insert(self.target.clone(), Value::String(content));
             }
 
             tracing::debug!("Retriever Values: {:?}", values);

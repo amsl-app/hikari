@@ -11,6 +11,7 @@ use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
+use yaml_serde::{Number, Value};
 
 #[derive(Clone)]
 pub struct Counter {
@@ -70,7 +71,7 @@ impl LlmStepTrait for Counter {
                 }
             }?;
             let mut values = HashMap::new();
-            values.insert(self.slot.clone(), new_value.into());
+            values.insert(self.slot.clone(), Value::Number(Number::from(new_value)));
 
             Ok(LlmStepResponse::new(
                 LlmStepContent::StepValue {

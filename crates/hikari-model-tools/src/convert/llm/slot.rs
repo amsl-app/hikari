@@ -10,7 +10,7 @@ use crate::convert::FromDbModel;
 
 impl FromDbModel<ConversationSlotModel> for Slot {
     fn from_db_model(model: ConversationSlotModel) -> Self {
-        tracing::debug!(?model.value, "Creating template from conversation slot model");
+        tracing::debug!(?model.value, "Creating YAML value from conversation slot model");
         Self {
             name: model.slot,
             value: Value::decode(&model.value),
@@ -20,7 +20,7 @@ impl FromDbModel<ConversationSlotModel> for Slot {
 
 impl FromDbModel<GlobalSlotModel> for Slot {
     fn from_db_model(model: GlobalSlotModel) -> Self {
-        tracing::debug!(?model.value, "Creating template from global slot model");
+        tracing::debug!(?model.value, "Creating YAML value from global slot model");
         Self {
             name: model.slot,
             value: Value::decode(&model.value),
@@ -30,7 +30,7 @@ impl FromDbModel<GlobalSlotModel> for Slot {
 
 impl FromDbModel<SessionSlotModel> for Slot {
     fn from_db_model(model: SessionSlotModel) -> Self {
-        tracing::debug!(?model.value, "Creating template from session slot model");
+        tracing::debug!(?model.value, "Creating YAML value from session slot model");
         Self {
             name: model.slot,
             value: Value::decode(&model.value),
@@ -40,7 +40,7 @@ impl FromDbModel<SessionSlotModel> for Slot {
 
 impl FromDbModel<ModuleSlotModel> for Slot {
     fn from_db_model(model: ModuleSlotModel) -> Self {
-        tracing::debug!(?model.value, "Creating template from module slot model");
+        tracing::debug!(?model.value, "Creating YAML value from module slot model");
         Self {
             name: model.slot,
             value: Value::decode(&model.value),

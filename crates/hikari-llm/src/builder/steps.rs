@@ -424,15 +424,13 @@ impl std::fmt::Display for Template {
 
 impl From<&str> for Template {
     fn from(value: &str) -> Self {
-        tracing::debug!(?value, "Creating template from string");
-        Template(Value::decode(value))
+        Template(Value::String(value.to_owned()))
     }
 }
 
 impl From<String> for Template {
     fn from(value: String) -> Self {
-        tracing::debug!(?value, "Creating template from string");
-        Template(Value::decode(&value))
+        Template(Value::String(value))
     }
 }
 
@@ -488,7 +486,7 @@ impl InjectionTrait for Template {
             tracing::debug!(%value, %key, "Replaced placeholder with value");
         }
         tracing::debug!(?content, "Creating template from injected content");
-    
+
         Template(Value::decode(&content))
     }
 }
