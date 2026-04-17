@@ -85,7 +85,7 @@ where
                 Ok(Some((sub, groups))) => {
                     // Check if user already exists
 
-                    let (user, custom_groups) = get_or_create_user(&conn, &sub, &groups).await.map_err(|error| {
+                    let (user, custom_groups) = get_or_create_user(&conn, &sub).await.map_err(|error| {
                         tracing::error!(error = &error as &dyn Error, "failed to create user");
                         (StatusCode::INTERNAL_SERVER_ERROR, "Error creating user")
                     })?;
