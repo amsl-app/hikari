@@ -1676,8 +1676,8 @@ dependencies = [
 
 [[package]]
 name = "csml_engine"
-version = "1.11.2"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.3#d879ce8724d057187d7c2f2fd7b49317090b4d55"
+version = "2.0.4"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.4#946ef104188a6e084193fd1ba568e8d16ac86b36"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -1697,7 +1697,7 @@ dependencies = [
  "openssl",
  "rand 0.10.1",
  "regex",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "sea-orm",
  "serde",
  "serde_derive",
@@ -1712,7 +1712,7 @@ dependencies = [
 [[package]]
 name = "csml_engine_db"
 version = "0.1.0"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.3#d879ce8724d057187d7c2f2fd7b49317090b4d55"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.4#946ef104188a6e084193fd1ba568e8d16ac86b36"
 dependencies = [
  "csml_engine_entity",
  "sea-orm",
@@ -1721,7 +1721,7 @@ dependencies = [
 [[package]]
 name = "csml_engine_entity"
 version = "0.1.0"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.3#d879ce8724d057187d7c2f2fd7b49317090b4d55"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.4#946ef104188a6e084193fd1ba568e8d16ac86b36"
 dependencies = [
  "chrono",
  "sea-orm",
@@ -1731,8 +1731,8 @@ dependencies = [
 
 [[package]]
 name = "csml_interpreter"
-version = "1.11.2"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.3#d879ce8724d057187d7c2f2fd7b49317090b4d55"
+version = "2.0.4"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.4#946ef104188a6e084193fd1ba568e8d16ac86b36"
 dependencies = [
  "base64 0.22.1",
  "bincode",
@@ -1766,7 +1766,7 @@ dependencies = [
 [[package]]
 name = "csml_model"
 version = "0.1.0"
-source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.3#d879ce8724d057187d7c2f2fd7b49317090b4d55"
+source = "git+https://github.com/amsl-app/csml-engine?tag=v2.0.4#946ef104188a6e084193fd1ba568e8d16ac86b36"
 dependencies = [
  "serde",
  "utoipa",
@@ -2080,13 +2080,14 @@ dependencies = [
 
 [[package]]
 name = "diesel-async"
-version = "0.7.4"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13096fb8dae53f2d411c4b523bec85f45552ed3044a2ab4d85fb2092d9cb4f34"
+checksum = "b95864e58597509106f1fddfe0600de7e589e1fddddd87f54eee0a49fd111bbc"
 dependencies = [
  "diesel",
  "futures-core",
  "futures-util",
+ "pin-project-lite",
  "scoped-futures",
  "tokio",
  "tokio-postgres",
