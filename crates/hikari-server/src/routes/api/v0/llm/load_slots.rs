@@ -25,11 +25,18 @@ macro_rules! gen_match_user_fields {
 async fn get_user_config(
     conn: &DatabaseConnection,
     user: &User,
-    key: &str,
-) -> Result<Option<String>, LlmExecutionError> {
-    let value = hikari_db::config::Query::get_config_value(conn, user.id, key).await?;
-    Ok(value)
+) -> Result<Value, LlmExecutionError> {
+    let config = hikari_db::config::Query::get_user_config(conn, user.id).await?;
+    let config_map = config
+        .into_iter()
+        .map(|c| {
+            tracing::debug!(?c.key, "Decoding user config value for load_slots");
+            (Value::String(c.key), Value::decode(&c.value))
+        })
+        .collect();
+    Ok(Value::Mapping(config_map))
 }
+
 
 pub async fn load_slots<'a>(
     conn: &DatabaseConnection,
@@ -83,10 +90,9 @@ pub async fn load_slots<'a>(
                 groups
             ),
             ValueSource::UserConfig(user_conf_path) => {
-                let key = user_conf_path.path.as_str();
-                let value = get_user_config(conn, user, key).await?.unwrap_or_default();
-
-                Value::decode(&value)
+                let user_conf_path = user_conf_path.path.as_str();
+                let value = get_user_config(conn, user).await?;
+                value.query(user_conf_path)?
             }
         };
 
