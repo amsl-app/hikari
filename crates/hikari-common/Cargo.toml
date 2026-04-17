@@ -11,8 +11,8 @@ workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.3", features = [] }
-csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.3" }
+csml_engine = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.4", features = [] }
+csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.0.4" }
 futures = { version = "0.3.32", features = ["async-await"] }
 serde_json = "1.0.145"
 thiserror = "2.0.16"
