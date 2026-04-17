@@ -53,7 +53,10 @@ impl ValueDecoder for Value {
             tracing::debug!("Successfully decoded YAML value");
             parsed
         } else {
-            tracing::warn!(?str, "Failed to decode YAML value, falling back to string representation");
+            tracing::warn!(
+                ?str,
+                "Failed to decode YAML value, falling back to string representation"
+            );
             Value::String(str.to_string())
         }
     }
