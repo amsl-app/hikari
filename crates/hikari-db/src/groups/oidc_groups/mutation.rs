@@ -30,13 +30,12 @@ impl Mutation {
                         .on_conflict_do_nothing()
                         .exec(conn)
                         .await?;
-
-                    Entity::delete_many()
-                        .filter(oidc_groups::Column::UserId.eq(user_id))
-                        .filter(oidc_groups::Column::Value.is_not_in(groups))
-                        .exec(conn)
-                        .await?;
                 }
+                Entity::delete_many()
+                    .filter(oidc_groups::Column::UserId.eq(user_id))
+                    .filter(oidc_groups::Column::Value.is_not_in(groups))
+                    .exec(conn)
+                    .await?;
                 Result::<_, DbErr>::Ok(())
             })
         })

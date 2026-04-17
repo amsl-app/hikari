@@ -13,7 +13,7 @@ impl Query {
         sub: &str,
     ) -> Result<Option<Model>, DbErr> {
         Entity::find()
-            .filter(hikari_entity::oidc_mapping::Column::OidcSub.eq(sub.to_string()))
+            .filter(hikari_entity::oidc_mapping::Column::OidcSub.eq(sub))
             .one(db)
             .await
     }
