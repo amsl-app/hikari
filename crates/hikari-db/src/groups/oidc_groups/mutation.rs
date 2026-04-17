@@ -15,22 +15,27 @@ impl Mutation {
         user_id: Uuid,
         groups: HashSet<String>,
     ) -> Result<(), DbErr> {
-        let groups = groups
-            .into_iter()
+        let new_groups = groups
+            .iter()
             .map(|group| ActiveModel {
                 user_id: user_id.into_active_value(),
-                value: group.into_active_value(),
+                value: group.clone().into_active_value(),
             })
             .collect::<Vec<_>>();
 
         db.transaction(|conn| {
             Box::pin(async move {
-                Entity::delete_many()
-                    .filter(oidc_groups::Column::UserId.eq(user_id))
-                    .exec(conn)
-                    .await?;
-                if !groups.is_empty() {
-                    Entity::insert_many(groups).on_conflict_do_nothing().exec(conn).await?;
+                if !new_groups.is_empty() {
+                    Entity::insert_many(new_groups)
+                        .on_conflict_do_nothing()
+                        .exec(conn)
+                        .await?;
+
+                    Entity::delete_many()
+                        .filter(oidc_groups::Column::UserId.eq(user_id))
+                        .filter(oidc_groups::Column::Value.is_not_in(groups))
+                        .exec(conn)
+                        .await?;
                 }
                 Result::<_, DbErr>::Ok(())
             })

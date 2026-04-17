@@ -58,20 +58,37 @@ pub async fn create_user<C: ConnectionTrait + TransactionTrait>(
     sub: &str,
     groups: HashSet<String>,
 ) -> Result<User, DbErr> {
-    let sub = sub.to_string();
+    let _sub = sub.to_string();
+    let _groups: HashSet<String> = groups.clone();
+
     let user = conn
         .transaction(|txn| {
             Box::pin(async move {
                 let user = hikari_db::user::Mutation::create_user(txn).await?;
-                hikari_db::oidc_mapping::Mutation::create_oidc_mapping(txn, user.id, sub).await?;
-                hikari_db::groups::oidc_groups::Mutation::set(txn, user.id, groups).await?;
+                hikari_db::oidc_mapping::Mutation::create_oidc_mapping(txn, user.id, _sub).await?;
+                hikari_db::groups::oidc_groups::Mutation::set(txn, user.id, _groups).await?;
                 Ok(user)
             })
         })
         .await;
     let user = match user {
         Ok(user) => user,
-        Err(TransactionError::Transaction(err)) | Err(TransactionError::Connection(err)) => return Err(err),
+        Err(TransactionError::Transaction(err)) | Err(TransactionError::Connection(err)) => {
+            // Try once to get the user due to racing conditions where another transaction might have created the user after we checked for it but before we tried to create it.
+            tracing::warn!(
+                "Transaction failed with error: {:?}. Try to get the user again to check for racing conditions.",
+                err
+            );
+
+            let res = get_user(conn, &sub, &groups).await?;
+            if let Some((user, _)) = res {
+                tracing::debug!("User found after transaction failure, returning existing user");
+                user
+            } else {
+                tracing::error!("User not found after transaction failure, returning error");
+                return Err(err);
+            }
+        }
     };
     Ok(user)
 }
