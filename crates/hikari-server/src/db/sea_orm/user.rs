@@ -80,7 +80,7 @@ pub async fn create_user<C: ConnectionTrait + TransactionTrait>(
                 err
             );
 
-            let res = get_user(conn, &sub, &groups).await?;
+            let res = get_user(conn, sub, &groups).await?;
             if let Some((user, _)) = res {
                 tracing::debug!("User found after transaction failure, returning existing user");
                 user
