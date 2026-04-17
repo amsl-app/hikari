@@ -45,23 +45,39 @@ pub trait ValueDecoder {
 
 impl ValueDecoder for Value {
     fn decode(str: &str) -> Value {
+        tracing::debug!(?str, "Attempting to decode YAML value");
         // FIX: Sometimes the value cannot be parsed and panics (e.g. bad indentation or incomplete structure)
         if let Ok(parsed) = panic::catch_unwind(|| {
             yaml_serde::from_str(str).unwrap_or_else(|_| panic!("failed to decode value: {str}"))
         }) {
+            tracing::debug!("Successfully decoded YAML value");
             parsed
         } else {
+            tracing::warn!(
+                ?str,
+                "Failed to decode YAML value, falling back to string representation"
+            );
             Value::String(str.to_string())
         }
     }
 
     fn encode(&self) -> String {
+        tracing::debug!("Attempting to encode value to string");
         match self {
             Value::String(s) => s.clone(),
             Value::Number(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Null => "null".to_string(),
-            other => yaml_serde::to_string(other).unwrap_or_default(),
+            other => match yaml_serde::to_string(other) {
+                Ok(encoded) => {
+                    tracing::debug!("Successfully encoded YAML value");
+                    encoded
+                }
+                Err(err) => {
+                    tracing::warn!(?err, "Failed to encode YAML value, returning empty string");
+                    String::new()
+                }
+            },
         }
     }
 }

@@ -460,7 +460,7 @@ impl SlotsTrait for Template {
 impl InjectionTrait for Template {
     fn inject(&self, values: &[SlotValuePair]) -> Template {
         let mut content = self.0.encode();
-        tracing::trace!(?content, "Injecting values into template");
+        tracing::debug!(?content, "Injecting values into template");
 
         for placeholder in self.placeholders() {
             tracing::trace!(?placeholder, "Found placeholder");
@@ -475,13 +475,15 @@ impl InjectionTrait for Template {
 
             let slot_path = SlotPath::from(placeholder.clone());
 
-            let value = values
-                .iter()
-                .find(|v| v.path == slot_path)
-                .map_or("**N/A**".to_string(), |v| v.value.0.encode());
+            let value = if let Some(v) = values.iter().find(|v| v.path == slot_path) {
+                v.value.0.encode()
+            } else {
+                tracing::warn!(%key, "Value for placeholder not found, replacing with **N/A**");
+                "**N/A**".to_string()
+            };
 
             content = content.replace(&key, &value);
-            tracing::trace!(%value, %key, "Replaced placeholder with value");
+            tracing::debug!(%value, %key, "Replaced placeholder with value");
         }
 
         Template(Value::decode(&content))

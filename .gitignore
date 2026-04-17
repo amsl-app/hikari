@@ -18,3 +18,5 @@ CSML
 run-local.sh
 /schemas/
 /tools/
+.gemini
+GEMINI.md
