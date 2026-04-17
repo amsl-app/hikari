@@ -20,6 +20,10 @@ pub async fn update_oidc_groups<C: ConnectionTrait + TransactionTrait>(
     let current_groups = hikari_db::groups::oidc_groups::Query::get_for_user(conn, user_id).await?;
     let current_group_names: HashSet<String> = current_groups.into_iter().map(|g| g.value).collect();
     if &current_group_names != groups {
+        tracing::debug!(
+            user_id = user_id.to_string(),
+            "Different OIDC groups found, updating groups"
+        );
         hikari_db::groups::oidc_groups::Mutation::set(conn, user_id, groups.clone()).await?;
     }
     Ok(())
@@ -33,11 +37,17 @@ pub async fn get_user<C: ConnectionTrait + TransactionTrait>(
     let sub = sub.to_string();
     let user_id = check_for_user_id(conn, &sub).await?;
     if let Some(user_id) = user_id {
+        tracing::debug!(user_id = user_id.to_string(), "UserId found");
         update_oidc_groups(conn, user_id, groups).await?;
         let user = hikari_db::user::Query::find_user_by_id(conn, user_id)
             .await?
             .ok_or_else(|| DbErr::RecordNotFound("Record not found after checking for user id".to_owned()))?;
         let custom_groups = hikari_db::groups::custom_groups::Query::get_for_user(conn, user_id).await?;
+        tracing::debug!(
+            user_id = ?user_id,
+            custom_groups = ?custom_groups,
+            "Returning user with custom groups"
+        );
         return Ok(Some((user, custom_groups)));
     }
     Ok(None)
@@ -72,8 +82,10 @@ pub async fn get_or_create_user<C: ConnectionTrait + TransactionTrait>(
     groups: &HashSet<String>,
 ) -> Result<(User, Vec<String>), DbErr> {
     if let Some((user, custom_groups)) = get_user(conn, sub, groups).await? {
+        tracing::debug!("User already exists, returning existing user");
         Ok((user, custom_groups))
     } else {
+        tracing::debug!("User does not exist, create new user");
         let user = create_user(conn, sub, groups.clone()).await?;
         Ok((user, Vec::new()))
     }
