@@ -27,7 +27,7 @@ async fn get_user_config(conn: &DatabaseConnection, user: &User) -> Result<Value
     let config_map = config
         .into_iter()
         .map(|c| {
-            tracing::debug!(?c.key, "Decoding user config value for load_slots");
+            tracing::trace!(?c.key, "Decoding user config value for load_slots");
             (Value::String(c.key), Value::decode(&c.value))
         })
         .collect();
@@ -51,6 +51,8 @@ pub async fn load_slots<'a>(
         session_key(current_module_id, current_session_id),
         yaml_serde::to_value(session)?,
     )]);
+
+    let user_config = get_user_config(conn, user).await?;
 
     for LoadToSlot { name, source } in slots {
         let value = match &source {
@@ -87,8 +89,7 @@ pub async fn load_slots<'a>(
             ),
             ValueSource::UserConfig(user_conf_path) => {
                 let user_conf_path = user_conf_path.path.as_str();
-                let value = get_user_config(conn, user).await?;
-                value.query(user_conf_path)?
+                user_config.query(user_conf_path)?
             }
         };
 

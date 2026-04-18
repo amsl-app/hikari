@@ -224,13 +224,13 @@ a:
         let res_num = number_val.query("$.a").unwrap();
         assert_eq!(res_num, Value::Null);
         let res_num_root = number_val.query("$").unwrap();
-        assert_eq!(res_num_root, Value::Number(yaml_serde::Number::from(42))); 
+        assert_eq!(res_num_root, Value::Number(yaml_serde::Number::from(42)));
 
         let bool_val = Value::Bool(true);
         let res_bool = bool_val.query("$.a").unwrap();
         assert_eq!(res_bool, Value::Null);
         let res_bool_root = bool_val.query("$").unwrap();
-        assert_eq!(res_bool_root, Value::Bool(true)); 
+        assert_eq!(res_bool_root, Value::Bool(true));
     }
 
     #[test]

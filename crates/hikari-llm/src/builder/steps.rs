@@ -483,9 +483,9 @@ impl InjectionTrait for Template {
             };
 
             content = content.replace(&key, &value);
-            tracing::debug!(%value, %key, "Replaced placeholder with value");
+            tracing::trace!(%value, %key, "Replaced placeholder with value");
         }
-        tracing::debug!(?content, "Creating template from injected content");
+        tracing::trace!(?content, "Creating template from injected content");
 
         Template(Value::decode(&content))
     }
