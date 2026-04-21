@@ -424,7 +424,7 @@ impl std::fmt::Display for Template {
 
 impl From<&str> for Template {
     fn from(value: &str) -> Self {
-        Template(Value::String(value.to_owned()))
+        Template(Value::String(value.to_string()))
     }
 }
 
