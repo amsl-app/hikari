@@ -25,7 +25,8 @@ pub enum LlmService {
     #[default]
     OpenAI,
     Gwdg,
-    Custom(Url),
+    KIT,
+    Custom(Url), 
 }
 
 impl FromStr for LlmService {
@@ -46,6 +47,7 @@ impl LlmService {
         match self {
             LlmService::OpenAI => "https://api.openai.com/v1".into(),
             LlmService::Gwdg => "https://chat-ai.academiccloud.de/v1".into(),
+            LlmService::KIT =>  "https://ki-toolbox.scc.kit.edu/api/v1".into(),
             LlmService::Custom(url) => Cow::from(url.as_str()),
         }
     }
