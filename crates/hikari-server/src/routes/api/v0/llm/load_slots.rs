@@ -27,7 +27,7 @@ async fn get_user_config(conn: &DatabaseConnection, user: &User) -> Result<Value
     let config_map = config
         .into_iter()
         .map(|c| {
-            tracing::trace!(?c.key, "Decoding user config value for load_slots");
+            tracing::trace!(key = ?c.key, "decoding user config value for load_slots");
             (Value::String(c.key), Value::decode(&c.value))
         })
         .collect();
