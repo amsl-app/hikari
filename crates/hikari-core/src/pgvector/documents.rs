@@ -6,6 +6,7 @@ use std::pin::Pin;
 use futures::{FutureExt, future::BoxFuture};
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingChunk;
 use hikari_utils::loader::{error::LoadingError, file::File};
+use tracing::instrument;
 
 use crate::pgvector::{embedder::Embedder, error::PgVectorError};
 
@@ -108,6 +109,7 @@ impl PgVectorDocumentTrait for PgVectorDocument {
         }
     }
 
+    #[instrument(skip_all)]
     fn chunks<'a>(
         &'a mut self,
         embedder: &'a Embedder,

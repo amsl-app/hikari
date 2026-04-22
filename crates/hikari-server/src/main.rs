@@ -34,6 +34,7 @@ use std::env;
 use std::fmt::Debug;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
+use tracing::instrument;
 use url::Url;
 
 mod app;
@@ -335,6 +336,7 @@ async fn load_bots(csml_url: &Url, worker_url: &Url, loader_handler: &LoaderHand
     Ok(bots)
 }
 
+#[instrument(skip_all)]
 async fn upload_documents(
     documents: DocumentCollection,
     llm_config: LlmConfig,
