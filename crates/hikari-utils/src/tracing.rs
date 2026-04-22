@@ -10,6 +10,8 @@ use opentelemetry_semantic_conventions::resource::{DEPLOYMENT_ENVIRONMENT_NAME, 
 use sentry::ClientInitGuard;
 use sentry_tracing::EventFilter;
 use std::borrow::Cow;
+use std::env;
+use std::env::VarError;
 use std::time::Duration;
 use thiserror::Error;
 use tracing_core::{Level, LevelFilter};
@@ -106,13 +108,23 @@ pub fn setup(config: TracingConfig) -> Result<TracingGuard, Error> {
         _ => EventFilter::Breadcrumb,
     });
 
+    let env_filter_builder = EnvFilter::builder().with_default_directive(LevelFilter::INFO.into());
+    let env_filter_string = env::var(EnvFilter::DEFAULT_ENV)
+        .inspect_err(|err| {
+            if !matches!(err, VarError::NotPresent) {
+                eprintln!("Failed to read tracing environment filter: {err}");
+            }
+        })
+        .unwrap_or_default();
+    let env_filter = env_filter_builder.parse(&env_filter_string).unwrap_or_else(|err| {
+        eprintln!("Failed to parse tracing environment filter: {err}");
+        eprintln!("Falling back to lossy parsing");
+        env_filter_builder.parse_lossy(env_filter_string)
+    });
+
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
-        .with(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
+        .with(env_filter)
         .with(sentry_layer);
     let providers = if let Some(otlp_endpoint) = config.otlp_endpoint {
         global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
