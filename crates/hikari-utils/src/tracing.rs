@@ -123,7 +123,7 @@ pub fn setup(config: TracingConfig) -> Result<TracingGuard, Error> {
     });
 
     let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().pretty())
         .with(env_filter)
         .with(sentry_layer);
     let providers = if let Some(otlp_endpoint) = config.otlp_endpoint {
