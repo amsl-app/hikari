@@ -174,10 +174,22 @@ async fn run(opt: Run) -> Result<()> {
     let llm_rag_documents_path = opt.llm_config.llm_collections;
 
     // ---- Load Bots
-    let bots = load_bots(&opt.csml, &opt.worker_url, &loader_handler).await?;
+    let bots = match &opt.csml {
+        Some(csml_path) => load_bots(csml_path, &opt.worker_url, &loader_handler).await?,
+        None => {
+            tracing::warn!("no csml path provided, using empty bots");
+            Bots::default()
+        },
+    };
 
     // ---- Load LLM
-    let llm_structure_config = load_llm_structures(&opt.llm_config.llm_structures, &loader_handler).await?;
+    let llm_structure_config = match &opt.llm_config.llm_structures {
+        Some(llm_structures_path) => load_llm_structures(llm_structures_path, &loader_handler).await?,
+        None => {
+            tracing::warn!("no llm structures path provided, using empty structures");
+            LlmStructureConfig::default()
+        },
+    };
     let document_collection = load_documents(&llm_rag_documents_path, &loader_handler).await?;
     let constants = load_constants(opt.llm_config.constants.as_ref(), &loader_handler).await?;
 

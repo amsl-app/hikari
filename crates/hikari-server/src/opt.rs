@@ -76,7 +76,7 @@ pub(crate) struct Run {
     pub(crate) workers: Option<usize>,
 
     #[arg(long, help = "The url were the csml files are stored")]
-    pub(crate) csml: Url,
+    pub(crate) csml: Option<Url>,
 
     #[arg(short, long, help = "The url were config files are stored")]
     pub(crate) config: Url,

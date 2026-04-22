@@ -52,6 +52,12 @@ pub(crate) struct Bots {
     bots: Vec<CsmlBot>,
 }
 
+impl Default for Bots {
+    fn default() -> Self {
+        Self { bots: Vec::new() }
+    }
+}
+
 impl Bots {
     pub fn new(bots: Vec<CsmlBot>) -> Self {
         Self { bots }
