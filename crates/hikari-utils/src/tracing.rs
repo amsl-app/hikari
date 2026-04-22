@@ -16,11 +16,22 @@ use std::time::Duration;
 use thiserror::Error;
 use tracing_core::{Level, LevelFilter};
 use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
+use strum;
 use typed_builder::TypedBuilder;
+
+#[derive(Debug, Clone, strum::EnumString, Default)]
+#[strum(serialize_all = "kebab-case")]
+pub enum LogFormat {
+    Pretty,
+    Json,
+    Compact,
+    #[default]
+    Default,
+}
 
 #[derive(TypedBuilder, Debug)]
 pub struct TracingConfig {
@@ -33,6 +44,8 @@ pub struct TracingConfig {
     pub env: String,
     #[builder(default)]
     pub otlp_endpoint: Option<String>,
+    #[builder(default)]
+    pub log_format: Option<LogFormat>,
 }
 
 #[derive(Debug, Error)]
@@ -122,8 +135,16 @@ pub fn setup(config: TracingConfig) -> Result<TracingGuard, Error> {
         env_filter_builder.parse_lossy(env_filter_string)
     });
 
+    let fmt_layer = tracing_subscriber::fmt::layer();
+    let fmt_layer = match config.log_format.unwrap_or_default() {
+        LogFormat::Pretty => fmt_layer.pretty().boxed(),
+        LogFormat::Json => fmt_layer.json().boxed(),
+        LogFormat::Compact => fmt_layer.compact().boxed(),
+        LogFormat::Default => fmt_layer.boxed(),
+    };
+
     let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(fmt_layer)
         .with(env_filter)
         .with(sentry_layer);
     let providers = if let Some(otlp_endpoint) = config.otlp_endpoint {

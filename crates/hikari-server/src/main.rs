@@ -147,6 +147,7 @@ async fn run(opt: Run) -> Result<()> {
             .otlp_endpoint(opt.otlp_endpoint)
             .sentry_dsn(opt.sentry_dsn)
             .env(opt.env.clone())
+            .log_format(opt.log_format)
             .build(),
     );
 
@@ -179,7 +180,7 @@ async fn run(opt: Run) -> Result<()> {
         None => {
             tracing::warn!("no csml path provided, using empty bots");
             Bots::default()
-        },
+        }
     };
 
     // ---- Load LLM
@@ -188,7 +189,7 @@ async fn run(opt: Run) -> Result<()> {
         None => {
             tracing::warn!("no llm structures path provided, using empty structures");
             LlmStructureConfig::default()
-        },
+        }
     };
     let document_collection = load_documents(&llm_rag_documents_path, &loader_handler).await?;
     let constants = load_constants(opt.llm_config.constants.as_ref(), &loader_handler).await?;

@@ -32,6 +32,7 @@ async fn run(opt: Run) -> Result<()> {
             .sentry_dsn(opt.sentry_dsn.clone())
             .env(opt.env.clone())
             .otlp_endpoint(opt.otlp_endpoint.clone())
+            .log_format(opt.log_format)
             .build(),
     );
     tracing::info!("starting hikari worker");
