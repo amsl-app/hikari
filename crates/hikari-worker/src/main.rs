@@ -34,7 +34,7 @@ async fn run(opt: Run) -> Result<()> {
             .otlp_endpoint(opt.otlp_endpoint.clone())
             .log_format(opt.log_format)
             .build(),
-    );
+    )?;
     tracing::info!("starting hikari worker");
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 

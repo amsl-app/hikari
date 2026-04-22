@@ -149,7 +149,7 @@ async fn run(opt: Run) -> Result<()> {
             .env(opt.env.clone())
             .log_format(opt.log_format)
             .build(),
-    );
+    )?;
 
     //TODO (Prio?) replace by command line argument
     let db_engine_type = env::var("ENGINE_DB_TYPE").map_err(|e| anyhow!("Cant find env: \"DATABASE_URL\" {e:?}"))?;

@@ -2,8 +2,8 @@ use std::net::IpAddr;
 
 use clap::{Parser, Subcommand};
 use hikari_utils::args::{llm::LlmServices, s3::S3};
-use url::Url;
 use hikari_utils::tracing::LogFormat;
+use url::Url;
 
 #[derive(Debug, Parser)]
 #[command(name = "hikari-worker", about = "Run the hikari worker")]
