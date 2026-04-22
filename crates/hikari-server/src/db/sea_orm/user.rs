@@ -30,7 +30,7 @@ pub async fn get_user<C: ConnectionTrait + TransactionTrait>(
     Ok(None)
 }
 
-pub async fn create_user<C: ConnectionTrait + TransactionTrait>(conn: &C, sub: &str) -> Result<User, DbErr> {
+pub async fn create_user<C: ConnectionTrait + TransactionTrait>(conn: &C, sub: &str) -> Result<(User, Vec<String>), DbErr> {
     let _sub = sub.to_string();
 
     let user = conn
@@ -45,9 +45,10 @@ pub async fn create_user<C: ConnectionTrait + TransactionTrait>(conn: &C, sub: &
     let user = match user {
         Ok(user) => user,
         Err(TransactionError::Transaction(err)) | Err(TransactionError::Connection(err)) => {
+            // TODO old logic
             // Try once to get the user due to racing conditions where another transaction might have created the user after we checked for it but before we tried to create it.
             tracing::warn!(%err, "transaction failed with error. Try to get the user again to check for racing conditions.");
-            let res = get_user(conn, sub).await?;
+            let res: Option<(User, Vec<String>)> = get_user(conn, sub).await?;
             if let Some((user, _)) = res {
                 tracing::debug!("user found after transaction failure, returning existing user");
                 user
@@ -69,8 +70,7 @@ pub async fn get_or_create_user<C: ConnectionTrait + TransactionTrait>(
         Ok((user, custom_groups))
     } else {
         tracing::debug!("user does not exist, create new user");
-        let user = create_user(conn, sub).await?;
-        Ok((user, Vec::new()))
+        let (user, custom_groups) = create_user(conn, sub).await?;
     }
 }
 
