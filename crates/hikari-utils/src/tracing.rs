@@ -161,7 +161,9 @@ pub fn setup(config: TracingConfig) -> Result<TracingGuard, Error> {
     } else {
         subscriber.with(None).with(None)
     };
-    subscriber.try_init()?;
+    subscriber.try_init().inspect_err(|err| {
+        eprintln!("failed to initialize tracing: {err}");
+    })?;
     Ok(TracingGuard {
         _sentry: guard,
         providers,
