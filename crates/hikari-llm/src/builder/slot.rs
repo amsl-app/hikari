@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::builder::{
-    slot::paths::{ModulePath, SessionPath, SlotPath, UserPath},
+    slot::paths::{ModulePath, SessionPath, SlotPath, UserConfigPath, UserPath},
     steps::{InjectionTrait, SlotsTrait, Template},
 };
 
@@ -21,7 +21,7 @@ pub enum ValueSource {
     User(UserPath),
     /// # Load value from the user config
     /// User configs are custom objects
-    UserConfig(UserPath),
+    UserConfig(UserConfigPath),
 }
 #[derive(Deserialize, Debug, Clone, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
