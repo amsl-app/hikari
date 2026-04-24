@@ -3,61 +3,71 @@ use hikari_entity::user::Model as User;
 use sea_orm::prelude::*;
 use sea_orm::{TransactionError, TransactionTrait};
 use std::collections::HashSet;
+use thiserror::Error;
 
-pub async fn check_for_user_id<C: ConnectionTrait + TransactionTrait>(
-    conn: &C,
-    sub: &str,
-) -> Result<Option<Uuid>, DbErr> {
-    let mapping = hikari_db::oidc_mapping::Query::find_for_sub(conn, sub).await?;
-    Ok(mapping.map(|m| m.user_id))
+#[derive(Debug, Error)]
+enum UserCreationError {
+    #[error(transparent)]
+    DbErr(#[from] DbErr),
+
+    #[error("User exists")]
+    UserExists { user_id: Uuid },
 }
 
-pub async fn get_user<C: ConnectionTrait + TransactionTrait>(
+pub async fn get_user_by_id<C: ConnectionTrait + TransactionTrait>(
+    conn: &C,
+    user_id: Uuid,
+) -> Result<(User, Vec<String>), DbErr> {
+    let user = hikari_db::user::Query::find_user_by_id(conn, user_id)
+        .await?
+        .ok_or_else(|| DbErr::RecordNotFound("record not found after checking for user id".to_owned()))?;
+    let custom_groups = hikari_db::groups::custom_groups::Query::get_for_user(conn, user_id).await?;
+    Ok((user, custom_groups))
+}
+
+pub async fn check_user_by_sub<C: ConnectionTrait + TransactionTrait>(
     conn: &C,
     sub: &str,
 ) -> Result<Option<(User, Vec<String>)>, DbErr> {
-    let sub = sub.to_string();
-    let user_id = check_for_user_id(conn, &sub).await?;
+    let user_id = hikari_db::oidc_mapping::Query::find_for_sub(conn, sub)
+        .await?
+        .map(|m| m.user_id);
     if let Some(user_id) = user_id {
         tracing::debug!(%user_id, "UserId found");
-        let user = hikari_db::user::Query::find_user_by_id(conn, user_id)
-            .await?
-            .ok_or_else(|| DbErr::RecordNotFound("record not found after checking for user id".to_owned()))?;
-        let custom_groups = hikari_db::groups::custom_groups::Query::get_for_user(conn, user_id).await?;
-        tracing::debug!(%user_id, ?custom_groups,"Returning user with custom groups");
-        return Ok(Some((user, custom_groups)));
+        let user = get_user_by_id(conn, user_id).await?;
+        return Ok(Some(user));
     }
     Ok(None)
 }
 
-pub async fn create_user<C: ConnectionTrait + TransactionTrait>(conn: &C, sub: &str) -> Result<(User, Vec<String>), DbErr> {
+pub async fn create_user<C: ConnectionTrait + TransactionTrait>(
+    conn: &C,
+    sub: &str,
+) -> Result<(User, Vec<String>), DbErr> {
     let _sub = sub.to_string();
 
-    let user = conn
+    let res = conn
         .transaction(|txn| {
             Box::pin(async move {
                 let user = hikari_db::user::Mutation::create_user(txn).await?;
-                hikari_db::oidc_mapping::Mutation::create_oidc_mapping(txn, user.id, _sub).await?;
-                Ok(user)
+                let mapping = hikari_db::oidc_mapping::Mutation::create_oidc_mapping(txn, user.id, _sub).await?;
+                if user.id.eq(&mapping.user_id) {
+                    Result::<_, UserCreationError>::Ok(user.id)
+                } else {
+                    Err(UserCreationError::UserExists {
+                        user_id: mapping.user_id,
+                    })
+                }
             })
         })
         .await;
-    let user = match user {
-        Ok(user) => user,
-        Err(TransactionError::Transaction(err)) | Err(TransactionError::Connection(err)) => {
-            // TODO old logic
-            // Try once to get the user due to racing conditions where another transaction might have created the user after we checked for it but before we tried to create it.
-            tracing::warn!(%err, "transaction failed with error. Try to get the user again to check for racing conditions.");
-            let res: Option<(User, Vec<String>)> = get_user(conn, sub).await?;
-            if let Some((user, _)) = res {
-                tracing::debug!("user found after transaction failure, returning existing user");
-                user
-            } else {
-                tracing::error!(%err, "user not found after transaction failure, returning error");
-                return Err(err);
-            }
+    let user_id: Uuid = match res {
+        Ok(user_id) | Err(TransactionError::Transaction(UserCreationError::UserExists { user_id })) => user_id,
+        Err(TransactionError::Connection(error) | TransactionError::Transaction(UserCreationError::DbErr(error))) => {
+            return Err(error);
         }
     };
+    let user = get_user_by_id(conn, user_id).await?;
     Ok(user)
 }
 
@@ -65,12 +75,13 @@ pub async fn get_or_create_user<C: ConnectionTrait + TransactionTrait>(
     conn: &C,
     sub: &str,
 ) -> Result<(User, Vec<String>), DbErr> {
-    if let Some((user, custom_groups)) = get_user(conn, sub).await? {
+    if let Some((user, custom_groups)) = check_user_by_sub(conn, sub).await? {
         tracing::debug!("user already exists, returning existing user");
         Ok((user, custom_groups))
     } else {
         tracing::debug!("user does not exist, create new user");
         let (user, custom_groups) = create_user(conn, sub).await?;
+        Ok((user, custom_groups))
     }
 }
 
