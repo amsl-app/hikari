@@ -37,4 +37,6 @@ pub enum ModuleError {
 pub enum LlmServiceError {
     #[error("Unknown service: {0}")]
     UnknownService(String),
+    #[error(transparent)]
+    InvalidUrl(#[from] url::ParseError),
 }

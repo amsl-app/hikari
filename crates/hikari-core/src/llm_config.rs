@@ -20,7 +20,6 @@ pub struct LlmConfig {
     openai: LlmServiceConfig,
     gwdg: LlmServiceConfig,
     kit: LlmServiceConfig,
-    custom: LlmServiceConfig,
     pub embedding_config: LlmFeatureConfig,
     pub journaling_config: LlmFeatureConfig,
     pub quiz_config: LlmFeatureConfig,
@@ -56,10 +55,6 @@ impl From<LlmServiceArgs> for LlmConfig {
                 key: config.kit_key,
                 default_model: config.kit_default_model,
             },
-            custom: LlmServiceConfig {
-                key: config.win_key,
-                default_model: config.win_default_model,
-            },
             embedding_config: LlmFeatureConfig {
                 service: embedding_service,
                 model: config.embedding_model,
@@ -82,17 +77,14 @@ impl LlmConfig {
         openai: LlmServiceConfig,
         gwdg: LlmServiceConfig,
         kit: LlmServiceConfig,
-        custom: LlmServiceConfig,
         embeddings: LlmFeatureConfig,
         journaling: LlmFeatureConfig,
         quiz: LlmFeatureConfig,
     ) -> Self {
         Self {
-
             openai,
             gwdg,
             kit,
-            custom,
             embedding_config: embeddings,
             journaling_config: journaling,
             quiz_config: quiz,
@@ -107,7 +99,7 @@ impl LlmConfig {
             LlmService::OpenAI => self.openai.default_model.as_deref().unwrap_or("gpt-4.1-mini"),
             LlmService::Gwdg => self.gwdg.default_model.as_deref().unwrap_or("llama-3.3-70b-instruct"),
             LlmService::KIT => self.kit.default_model.as_deref().unwrap_or("minimax-m2.7-229b"),
-            LlmService::Custom(_) => self.custom.default_model.as_deref().unwrap_or("llama-3.3-8b-instruct"),
+            LlmService::Custom(_) => "llama-3.3-8b-instruct", // Should be defined in the agent config manually
         }
     }
 
@@ -117,7 +109,7 @@ impl LlmConfig {
             LlmService::OpenAI => self.openai.key.as_deref(),
             LlmService::Gwdg => self.gwdg.key.as_deref(),
             LlmService::KIT => self.kit.key.as_deref(),
-            LlmService::Custom(_) => self.custom.key.as_deref(),
+            LlmService::Custom(_) => None,
         }
     }
 

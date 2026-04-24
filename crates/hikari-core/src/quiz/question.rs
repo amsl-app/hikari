@@ -231,8 +231,10 @@ pub async fn create_question(
     }?;
 
     if let Some(usage) = llm_response.tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_evaluation".to_owned()).await?;
+        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_generation".to_owned()).await?;
     }
+
+    tracing::debug!(llm_content=?llm_response.content, "llm response content");
 
     if let Content::Tool(tool_calls) = llm_response.content {
         let first = tool_calls
@@ -245,14 +247,17 @@ pub async fn create_question(
         // FIXME: This should probably be checked
         let question = arguments
             .get("question")
-            .expect("missing question")
+            .ok_or(QuizError::UnexpectedResponseFormat)?
             .as_str()
             .unwrap_or("")
             .to_string();
 
         let question_model = if name == "MultipleChoiceQuestionTool" {
             // FIXME: This should probably be checked
-            let options = arguments.get("options").expect("missing question options").to_string();
+            let options = arguments
+                .get("options")
+                .ok_or(QuizError::UnexpectedResponseFormat)?
+                .to_string();
 
             let question = hikari_db::quiz::question::Mutation::create_multiple_choice_question(
                 conn,
@@ -272,7 +277,7 @@ pub async fn create_question(
             // FIXME: This should probably be checked
             let solution = arguments
                 .get("solution")
-                .expect("missing solution")
+                .ok_or(QuizError::UnexpectedResponseFormat)?
                 .as_str()
                 .unwrap_or("")
                 .to_string();
@@ -292,6 +297,7 @@ pub async fn create_question(
 
             Ok(question)
         } else {
+            tracing::error!("no tool response found in LLM output");
             Err(QuizError::UnexpectedResponseFormat)
         }?;
 

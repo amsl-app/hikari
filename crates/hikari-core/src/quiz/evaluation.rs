@@ -297,14 +297,14 @@ pub async fn evaluate_answer(
         // FIXME: These should probably be checked
         let grade = arguments
             .get("grade")
-            .expect("missing grade")
+            .ok_or(QuizError::UnexpectedResponseFormat)?
             .as_f64()
             .unwrap_or(0.0)
             .to_i32()
             .unwrap_or(0);
         let evaluation = arguments
             .get("evaluation")
-            .expect("missing evaluation")
+            .ok_or(QuizError::UnexpectedResponseFormat)?
             .as_str()
             .unwrap_or("")
             .to_string();

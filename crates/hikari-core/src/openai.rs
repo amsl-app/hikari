@@ -325,6 +325,7 @@ pub async fn openai_call_with_timeout(
         }
     } else {
         let res = client.chat().create(request).await;
+        tracing::debug!("received OpenAI response");
         let chat_completion = res.map_err(|error| {
             tracing::warn!(error = &error as &dyn Error, "open AI call failed");
             OpenAiError::Api(error)

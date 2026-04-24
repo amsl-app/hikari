@@ -275,6 +275,7 @@ async fn get_next_question(
     )?;
 
     if let Some(question) = open_question {
+        tracing::debug!(?quiz_id, question_id=?question.id, "found open question for quiz", );
         let mut question_model: Question = question.into_model();
         question_model.sanitize_for_client();
         return Ok(Json(question_model).into_response());
@@ -298,7 +299,7 @@ async fn get_next_question(
 
     let specific_content: &str = pick_specific_content(&content);
 
-    let llm_config: &LlmConfig = AppConfig::llm_config(&app_config);
+    let llm_config: &LlmConfig = app_config.llm_config();
 
     let contents = &session.contents;
 
@@ -311,6 +312,8 @@ async fn get_next_question(
         .iter()
         .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
         .collect();
+
+    tracing::debug!(selected_session_id, topic, specific_content, "requesting new question");
 
     let mut question = create_question(
         &user_id,
