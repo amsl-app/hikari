@@ -33,7 +33,7 @@ pub struct LlmServices {
 #[allow(clippy::struct_field_names)]
 pub struct LlmConfig {
     #[arg(long, required = false)]
-    pub llm_structures: Url,
+    pub llm_structures: Option<Url>,
     #[arg(long, required = false)]
     pub llm_collections: Url,
     #[arg(long, required = false, help = "The url were the constants are stored")]

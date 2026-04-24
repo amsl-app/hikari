@@ -5,6 +5,7 @@ use hikari_utils::loader::{error::LoadingError, file::File};
 use regex::Regex;
 use std::collections::VecDeque;
 use std::sync::LazyLock;
+use tracing::instrument;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::pgvector::documents::{
@@ -55,6 +56,7 @@ impl PgVectorDocumentTrait for TextDocument {
         self.loaded_file.insert(file)
     }
 
+    #[instrument(skip_all, fields(id = self.id))]
     fn chunks<'a>(
         &'a mut self,
         embedder: &'a Embedder,
@@ -120,7 +122,7 @@ impl PgVectorDocumentTrait for TextDocument {
             let count = similarities_sum / similarities_count;
             let similarity_avg = if count.is_normal() { count } else { 0.0 };
 
-            tracing::debug!("Average similarity: {}", similarity_avg);
+            tracing::debug!(name: "average_similarity", similarity_avg);
 
             let mut chunks: Vec<LlmEmbeddingChunk> = Vec::new();
 

@@ -10,15 +10,28 @@ use opentelemetry_semantic_conventions::resource::{DEPLOYMENT_ENVIRONMENT_NAME, 
 use sentry::ClientInitGuard;
 use sentry_tracing::EventFilter;
 use std::borrow::Cow;
+use std::env;
+use std::env::VarError;
 use std::time::Duration;
 use thiserror::Error;
 use tracing_core::{Level, LevelFilter};
 use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
+use strum;
 use typed_builder::TypedBuilder;
+
+#[derive(Debug, Clone, strum::EnumString, Default)]
+#[strum(serialize_all = "kebab-case")]
+pub enum LogFormat {
+    Pretty,
+    Json,
+    Compact,
+    #[default]
+    Default,
+}
 
 #[derive(TypedBuilder, Debug)]
 pub struct TracingConfig {
@@ -31,6 +44,8 @@ pub struct TracingConfig {
     pub env: String,
     #[builder(default)]
     pub otlp_endpoint: Option<String>,
+    #[builder(default)]
+    pub log_format: Option<LogFormat>,
 }
 
 #[derive(Debug, Error)]
@@ -106,13 +121,31 @@ pub fn setup(config: TracingConfig) -> Result<TracingGuard, Error> {
         _ => EventFilter::Breadcrumb,
     });
 
+    let env_filter_builder = EnvFilter::builder().with_default_directive(LevelFilter::INFO.into());
+    let env_filter_string = env::var(EnvFilter::DEFAULT_ENV)
+        .inspect_err(|err| {
+            if !matches!(err, VarError::NotPresent) {
+                eprintln!("Failed to read tracing environment filter: {err}");
+            }
+        })
+        .unwrap_or_default();
+    let env_filter = env_filter_builder.parse(&env_filter_string).unwrap_or_else(|err| {
+        eprintln!("Failed to parse tracing environment filter: {err}");
+        eprintln!("Falling back to lossy parsing");
+        env_filter_builder.parse_lossy(env_filter_string)
+    });
+
+    let fmt_layer = tracing_subscriber::fmt::layer();
+    let fmt_layer = match config.log_format.unwrap_or_default() {
+        LogFormat::Pretty => fmt_layer.pretty().boxed(),
+        LogFormat::Json => fmt_layer.json().boxed(),
+        LogFormat::Compact => fmt_layer.compact().boxed(),
+        LogFormat::Default => fmt_layer.boxed(),
+    };
+
     let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
-        .with(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
+        .with(fmt_layer)
+        .with(env_filter)
         .with(sentry_layer);
     let providers = if let Some(otlp_endpoint) = config.otlp_endpoint {
         global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
@@ -149,7 +182,9 @@ pub fn setup(config: TracingConfig) -> Result<TracingGuard, Error> {
     } else {
         subscriber.with(None).with(None)
     };
-    subscriber.try_init()?;
+    subscriber.try_init().inspect_err(|err| {
+        eprintln!("failed to initialize tracing: {err}");
+    })?;
     Ok(TracingGuard {
         _sentry: guard,
         providers,

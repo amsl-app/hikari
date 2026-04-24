@@ -3,6 +3,7 @@ use std::{collections::HashSet, vec};
 use futures::{FutureExt, future::BoxFuture};
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingChunk;
 use hikari_utils::loader::{error::LoadingError, file::File};
+use tracing::instrument;
 
 use crate::pgvector::{
     documents::{MIN_CHUNK_SIZE, PgVectorDocumentTrait, RagDocumentLoaderFn, cosine_similarity},
@@ -49,6 +50,7 @@ impl PgVectorDocumentTrait for SlidesDocument {
         self.loaded_file.insert(file)
     }
 
+    #[instrument(skip_all, fields(id = self.id))]
     fn chunks<'a>(
         &'a mut self,
         embedder: &'a Embedder,

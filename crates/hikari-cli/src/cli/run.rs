@@ -53,14 +53,17 @@ async fn load_bot(name: String, endpoint: Option<String>) -> Result<CsmlBot, Bot
 }
 
 pub(crate) async fn run(opt: Run) -> Result<(), Error> {
-    let _guard = opt.debug.then(|| {
-        hikari_utils::tracing::setup(
-            hikari_utils::tracing::TracingConfig::builder()
-                .package(env!("CARGO_PKG_NAME"))
-                .version(env!("CARGO_PKG_VERSION"))
-                .build(),
-        )
-    });
+    let _guard = opt
+        .debug
+        .then(|| {
+            hikari_utils::tracing::setup(
+                hikari_utils::tracing::TracingConfig::builder()
+                    .package(env!("CARGO_PKG_NAME"))
+                    .version(env!("CARGO_PKG_VERSION"))
+                    .build(),
+            )
+        })
+        .transpose()?;
 
     let mut line: String = String::new();
 

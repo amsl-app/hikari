@@ -12,10 +12,12 @@ use sea_orm::prelude::Uuid;
 use sea_orm::query::Value;
 use sea_orm::{ConnectionTrait, DbBackend, QueryResult, Statement, TransactionTrait};
 use std::vec;
+use tracing::instrument;
 use xxhash_rust::xxh3::xxh3_64;
 pub mod documents;
 pub mod embedder;
 pub mod error;
+use tracing::Level;
 
 pub(crate) const EMBEDDING_TABLE: &str = "llm_embeddings";
 pub(crate) const DOCUMENT_TABLE: &str = "llm_documents";
@@ -42,6 +44,7 @@ impl PgVector<'_> {
         }
     }
 
+    #[instrument(skip_all, fields(?file_metadata), ret, err(level = Level::ERROR))]
     pub async fn upsert_file(
         &self,
         mut document: PgVectorDocument,
@@ -90,6 +93,7 @@ impl PgVector<'_> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip(self, chunks), ret, err(level = Level::ERROR))]
     async fn insert_file(
         &self,
         file_id: &str,
@@ -222,6 +226,7 @@ impl PgVector<'_> {
     }
 }
 
+#[instrument(skip_all, fields(?file_metadata))]
 pub async fn upload_document(
     retriever: &PgVector<'_>,
     document: PgVectorDocument,
