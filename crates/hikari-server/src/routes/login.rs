@@ -62,7 +62,7 @@ pub(crate) async fn login_token(
         LoginError::Invalid
     })?;
 
-    let access_token = db::sea_orm::user::create_user_and_get_token(&conn, &sub, groups).await?;
+    let access_token = db::sea_orm::user::get_or_create_user_and_get_token(&conn, &sub, groups).await?;
 
     let mut response = Response::builder();
     response = response.status(StatusCode::OK);

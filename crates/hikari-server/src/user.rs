@@ -1,6 +1,6 @@
 use crate::app::AuthConfig;
 use crate::auth::{AuthError, validate_jwt};
-use crate::db::sea_orm::user::create_user;
+use crate::db::sea_orm::user::get_or_create_user;
 use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::{Extension, RequestPartsExt};
 use axum_auth::AuthBearer;
@@ -83,7 +83,9 @@ where
             .await
             {
                 Ok(Some((sub, groups))) => {
-                    let (user, custom_groups) = create_user(&conn, &sub, groups.clone()).await.map_err(|error| {
+                    // Check if user already exists
+
+                    let (user, custom_groups) = get_or_create_user(&conn, &sub).await.map_err(|error| {
                         tracing::error!(error = &error as &dyn Error, "failed to create user");
                         (StatusCode::INTERNAL_SERVER_ERROR, "Error creating user")
                     })?;
