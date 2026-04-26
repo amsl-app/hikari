@@ -121,9 +121,17 @@ impl TryFrom<ChatCompletionMessageToolCall> for ToolCallResponse {
             .captures(&arguments)
             .and_then(|caps| caps.get(1).map(|t| t.as_str().trim().to_string()));
         let arguments = THINKING_RE.replace_all(&arguments, "").to_string();
-        tracing::debug!(arguments = &arguments, "cleaned function call arguments");
-
+        let arguments_len = arguments.len();
         let arguments = Value::from_str(&arguments)?;
+        let argument_keys: Vec<&str> = match &arguments {
+            Value::Object(map) => map.keys().map(String::as_str).collect(),
+            _ => Vec::new(),
+        };
+        tracing::debug!(
+            arguments_len,
+            argument_keys = ?argument_keys,
+            "cleaned function call arguments"
+        );
 
         Ok(ToolCallResponse {
             name,
