@@ -313,7 +313,7 @@ async fn get_next_question(
         .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
         .collect();
 
-    tracing::debug!(selected_session_id, topic, specific_content, "requesting new question");
+    tracing::debug!(selected_session_id, topic, "requesting new question");
 
     let mut question = create_question(
         &user_id,
