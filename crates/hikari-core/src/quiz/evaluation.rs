@@ -281,6 +281,7 @@ pub async fn evaluate_answer(
             .build(),
         openai_config,
         None,
+        None,
         model,
         prompt_messages,
     )

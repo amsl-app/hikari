@@ -78,6 +78,30 @@ pub struct LlmModel {
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasining_effort: Option<ReasoningEffort>,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ReasoningEffort {
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+
+impl From<ReasoningEffort> for async_openai::types::chat::ReasoningEffort {
+    fn from(value: ReasoningEffort) -> Self {
+        match value {
+            ReasoningEffort::None => async_openai::types::chat::ReasoningEffort::None,
+            ReasoningEffort::Minimal => async_openai::types::chat::ReasoningEffort::Minimal,
+            ReasoningEffort::Low => async_openai::types::chat::ReasoningEffort::Low,
+            ReasoningEffort::Medium => async_openai::types::chat::ReasoningEffort::Medium,
+            ReasoningEffort::High => async_openai::types::chat::ReasoningEffort::High,
+        }
+    }
 }
 
 impl LlmModel {
@@ -85,6 +109,7 @@ impl LlmModel {
         Self {
             temperature: self.temperature.or(Some(temp)),
             model: self.model,
+            reasining_effort: self.reasining_effort,
         }
     }
 }

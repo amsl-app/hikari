@@ -263,6 +263,7 @@ pub async fn create_question(
             .build(),
         openai_config,
         None,
+        None,
         model,
         prompt_messages,
     )

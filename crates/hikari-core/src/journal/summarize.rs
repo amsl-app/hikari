@@ -367,6 +367,7 @@ Verwende Valides JSON als Argumente für den Funktionsaufruf.
             .build(),
         openai_config,
         None,
+        None,
         model,
         messages,
     )

@@ -6,7 +6,7 @@ use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionMessageToolCalls,
     ChatCompletionRequestMessage, ChatCompletionTools, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
-    FunctionCall, FunctionCallStream,
+    FunctionCall, FunctionCallStream, ReasoningEffort,
 };
 use async_stream::try_stream;
 use backoff::ExponentialBackoffBuilder;
@@ -186,6 +186,7 @@ pub async fn openai_call_with_timeout(
     openai_config: OpenAIConfig,
     streaming: bool,
     temperature: Option<f32>,
+    reasoning_effort: Option<ReasoningEffort>,
     model: &str,
     messages: Vec<ChatCompletionRequestMessage>,
     tools: Vec<ToolSchema>,
@@ -196,6 +197,10 @@ pub async fn openai_call_with_timeout(
 
     if let Some(temperature) = temperature {
         request.temperature(temperature);
+    }
+
+    if let Some(reasoning_effort) = reasoning_effort {
+        request.reasoning_effort(reasoning_effort);
     }
 
     let tools = tools
@@ -404,6 +409,7 @@ pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
     config: CallConfig,
     openai_config: OpenAIConfig,
     temperature: Option<f32>,
+    reasoning_effort: Option<ReasoningEffort>,
     model: &str,
     messages: Vec<ChatCompletionRequestMessage>,
 ) -> Result<(T, Option<u32>), OpenAiError> {
@@ -419,6 +425,7 @@ pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
         openai_config,
         false,
         temperature,
+        reasoning_effort,
         model,
         messages,
         vec![tool_schema],

@@ -98,6 +98,7 @@ pub async fn generate_prompt(
             .build(),
         openai_config,
         None,
+        None,
         model,
         messages,
     )
@@ -198,6 +199,7 @@ Es folgen die Fragen.",
             .build(),
         openai_config,
         None,
+        None,
         model,
         messages,
     )
@@ -281,6 +283,7 @@ pub async fn merge_prompts(
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
+        None,
         None,
         model,
         messages,
@@ -376,6 +379,7 @@ Rufe die Funktion `TextZusammnfuehren` auf um die Formulierungen zurückzugeben.
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
+        None,
         None,
         model,
         messages,
