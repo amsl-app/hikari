@@ -2,8 +2,7 @@ pub mod error;
 use crate::journal::summarize::error::SummarizeError;
 use crate::llm_config::LlmConfig;
 use crate::openai::error::OpenAiError;
-use crate::openai::tools::ToolChoice;
-use crate::openai::{CallConfig, Content, OpenAiCallResult, openai_call_with_timeout};
+use crate::openai::{CallConfig, openai_single_tool_call};
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
 };
@@ -361,39 +360,22 @@ Verwende Valides JSON als Argumente für den Funktionsaufruf.
     let openai_config = llm_config.get_journaling_openai_config();
     let model = llm_config.get_journaling_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (mut res, tokens) = openai_single_tool_call::<Summary>(
         CallConfig::builder()
             .total_timeout(Duration::from_secs(120))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,
-        false,
         None,
         model,
         messages,
-        vec![schemars::schema_for!(Summary).into()],
-        Some(ToolChoice::Named("Summary".to_string())),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(SummarizeError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, &user_id, usage, "journal_summary".to_owned()).await?;
     }
 
-    let response = match llm_response.content {
-        Content::Tool(tool_calls) => tool_calls
-            .into_iter()
-            .next()
-            .ok_or(SummarizeError::UnexpectedResponseFormat),
-        Content::Text { .. } => Err(SummarizeError::UnexpectedResponseFormat),
-    }?;
-
-    let mut res: Summary = serde_json::from_value(response.arguments)?;
     res.fix_escapes();
 
     let (summary, topic_summaries) = journal_summary::Mutation::create(

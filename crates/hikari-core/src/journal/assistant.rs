@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     journal::assistant::error::AssistantError,
     llm_config::LlmConfig,
-    openai::{CallConfig, Content, OpenAiCallResult, error::OpenAiError, openai_call_with_timeout, tools::ToolChoice},
+    openai::{CallConfig, error::OpenAiError, openai_single_tool_call},
 };
 use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
@@ -88,40 +88,23 @@ pub async fn generate_prompt(
     let openai_config = llm_config.get_journaling_openai_config();
     let model = llm_config.get_journaling_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (mut res, tokens) = openai_single_tool_call::<PromptResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_secs(60))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
-        false,
         None,
         model,
         messages,
-        vec![schemars::schema_for!(PromptResponse).into()],
-        Some(ToolChoice::Named("TiefereNachfrage".to_string())),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(AssistantError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_prompt".to_owned()).await?;
     }
 
-    let response = match llm_response.content {
-        Content::Tool(tool_calls) => tool_calls
-            .into_iter()
-            .next()
-            .ok_or(AssistantError::UnexpectedResponseFormat),
-        Content::Text { .. } => Err(AssistantError::UnexpectedResponseFormat),
-    }?;
-
-    let mut res: PromptResponse = serde_json::from_value(response.arguments)?;
     res.fix_escapes();
     Ok(res)
 }
@@ -204,40 +187,23 @@ Es folgen die Fragen.",
     let openai_config = llm_config.get_journaling_openai_config();
     let model = llm_config.get_journaling_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (mut res, tokens) = openai_single_tool_call::<PromptResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_secs(60))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
-        false,
         None,
         model,
         messages,
-        vec![schemars::schema_for!(PromptResponse).into()],
-        Some(ToolChoice::Named("TiefereNachfrage".to_string())),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(AssistantError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_text_prompt".to_owned()).await?;
     }
 
-    let response = match llm_response.content {
-        Content::Tool(tool_calls) => tool_calls
-            .into_iter()
-            .next()
-            .ok_or(AssistantError::UnexpectedResponseFormat),
-        Content::Text { .. } => Err(AssistantError::UnexpectedResponseFormat),
-    }?;
-
-    let mut res: PromptResponse = serde_json::from_value(response.arguments)?;
     res.fix_escapes();
     Ok(res)
 }
@@ -304,40 +270,23 @@ pub async fn merge_prompts(
     let openai_config = llm_config.get_journaling_openai_config();
     let model = llm_config.get_journaling_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (mut res, tokens) = openai_single_tool_call::<MergeResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_secs(60))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
-        false,
         None,
         model,
         messages,
-        vec![schemars::schema_for!(MergeResponse).into()],
-        Some(ToolChoice::Named("TextZusammenfuehren".to_string())),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(AssistantError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_merge".to_owned()).await?;
     }
 
-    let response = match llm_response.content {
-        Content::Tool(tool_calls) => tool_calls
-            .into_iter()
-            .next()
-            .ok_or(AssistantError::UnexpectedResponseFormat),
-        Content::Text { .. } => Err(AssistantError::UnexpectedResponseFormat),
-    }?;
-
-    let mut res: MergeResponse = serde_json::from_value(response.arguments)?;
     res.fix_escapes();
     Ok(res)
 }
@@ -415,40 +364,23 @@ Rufe die Funktion `TextZusammnfuehren` auf um die Formulierungen zurückzugeben.
     let openai_config = llm_config.get_journaling_openai_config();
     let model = llm_config.get_journaling_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (mut res, tokens) = openai_single_tool_call::<MergeResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_secs(60))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
-        false,
         None,
         model,
         messages,
-        vec![schemars::schema_for!(MergeResponse).into()],
-        Some(ToolChoice::Named("TextZusammenfuehren".to_string())),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(AssistantError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_text_merge".to_owned()).await?;
     }
 
-    let response = match llm_response.content {
-        Content::Tool(tool_calls) => tool_calls
-            .into_iter()
-            .next()
-            .ok_or(AssistantError::UnexpectedResponseFormat),
-        Content::Text { .. } => Err(AssistantError::UnexpectedResponseFormat),
-    }?;
-
-    let mut res: MergeResponse = serde_json::from_value(response.arguments)?;
     res.fix_escapes();
     Ok(res)
 }

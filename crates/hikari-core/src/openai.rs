@@ -12,6 +12,8 @@ use async_stream::try_stream;
 use backoff::ExponentialBackoffBuilder;
 use futures::StreamExt;
 use regex::Regex;
+use schemars::JsonSchema;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::error::Error;
 use std::str::FromStr;
@@ -353,4 +355,48 @@ pub async fn openai_call_with_timeout(
         let message: Message = chat_completion.try_into()?;
         Ok(OpenAiCallResult::Message(message))
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
+    config: CallConfig,
+    openai_config: OpenAIConfig,
+    temperature: Option<f32>,
+    model: &str,
+    messages: Vec<ChatCompletionRequestMessage>,
+) -> Result<(T, Option<u32>), OpenAiError> {
+    let schema = schemars::schema_for!(T);
+    let tool_schema: ToolSchema = schema.into();
+    let tool_name = tool_schema
+        .name()
+        .ok_or_else(|| OpenAiError::ToolError("Schema missing title/name".to_string()))?
+        .to_string();
+
+    let llm_response = openai_call_with_timeout(
+        config,
+        openai_config,
+        false,
+        temperature,
+        model,
+        messages,
+        vec![tool_schema],
+        Some(ToolChoice::Named(tool_name)),
+    )
+    .await?;
+
+    let llm_response = match llm_response {
+        OpenAiCallResult::Stream(_) => Err(OpenAiError::UnexpectedResponseFormat),
+        OpenAiCallResult::Message(msg) => Ok(msg),
+    }?;
+
+    let response = match llm_response.content {
+        Content::Tool(tool_calls) => tool_calls
+            .into_iter()
+            .next()
+            .ok_or(OpenAiError::UnexpectedResponseFormat),
+        Content::Text { .. } => Err(OpenAiError::UnexpectedResponseFormat),
+    }?;
+
+    let res: T = serde_json::from_value(response.arguments)?;
+    Ok((res, llm_response.tokens))
 }

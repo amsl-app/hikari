@@ -1,6 +1,5 @@
 use crate::llm_config::LlmConfig;
-use crate::openai::tools::ToolChoice;
-use crate::openai::{CallConfig, Content, OpenAiCallResult, openai_call_with_timeout};
+use crate::openai::{CallConfig, openai_single_tool_call};
 use crate::pgvector::search;
 use crate::quiz::error::QuizError;
 use crate::quiz::max_five_random_exam_questions;
@@ -254,36 +253,21 @@ pub async fn create_question(
     let openai_config = llm_config.get_quiz_openai_config();
     let model = llm_config.get_quiz_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (question, tokens) = openai_single_tool_call::<QuizQuestion>(
         CallConfig::builder()
             .total_timeout(Duration::from_secs(120))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,
-        false,
         None,
         model,
         prompt_messages,
-        vec![schemars::schema_for!(QuizQuestion).into()],
-        Some(ToolChoice::Named("QuizQuestion".to_string())),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(QuizError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_generation".to_owned()).await?;
     }
-
-    let response = match llm_response.content {
-        Content::Tool(tool_calls) => tool_calls.into_iter().next().ok_or(QuizError::UnexpectedResponseFormat),
-        Content::Text { .. } => Err(QuizError::UnexpectedResponseFormat),
-    }?;
-
-    let question: QuizQuestion = serde_json::from_value(response.arguments)?;
 
     match question.question {
         QuestionType::Text(text_question) => {
