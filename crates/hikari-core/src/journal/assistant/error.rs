@@ -4,7 +4,7 @@ use sea_orm::DbErr;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum SummarizeError {
+pub enum AssistantError {
     #[error(transparent)]
     DbError(#[from] DbErr),
 

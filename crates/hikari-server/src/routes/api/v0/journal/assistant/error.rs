@@ -1,6 +1,6 @@
 use crate::routes::error::{ErrorData, ErrorDataProvider, GetStatusCode};
 use axum::response::{IntoResponse, Response};
-use hikari_core::openai::error::{FunctionCallError, OpenAiError};
+use hikari_core::openai::error::FunctionCallError;
 use http::status::InvalidStatusCode;
 use sea_orm::DbErr;
 use serde_derive::Serialize;
@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 #[derive(Error, Debug)]
 pub(crate) enum AssistantError {
     #[error(transparent)]
-    OpenAi(#[from] OpenAiError),
+    AssistantError(#[from] hikari_core::journal::assistant::error::AssistantError),
 
     #[error(transparent)]
     FunctionCall(#[from] FunctionCallError),
@@ -44,7 +44,7 @@ impl ErrorDataProvider<AssistantErrorType> for FunctionCallError {
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AssistantErrorType {
-    OpenAi,
+    Assistant,
     Response,
     Database,
     Other,
@@ -60,9 +60,9 @@ impl ErrorDataProvider<AssistantErrorType> for AssistantError {
     fn error_data(self) -> Option<ErrorData<AssistantErrorType>> {
         tracing::error!(error = &self as &dyn Error, "assistant error");
         let error_data = match self {
-            Self::OpenAi(error) => {
-                tracing::error!(error = &error as &dyn Error, "error communicating with OpenAI");
-                ErrorData::new(AssistantErrorType::OpenAi, "error communicating with OpenAI")
+            Self::AssistantError(error) => {
+                tracing::error!(error = &error as &dyn Error, "Error using the assistant");
+                ErrorData::new(AssistantErrorType::Assistant, "error using the assistant")
             }
             Self::FunctionCall(fc) => fc.error_data()?,
             Self::DbError(error) => {

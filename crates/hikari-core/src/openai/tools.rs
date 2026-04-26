@@ -1,17 +1,20 @@
+use crate::openai::error::OpenAiError;
 use async_openai::types::chat::{
     ChatCompletionNamedToolChoice, ChatCompletionTool, ChatCompletionToolChoiceOption, ChatCompletionTools,
-    FunctionName, FunctionObjectArgs, ToolChoiceOptions,
+    FunctionName, FunctionObject, ToolChoiceOptions,
 };
-use async_trait::async_trait;
+use schemars::Schema;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::openai::error::OpenAiError;
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::hash::Hash;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToolChoice {
     Auto,
     Named(String),
-    Required,
+    // Required, Since this is not always supported, we encourage to use Auto or Single Tools with enum variants instead.
 }
 
 impl From<ToolChoice> for ChatCompletionToolChoiceOption {
@@ -21,37 +24,67 @@ impl From<ToolChoice> for ChatCompletionToolChoiceOption {
             ToolChoice::Named(name) => ChatCompletionToolChoiceOption::Function(ChatCompletionNamedToolChoice {
                 function: FunctionName { name: name.clone() },
             }),
-            ToolChoice::Required => ChatCompletionToolChoiceOption::Mode(ToolChoiceOptions::Required),
+            // ToolChoice::Required => ChatCompletionToolChoiceOption::Mode(ToolChoiceOptions::Required),
         }
     }
 }
 
-#[async_trait]
-pub trait Tool: Send + Sync {
-    fn name(&self) -> &str;
-    fn description(&self) -> &str;
-    fn parameters(&self) -> Value;
-
-    fn as_openai_tool(&self) -> Result<ChatCompletionTools, OpenAiError> {
-        let call = FunctionObjectArgs::default()
-            .name(self.name().to_string())
-            .description(self.description().to_string())
-            .parameters(self.parameters())
-            .strict(false)
-            .build()?;
-
-        Ok(ChatCompletionTools::Function(ChatCompletionTool { function: call }))
+pub fn rename_key(obj: &mut serde_json::Map<String, Value>, old_key: &str, new_key: &str) -> Result<(), OpenAiError> {
+    if let Some(value) = obj.remove(old_key) {
+        obj.insert(new_key.to_string(), value);
+        Ok(())
+    } else {
+        Err(OpenAiError::ToolError(format!("Key '{}' not found in object", old_key)))
     }
 }
 
-use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::collections::HashMap;
+#[derive(Debug, Clone)]
+pub struct ToolSchema(pub Schema);
+
+impl ToolSchema {
+    pub fn name(&self) -> Option<&str> {
+        self.0.get("title").and_then(|v| v.as_str())
+    }
+}
+
+impl From<Schema> for ToolSchema {
+    fn from(schema: Schema) -> Self {
+        ToolSchema(schema)
+    }
+}
+
+impl TryFrom<ToolSchema> for ChatCompletionTools {
+    type Error = OpenAiError;
+
+    fn try_from(schema: ToolSchema) -> Result<ChatCompletionTools, Self::Error> {
+        let mut schema_value = serde_json::to_value(schema.0)?;
+        let schema_value = schema_value
+            .as_object_mut()
+            .ok_or_else(|| OpenAiError::ToolError("Schema is not an object".to_string()))?;
+
+        rename_key(schema_value, "title", "name")?;
+        rename_key(schema_value, "properties", "parameters")?;
+
+        if schema_value.get("description").is_none() {
+            return Err(OpenAiError::ToolError("Missing description in schema".to_string()));
+        }
+
+        let schema_value = Value::Object(schema_value.clone());
+
+        let function_args = serde_json::from_value::<FunctionObject>(schema_value)?;
+        let tool = ChatCompletionTool {
+            function: function_args,
+        };
+        Ok(ChatCompletionTools::Function(tool))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenApiField<'a> {
     pub r#type: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r#enum: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,6 +101,13 @@ pub struct OpenApiField<'a> {
     pub required: Vec<&'a str>,
 }
 
+impl<'a> From<OpenApiField<'a>> for ToolSchema {
+    fn from(field: OpenApiField<'a>) -> Self {
+        let value = serde_json::to_value(field).expect("Serialization failed that should not fail");
+        ToolSchema(serde_json::from_value(value).expect("Deserialization failed that should not fail"))
+    }
+}
+
 pub trait AsOpenApiField<'a> {
     fn openapi_field(&'a self) -> OpenApiField<'a>;
 }
@@ -77,6 +117,7 @@ impl<'a> OpenApiField<'a> {
     pub fn new(r#type: &'a str) -> Self {
         OpenApiField {
             r#type,
+            title: None,
             r#enum: None,
             description: None,
             properties: HashMap::new(),
@@ -90,6 +131,12 @@ impl<'a> OpenApiField<'a> {
     #[must_use]
     pub fn object() -> Self {
         OpenApiField::new("object")
+    }
+
+    #[must_use]
+    pub fn title<D: Into<Cow<'a, str>>>(mut self, title: D) -> Self {
+        self.title = Some(title.into());
+        self
     }
 
     #[must_use]
@@ -132,5 +179,99 @@ impl<'a> OpenApiField<'a> {
     pub fn r#enum<I: Into<Vec<&'a str>>>(mut self, r#enum: I) -> Self {
         self.r#enum = Some(r#enum.into());
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use schemars::JsonSchema;
+    use serde::{Deserialize, Serialize};
+
+    #[test]
+    fn test_as_openai_tool() {
+        #[derive(JsonSchema, Serialize, Deserialize)]
+        #[schemars(description = "An struct within an enum tool for demonstration purposes", inline)]
+        pub struct EnumStruct {
+            pub field: String,
+        }
+
+        #[derive(JsonSchema, Serialize, Deserialize)]
+        #[schemars(description = "An enum tool for demonstration purposes", inline)]
+        #[serde(untagged)]
+        enum MyToolEnum {
+            /// Variant A of the test tool
+            VariantA(EnumStruct),
+            /// Another variant of the test tool
+            VariantB {
+                /// A field in VariantB
+                field_b: String,
+            },
+            VariantC,
+        }
+
+        #[derive(JsonSchema, Serialize, Deserialize)]
+        #[schemars(description = "A test tool for demonstration purposes")]
+        struct MyTestTool {
+            /// The name of the person
+            name: String,
+            /// Optional age
+            age: Option<u32>,
+            /// An enum field for demonstration
+            enum_field: MyToolEnum,
+        }
+
+        let schema = ToolSchema(schemars::schema_for!(MyTestTool));
+        print!("{:#?}", schema);
+
+        let openai_tool: ChatCompletionTools = schema.try_into().expect("Failed to convert to OpenAI tool");
+
+        match openai_tool {
+            ChatCompletionTools::Function(f) => {
+                assert_eq!(f.function.name, "MyTestTool");
+                assert_eq!(
+                    f.function.description.as_deref(),
+                    Some("A test tool for demonstration purposes")
+                );
+                let params = f.function.parameters.as_ref().expect("Parameters should exist");
+                assert_eq!(params["name"]["type"], "string");
+                assert_eq!(params["name"]["description"], "The name of the person");
+                assert_eq!(params["age"]["description"], "Optional age");
+                assert_eq!(params["enum_field"]["description"], "An enum field for demonstration");
+            }
+            _ => panic!("Expected Function tool"),
+        }
+    }
+
+    #[test]
+    fn test_manual_schema() {
+        let schema = OpenApiField::object()
+            .title("MyManualTool")
+            .description("A manually defined tool schema")
+            .properties(
+                vec![
+                    ("field1", OpenApiField::new("string").description("A string field")),
+                    ("field2", OpenApiField::new("number").description("A number field")),
+                ]
+                .into_iter()
+                .collect::<HashMap<&str, OpenApiField>>(),
+            );
+        let tool_schema: ToolSchema = schema.into();
+        let openai_tool: ChatCompletionTools = tool_schema.try_into().expect("Failed to convert to OpenAI tool");
+        match openai_tool {
+            ChatCompletionTools::Function(f) => {
+                assert_eq!(f.function.name, "MyManualTool");
+                assert_eq!(
+                    f.function.description.as_deref(),
+                    Some("A manually defined tool schema")
+                );
+                let params = f.function.parameters.as_ref().expect("Parameters should exist");
+                assert_eq!(params["field1"]["type"], "string");
+                assert_eq!(params["field1"]["description"], "A string field");
+                assert_eq!(params["field2"]["type"], "number");
+                assert_eq!(params["field2"]["description"], "A number field");
+            }
+            _ => panic!("Expected Function tool"),
+        }
     }
 }

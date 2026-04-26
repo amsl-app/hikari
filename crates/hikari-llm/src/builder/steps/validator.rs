@@ -13,9 +13,7 @@ use crate::execution::steps::LlmStep;
 use crate::execution::steps::conversation_validator::ConversationValidator;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::json;
 use std::collections::HashMap;
-use std::hash::BuildHasher;
 use yaml_serde::Value;
 
 const PROMPT_KEY: &str = "VALIDATOR_PREFIX";
@@ -152,41 +150,5 @@ impl IntoLlmStep for ValidatorBuilder {
             validation_type,
         ));
         Ok(conversation_validator)
-    }
-}
-
-impl<S: BuildHasher + Default> From<ConversationGoal> for HashMap<String, serde_json::Value, S> {
-    fn from(value: ConversationGoal) -> Self {
-        let name = value.name.to_string();
-        let goal = value.goal.to_string();
-        let examples = value
-            .examples
-            .iter()
-            .map(|e| format!("- {e}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        let value_description =
-            format!("True, wenn das Konversationsziel '''{name}''' erfüllt ist: {goal}\n Beispiele:\n{examples}");
-        let explaination_description =
-            format!("Erkläre, deinen Gedanken, warum du für '''{name}''' so entschieden hast.");
-        vec![
-            (
-                format!("{name}_decision"),
-                json!({
-                    "type": "boolean",
-                    "description": value_description
-                }),
-            ),
-            (
-                name,
-                json!({
-                    "type": "string",
-                    "description": explaination_description
-                }),
-            ),
-        ]
-        .into_iter()
-        .collect()
     }
 }

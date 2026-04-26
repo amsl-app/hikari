@@ -183,8 +183,8 @@ impl LlmAgent {
                         match result {
                             Ok(value) => {
                                 tracing::trace!(?value, "message chunk");
-                                let content = if let Content::Text(content) = &value.content {
-                                        Ok(content)
+                                let content = if let Content::Text { text, .. } = &value.content {
+                                        Ok(text.as_deref().unwrap_or(""))
                                 } else {
                                     Err(LlmExecutionError::UnexpectedResponseFormat)
                                 }?;

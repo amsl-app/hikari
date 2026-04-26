@@ -80,56 +80,61 @@ impl LlmStepTrait for ConversationValidator {
                 )
                 .await?;
 
-            if let Content::Tool(tool_calls) = content {
-                let first = tool_calls
+            let response = match content {
+                Content::Tool(tool_calls) => tool_calls
                     .into_iter()
                     .next()
-                    .ok_or(LlmExecutionError::UnexpectedResponseFormat)?;
-                let arguments = first.arguments;
+                    .ok_or(LlmExecutionError::UnexpectedResponseFormat),
+                Content::Text { .. } => Err(LlmExecutionError::UnexpectedResponseFormat),
+            }?;
 
-                let values: HashMap<String, Value> = serde_json::from_value(arguments)?;
+            let arguments = response.arguments;
 
-                let slots = values
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            SaveTarget::Slot(SlotPath::new(k.to_owned(), Destination::default())),
-                            v.clone(),
-                        )
-                    })
-                    .collect();
+            let values: HashMap<String, HashMap<String, Value>> = serde_json::from_value(arguments)?;
 
-                let decisions: Vec<(String, bool)> = values
-                    .iter()
-                    .filter_map(|(k, v)| Value::as_bool(v).map(|b| (k.to_owned(), b)))
-                    .collect();
+            let decisions: HashMap<String, Value> = values
+                .iter()
+                .map(|(k, v)| (k.to_owned(), v.get("decision").cloned().unwrap_or(Value::Null)))
+                .collect();
 
-                if decisions.len() != values.len() / 2 {
-                    return Err(LlmExecutionError::Unexpected(
-                        "Expected a boolean value for every validation goal".to_owned(),
-                    ));
-                }
+            let explanations: HashMap<String, Value> = values
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        format!("{k}_explanation"),
+                        v.get("explanation").cloned().unwrap_or(Value::Null),
+                    )
+                })
+                .collect();
 
-                let success = match self.validation_type {
-                    ValidationType::All => decisions.iter().all(|(_, v)| *v),
-                    ValidationType::Any => decisions.iter().any(|(_, v)| *v),
-                };
+            let slots = decisions
+                .iter()
+                .chain(explanations.iter())
+                .map(|(k, v)| {
+                    (
+                        SaveTarget::Slot(SlotPath::new(k.to_owned(), Destination::default())),
+                        v.clone(),
+                    )
+                })
+                .collect();
 
-                let goto = if success {
-                    self.goto_on_success.clone()
-                } else {
-                    self.goto_on_fail.clone()
-                };
+            let success = match self.validation_type {
+                ValidationType::All => decisions.iter().all(|(_, v)| *v == Value::Bool(true)),
+                ValidationType::Any => decisions.iter().any(|(_, v)| *v == Value::Bool(true)),
+            };
 
-                let content = LlmStepContent::StepValue {
-                    values: slots,
-                    next_step: goto,
-                };
-
-                Ok(LlmStepResponse::new(content, tokens))
+            let goto = if success {
+                self.goto_on_success.clone()
             } else {
-                Err(LlmExecutionError::UnexpectedResponseFormat)
-            }
+                self.goto_on_fail.clone()
+            };
+
+            let content = LlmStepContent::StepValue {
+                values: slots,
+                next_step: goto,
+            };
+
+            Ok(LlmStepResponse::new(content, tokens))
         }
         .boxed()
     }

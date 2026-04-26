@@ -58,7 +58,7 @@ impl LlmStepTrait for TextMessage {
                 for chunk in chars.chunks(16) {
                     let chunk_str: String = chunk.iter().collect();
                     yield Ok(Message {
-                        content: Content::Text(chunk_str), tokens: None
+                        content: Content::Text { text: Some(chunk_str), thinking: None }, tokens: None
                     });
                     // Simulate delay (adjust as needed)
                     sleep(Duration::from_millis(50)).await;

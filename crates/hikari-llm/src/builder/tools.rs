@@ -3,9 +3,8 @@ use crate::builder::slot::paths::SlotPath;
 use crate::builder::steps::extractor::ExtractionValues;
 use crate::builder::steps::validator::ConversationGoal;
 use crate::builder::steps::{InjectionTrait, SlotsTrait};
-use crate::execution::tools::extractor::ExtractionTool;
-use crate::execution::tools::summarizer::SummarizerTool;
-use crate::execution::tools::validation::ValidationTool;
+use hikari_core::openai::tools::{AsOpenApiField, OpenApiField, ToolSchema};
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub enum Tool {
@@ -44,11 +43,127 @@ impl InjectionTrait for Tool {
 
 impl Tool {
     #[must_use]
-    pub fn to_langchain_tool(&self) -> Box<dyn hikari_core::openai::tools::Tool> {
+    pub fn tool_schema(&self) -> ToolSchema {
         match self {
-            Tool::ValidationTool(goals) => Box::new(ValidationTool::new(goals.clone())),
-            Tool::ExtractionTool(values) => Box::new(ExtractionTool::new(values.clone())),
-            Tool::Summarizer => Box::new(SummarizerTool::new()),
+            Tool::ValidationTool(goals) => {
+                let mut properties: HashMap<&str, OpenApiField> = HashMap::new();
+                let mut required: Vec<&str> = Vec::new();
+                for output in goals {
+                    let name = output.name.0.as_str().unwrap_or_default();
+                    let goal = output.goal.0.as_str().unwrap_or_default();
+
+                        let examples = if output.examples.is_empty() {
+                                "".to_string()
+                            } else {
+                                let example_strings = output
+                                    .examples
+                                    .iter()
+                                    .map(|e| e.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join("<sep>");
+                                format!("\n<examples>\n{}\n</examples>\n", example_strings)
+                            };
+
+                        let value_description = format!("True, wenn das Konversationsziel '''{name}''' erfüllt ist: {goal}{examples}");
+                        let explaination_description =
+                            "Erkläre, deinen Gedanken, warum du so entschieden hast.".to_string();
+                        properties.insert(name, OpenApiField::object().properties(
+                            HashMap::from([
+                                ("decision", OpenApiField::new("string").description(value_description)),
+                                ("explaination", OpenApiField::new("string").description(explaination_description))
+                            ])
+                        ).required(vec!["decision", "explaination"]));
+                        required.push(name);
+                }
+
+                OpenApiField::object().title("Validation").description("This tool is used to validate the conversation. Always use this tool when you need to validate a chat. The function receives the input whether the defined goals were achieved or not.").properties(properties).required(required).into()
+            },
+            Tool::ExtractionTool(values) => {
+                let prperties: HashMap<&str, OpenApiField> = values
+                                                .iter()
+                                                .map(|output| (output.target_identifier(), output.openapi_field()))
+                                                .collect();
+                                    OpenApiField::object()
+                                        .title("Extraction")
+                                        .description("This tool uses information from a conversation. Always use this tool when you need to extract information from a conversation. The function receives the values that could be extracted as input")
+                                        .properties(
+                                            prperties
+                                        )
+                                        .into()}
+            Tool::Summarizer => OpenApiField::object()
+                        .title("Summary")
+                        .description("This tool processes and stores the conversation summary. Always use this tool when you need to create a summary for the conversation. The function receives the summary as input")
+                        .properties(
+                            HashMap::from([("summary", OpenApiField::new("string"))]))
+                        .required(vec!["summary"]).into()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::builder::slot::SaveTarget;
+    use crate::builder::slot::paths::{Destination, SlotPath};
+    use crate::builder::steps::extractor::ExtractionSchema;
+    use async_openai::types::chat::ChatCompletionTools;
+
+    #[test]
+    fn test_extractor() {
+        let outputs = vec![
+            ExtractionValues {
+                schema: ExtractionSchema {
+                    description: "extraction_value_1".into(),
+                    examples: vec![],
+                    r#enum: None,
+                    r#items: None,
+                    r#properties: None,
+                    r#type: "number".to_string(),
+                },
+                target: SaveTarget::Slot(SlotPath::new("slot_name".to_string(), Destination::default())),
+            },
+            ExtractionValues {
+                schema: ExtractionSchema {
+                    description: "extraction_value_2".into(),
+                    examples: vec![],
+                    r#enum: None,
+                    r#items: None,
+                    r#properties: None,
+                    r#type: "string".to_string(),
+                },
+                target: SaveTarget::Slot(SlotPath::new("a.b.c".to_string(), Destination::default())),
+            },
+            ExtractionValues {
+                schema: ExtractionSchema {
+                    description: "extraction_value_2".into(),
+                    examples: vec![],
+                    r#enum: Some(vec!["value1".to_string(), "value2".to_string()]),
+                    r#items: None,
+                    r#properties: None,
+                    r#type: "string".to_string(),
+                },
+                target: SaveTarget::Slot(SlotPath::new("enum_slot".to_string(), Destination::default())),
+            },
+        ];
+
+        let tool = Tool::ExtractionTool(outputs).tool_schema();
+        let openai_tool: ChatCompletionTools = tool.try_into().expect("Failed to convert to OpenAI tool");
+        let openai_tool = match openai_tool {
+            ChatCompletionTools::Function(f) => f.function,
+            _ => panic!("Expected Function tool"),
+        };
+
+        assert_eq!(openai_tool.name, "Extraction");
+        assert_eq!(
+            openai_tool.description,
+            Some("This tool uses information from a conversation. Always use this tool when you need to extract information from a conversation. The function receives the values that could be extracted as input".to_string())
+        );
+        let parameters = openai_tool.parameters.unwrap();
+        assert_eq!(parameters["slot_name"]["type"], "number");
+        assert_eq!(parameters["slot_name"]["description"], "extraction_value_1");
+        assert_eq!(parameters["a.b.c"]["type"], "string");
+        assert_eq!(parameters["a.b.c"]["description"], "extraction_value_2");
+        assert_eq!(parameters["enum_slot"]["type"], "string");
+        assert_eq!(parameters["enum_slot"]["description"], "extraction_value_2");
     }
 }

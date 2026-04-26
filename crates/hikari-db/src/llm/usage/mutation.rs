@@ -1,13 +1,13 @@
 use chrono::Utc;
 use hikari_entity::llm::usage;
-use sea_orm::{DatabaseConnection, DbErr, EntityTrait, InsertResult, IntoActiveValue};
+use sea_orm::{ConnectionTrait, DbErr, EntityTrait, InsertResult, IntoActiveValue, TransactionTrait};
 use uuid::Uuid;
 
 pub struct Mutation;
 
 impl Mutation {
-    pub async fn add_usage(
-        conn: &DatabaseConnection,
+    pub async fn add_usage<C: ConnectionTrait + TransactionTrait>(
+        conn: &C,
         user_id: &Uuid,
         tokens: u32,
         step: String,
