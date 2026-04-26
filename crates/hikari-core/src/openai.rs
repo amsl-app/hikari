@@ -239,7 +239,16 @@ pub enum OpenAiCallResult {
 }
 
 #[allow(clippy::too_many_arguments)]
-// #[instrument(skip(config, openai_config, messages, tools, tool_choice))]
+#[instrument(skip(
+    config,
+    openai_config,
+    temperature,
+    reasoning_effort,
+    model,
+    messages,
+    tools,
+    tool_choice
+))]
 pub async fn openai_call_with_timeout(
     config: CallConfig,
     openai_config: OpenAIConfig,
@@ -254,9 +263,6 @@ pub async fn openai_call_with_timeout(
     let start_time = Instant::now();
     let model_label = model.to_string();
     let service = openai_config.api_base().to_string();
-    let reasoning_effort_label = reasoning_effort
-        .map(|r| r.to_string())
-        .unwrap_or_else(|| "N/A".to_owned());
 
     let mut request = CreateChatCompletionRequestArgs::default();
     request.model(model).messages(messages);
@@ -309,7 +315,7 @@ pub async fn openai_call_with_timeout(
         let res = client.chat().create_stream(request).await;
         match res {
             Ok(stream) => {
-                let stream = process_stream(stream, start_time, service, model_label, reasoning_effort_label);
+                let stream = process_stream(stream, start_time, service, model_label);
                 Ok(OpenAiCallResult::Stream(MessageStream::new(stream)))
             }
             Err(error) => Err(OpenAiError::Api(error)),
@@ -320,10 +326,9 @@ pub async fn openai_call_with_timeout(
 
         let elapsed = start_time.elapsed();
         metrics::histogram!(
-            "llm_call_duration_ms",
+            "llm_time_to_last_token_ms",
             "service" => service,
             "model" => model_label,
-            "reasoning_effort" => reasoning_effort_label
         )
         .record(elapsed.as_millis() as f64);
 
@@ -347,7 +352,6 @@ pub(crate) fn process_stream(
     start_time: Instant,
     service: String,
     model: String,
-    reasoning_effort: String,
 ) -> Pin<Box<dyn Stream<Item = Result<Message, crate::openai::error::StreamingError>> + Send>> {
     let mut in_think_block = false;
     let mut buffer = String::new();
@@ -368,7 +372,6 @@ pub(crate) fn process_stream(
                             "llm_time_to_first_token_ms",
                             "service" => service.clone(),
                             "model" => model.clone(),
-                            "reasoning_effort" => reasoning_effort.clone()
                         ).record(start_time.elapsed().as_millis() as f64);
                     }
                 if let Some(tool_calls) = first.delta.tool_calls {
@@ -495,7 +498,6 @@ pub(crate) fn process_stream(
             "llm_time_to_last_token_ms",
             "service" => service,
             "model" => model,
-            "reasoning_effort" => reasoning_effort,
         ).record(start_time.elapsed().as_millis() as f64);
     }
     .boxed()
@@ -647,13 +649,7 @@ mod tests {
         ];
 
         let stream = stream::iter(chunks);
-        let mut processed = process_stream(
-            stream,
-            Instant::now(),
-            "test".to_string(),
-            "test".to_string(),
-            "none".to_string(),
-        );
+        let mut processed = process_stream(stream, Instant::now(), "test".to_string(), "test".to_string());
 
         // First message should be "Hello "
         let msg1 = processed.next().await.unwrap().unwrap();
