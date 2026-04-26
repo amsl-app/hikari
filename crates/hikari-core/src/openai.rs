@@ -19,6 +19,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::Duration;
+use tracing::instrument;
 use typed_builder::TypedBuilder;
 
 pub mod error;
@@ -177,6 +178,7 @@ pub enum OpenAiCallResult {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(openai_config, messages, tools, tool_choice))]
 pub async fn openai_call_with_timeout(
     config: CallConfig,
     openai_config: OpenAIConfig,
@@ -357,7 +359,7 @@ pub async fn openai_call_with_timeout(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[instrument(skip(openai_config, messages))]
 pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
     config: CallConfig,
     openai_config: OpenAIConfig,

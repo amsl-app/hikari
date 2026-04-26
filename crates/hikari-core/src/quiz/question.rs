@@ -20,6 +20,7 @@ use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::instrument;
 
 #[derive(Debug, Clone, Default)]
 struct Operators {
@@ -76,6 +77,7 @@ struct MultipleChoiceOption {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(exams, llm_config, conn))]
 pub async fn create_question(
     user_id: &Uuid,
     session_id: &str,
@@ -90,6 +92,7 @@ pub async fn create_question(
     let score: f64 =
         (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, session_id, topic).await?).unwrap_or(0.0);
     let level = random_bloom_level(score);
+    tracing::debug!(%score, ?level, "determined bloom level for question generation");
 
     let old_questions = hikari_db::quiz::question::Query::get_question_by_user_topic_level(
         conn,

@@ -1,4 +1,5 @@
 use std::time::Duration;
+use tracing::instrument;
 
 use crate::{
     journal::assistant::error::AssistantError,
@@ -35,6 +36,7 @@ impl PromptResponse {
     }
 }
 
+#[instrument(skip(llm_config, conn))]
 pub async fn generate_prompt(
     user_id: &Uuid,
     prompt: String,
@@ -109,6 +111,7 @@ pub async fn generate_prompt(
     Ok(res)
 }
 
+#[instrument(skip(llm_config, conn))]
 pub async fn generate_text_prompt(
     user_id: &Uuid,
     prompts: Vec<String>,
@@ -226,6 +229,7 @@ impl MergeResponse {
     }
 }
 
+#[instrument(skip(llm_config, conn))]
 pub async fn merge_prompts(
     user_id: &Uuid,
     prompt_inputs: Vec<(String, String)>,
@@ -291,6 +295,7 @@ pub async fn merge_prompts(
     Ok(res)
 }
 
+#[instrument(skip(llm_config, conn))]
 pub async fn text_merge_prompts(
     user_id: &Uuid,
     original_input: String,

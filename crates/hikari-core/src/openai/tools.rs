@@ -29,15 +29,6 @@ impl From<ToolChoice> for ChatCompletionToolChoiceOption {
     }
 }
 
-pub fn rename_key(obj: &mut serde_json::Map<String, Value>, old_key: &str, new_key: &str) -> Result<(), OpenAiError> {
-    if let Some(value) = obj.remove(old_key) {
-        obj.insert(new_key.to_string(), value);
-        Ok(())
-    } else {
-        Err(OpenAiError::ToolError(format!("Key '{}' not found in object", old_key)))
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ToolSchema(pub Schema);
 
@@ -57,25 +48,30 @@ impl TryFrom<ToolSchema> for ChatCompletionTools {
     type Error = OpenAiError;
 
     fn try_from(schema: ToolSchema) -> Result<ChatCompletionTools, Self::Error> {
-        let mut schema_value = serde_json::to_value(schema.0)?;
-        let schema_value = schema_value
-            .as_object_mut()
-            .ok_or_else(|| OpenAiError::ToolError("Schema is not an object".to_string()))?;
+        let mut properties = schema
+            .0
+            .as_object()
+            .cloned()
+            .ok_or(OpenAiError::ToolError("Schema is not an object".to_string()))?;
 
-        rename_key(schema_value, "title", "name")?;
-        rename_key(schema_value, "properties", "parameters")?;
+        let title = properties
+            .remove("title")
+            .and_then(|t| t.as_str().map(|s| s.to_string()))
+            .ok_or(OpenAiError::ToolError("Missing title in schema".to_string()))?;
 
-        if schema_value.get("description").is_none() {
-            return Err(OpenAiError::ToolError("Missing description in schema".to_string()));
-        }
+        let description = properties
+            .remove("description")
+            .and_then(|d| d.as_str().map(|s| s.to_string()))
+            .ok_or(OpenAiError::ToolError("Missing description in schema".to_string()))?;
 
-        let schema_value = Value::Object(schema_value.clone());
-
-        let function_args = serde_json::from_value::<FunctionObject>(schema_value)?;
-        let tool = ChatCompletionTool {
-            function: function_args,
+        let function = FunctionObject {
+            name: title.clone(),
+            description: Some(description.clone()),
+            parameters: Some(Value::Object(properties)),
+            strict: None,
         };
-        Ok(ChatCompletionTools::Function(tool))
+
+        Ok(ChatCompletionTools::Function(ChatCompletionTool { function }))
     }
 }
 
@@ -266,10 +262,11 @@ mod tests {
                     Some("A manually defined tool schema")
                 );
                 let params = f.function.parameters.as_ref().expect("Parameters should exist");
-                assert_eq!(params["field1"]["type"], "string");
-                assert_eq!(params["field1"]["description"], "A string field");
-                assert_eq!(params["field2"]["type"], "number");
-                assert_eq!(params["field2"]["description"], "A number field");
+                assert_eq!(params["type"], "object");
+                assert_eq!(params["properties"]["field1"]["type"], "string");
+                assert_eq!(params["properties"]["field1"]["description"], "A string field");
+                assert_eq!(params["properties"]["field2"]["type"], "number");
+                assert_eq!(params["properties"]["field2"]["description"], "A number field");
             }
             _ => panic!("Expected Function tool"),
         }

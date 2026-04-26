@@ -21,6 +21,7 @@ use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::vec;
+use tracing::instrument;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[schemars(
@@ -36,6 +37,7 @@ struct Evaluation {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(question, exams, llm_config, conn))]
 pub async fn evaluate_answer(
     user_id: &Uuid,
     module_id: &str,
@@ -289,6 +291,7 @@ pub async fn evaluate_answer(
     }
 
     let score_adjustment = f64::from(evaluation.grade) - 2.5;
+    tracing::debug!(grade = evaluation.grade, %score_adjustment, "evaluation result received");
 
     let current_score: f64 =
         (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
