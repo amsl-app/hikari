@@ -105,8 +105,10 @@ mod tests {
     use super::*;
     use crate::builder::slot::SaveTarget;
     use crate::builder::slot::paths::{Destination, SlotPath};
+    use crate::builder::steps::Template;
     use crate::builder::steps::extractor::ExtractionSchema;
     use async_openai::types::chat::ChatCompletionTools;
+    use yaml_serde::Value;
 
     #[test]
     fn test_extractor() {
@@ -158,12 +160,61 @@ mod tests {
             openai_tool.description,
             Some("This tool uses information from a conversation. Always use this tool when you need to extract information from a conversation. The function receives the values that could be extracted as input".to_string())
         );
-        let parameters = openai_tool.parameters.unwrap();
-        assert_eq!(parameters["slot_name"]["type"], "number");
-        assert_eq!(parameters["slot_name"]["description"], "extraction_value_1");
-        assert_eq!(parameters["a.b.c"]["type"], "string");
-        assert_eq!(parameters["a.b.c"]["description"], "extraction_value_2");
-        assert_eq!(parameters["enum_slot"]["type"], "string");
-        assert_eq!(parameters["enum_slot"]["description"], "extraction_value_2");
+        let properties = openai_tool.parameters.unwrap()["properties"].clone();
+        assert_eq!(properties["slot_name"]["type"], "number");
+        assert_eq!(properties["slot_name"]["description"], "extraction_value_1");
+        assert_eq!(properties["a.b.c"]["type"], "string");
+        assert_eq!(properties["a.b.c"]["description"], "extraction_value_2");
+        assert_eq!(properties["enum_slot"]["type"], "string");
+        assert_eq!(properties["enum_slot"]["description"], "extraction_value_2");
+    }
+
+    #[test]
+    fn test_validation_tool() {
+        let goals = vec![ConversationGoal {
+            name: Template(Value::String("goal_1".to_string())),
+            goal: Template(Value::String("First goal description".to_string())),
+            examples: vec![Template(Value::String("Example 1".to_string()))],
+        }];
+
+        let tool = Tool::ValidationTool(goals).tool_schema();
+        let openai_tool: ChatCompletionTools = tool.try_into().expect("Failed to convert to OpenAI tool");
+        let openai_tool = match openai_tool {
+            ChatCompletionTools::Function(f) => f.function,
+            _ => panic!("Expected Function tool"),
+        };
+
+        assert_eq!(openai_tool.name, "Validation");
+        let properties = openai_tool.parameters.unwrap()["properties"].clone();
+        assert!(properties.get("goal_1").is_some());
+        assert_eq!(properties["goal_1"]["type"], "object");
+        let goal_props = properties["goal_1"]["properties"].clone();
+        assert!(
+            goal_props["decision"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("First goal description")
+        );
+        assert!(
+            goal_props["decision"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("Example 1")
+        );
+    }
+
+    #[test]
+    fn test_summarizer() {
+        let tool = Tool::Summarizer.tool_schema();
+        let openai_tool: ChatCompletionTools = tool.try_into().expect("Failed to convert to OpenAI tool");
+        let openai_tool = match openai_tool {
+            ChatCompletionTools::Function(f) => f.function,
+            _ => panic!("Expected Function tool"),
+        };
+
+        assert_eq!(openai_tool.name, "Summary");
+        let properties = openai_tool.parameters.unwrap()["properties"].clone();
+        assert!(properties.get("summary").is_some());
+        assert_eq!(properties["summary"]["type"], "string");
     }
 }

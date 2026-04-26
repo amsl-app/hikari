@@ -10,12 +10,14 @@ use async_openai::types::chat::{
 };
 use async_stream::try_stream;
 use backoff::ExponentialBackoffBuilder;
+use futures::Stream;
 use futures::StreamExt;
 use regex::Regex;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::error::Error;
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -235,112 +237,8 @@ pub async fn openai_call_with_timeout(
         tracing::debug!("Using streaming OpenAI call");
         let res = client.chat().create_stream(request).await;
         match res {
-            Ok(mut stream) => {
-                let mut in_think_block = false;
-                let mut think_buffer = String::new();
-                let mut text_buffer = String::new();
-
-                let stream = try_stream! {
-                    while let Some(chunk) = stream.next().await {
-                        let chunk = chunk?;
-                        let tokens = chunk.usage.map(|u| u.total_tokens);
-
-                        let first = chunk.choices.into_iter().next();
-
-                        if let Some(first) = first {
-                            if let Some(tool_calls) = first.delta.tool_calls {
-                                let tool_calls: Vec<ToolCallResponse> =
-                                    tool_calls.into_iter().map(std::convert::TryInto::try_into).collect::<Result<_, _>>()?;
-
-                                yield Message {
-                                    content: Content::Tool(tool_calls),
-                                    tokens,
-                                }
-                            } else if let Some(content) = first.delta.content {
-                                // If we previously detected a <think> tag, we are currently in a think block and all content should be treated as thinking until we find the closing tag. 
-                                // This is necessary to properly handle cases where the <think> tag is split across multiple chunks.
-                                if in_think_block {
-                                    let already_sent = think_buffer.len();
-                                    think_buffer.push_str(&content); // To always check the whole buffer for the closing tag, even if it spans multiple chunks
-
-                                    if let Some(pos) = think_buffer.find("</think>") {
-                                        in_think_block = false;
-                                        let thinking = think_buffer[already_sent..pos].to_string();
-                                        let text = think_buffer[pos + 8..].to_string();
-
-                                        think_buffer.clear();
-                                        text_buffer.push_str(&text);
-
-                                        let thinking: Option<String> = match thinking.trim().is_empty() {
-                                            true => None,
-                                            false => Some(thinking),
-                                        };
-
-                                        let text: Option<String> = match text.trim().is_empty() {
-                                            true => None,
-                                            false => Some(text),
-                                        };
-
-                                        yield Message {
-                                            content: Content::Text{
-                                                text,
-                                                thinking
-                                            },
-                                            tokens: None,
-                                        }
-                                    } else {
-                                        yield Message {
-                                            content: Content::Text{
-                                                text: None,
-                                                thinking: Some(content),
-                                            },
-                                            tokens,
-                                        }
-                                    }
-                                    continue; // Don't process the content further, since it's part of the think block and we will handle it once we find the closing tag
-                                }
-                                // If we are not in the think block
-                                let already_sent = text_buffer.len();
-                                text_buffer.push_str(&content);
-                                if let Some(pos) = text_buffer.find("<think>") {
-                                    in_think_block = true;
-
-                                    let text = text_buffer[already_sent..pos].to_string();
-                                    let thinking = text_buffer[pos + 7..].to_string();
-
-                                    text_buffer.clear();
-                                    think_buffer.push_str(&thinking);
-
-                                    let text: Option<String> = match text.trim().is_empty() {
-                                        true => None,
-                                        false => Some(text),
-                                    };
-                                    let thinking: Option<String> = match thinking.trim().is_empty() {
-                                        true => None,
-                                        false => Some(thinking),
-                                    };
-
-                                    yield Message {
-                                        content: Content::Text{
-                                            text,
-                                            thinking,
-                                        },
-                                        tokens: None,
-                                    }
-                                } else {
-                                    yield Message {
-                                        content: Content::Text{
-                                            text: Some(content),
-                                            thinking: None,
-                                        },
-                                        tokens,
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                .boxed();
+            Ok(stream) => {
+                let stream = process_stream(stream);
                 Ok(OpenAiCallResult::Stream(MessageStream::new(stream)))
             }
             Err(error) => Err(OpenAiError::Api(error)),
@@ -357,6 +255,148 @@ pub async fn openai_call_with_timeout(
         let message: Message = chat_completion.try_into()?;
         Ok(OpenAiCallResult::Message(message))
     }
+}
+
+pub(crate) fn process_stream(
+    mut stream: impl Stream<
+        Item = Result<async_openai::types::chat::CreateChatCompletionStreamResponse, async_openai::error::OpenAIError>,
+    > + Unpin
+    + Send
+    + 'static,
+) -> Pin<Box<dyn Stream<Item = Result<Message, crate::openai::error::StreamingError>> + Send>> {
+    let mut in_think_block = false;
+    let mut buffer = String::new();
+
+    try_stream! {
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            let tokens = chunk.usage.map(|u| u.total_tokens);
+
+            let first = chunk.choices.into_iter().next();
+
+            if let Some(first) = first {
+                if let Some(tool_calls) = first.delta.tool_calls {
+                    let tool_calls: Vec<ToolCallResponse> =
+                        tool_calls.into_iter().map(std::convert::TryInto::try_into).collect::<Result<_, _>>()?;
+
+                    yield Message {
+                        content: Content::Tool(tool_calls),
+                        tokens,
+                    }
+                } else if let Some(content) = first.delta.content {
+                    buffer.push_str(&content);
+
+                    loop {
+                        if !in_think_block {
+                            if let Some(pos) = buffer.find("<think>") {
+                                let text = buffer[..pos].to_string();
+                                buffer.drain(..pos + 7);
+                                in_think_block = true;
+
+                                let text = match text.trim().is_empty() {
+                                    true => None,
+                                    false => Some(text),
+                                };
+
+                                if text.is_some() {
+                                    yield Message {
+                                        content: Content::Text { text, thinking: None },
+                                        tokens: None,
+                                    }
+                                }
+                            } else {
+                                // No <think> tag found.
+                                // We can yield everything up to the last '<' to avoid yielding a partial tag.
+                                if let Some(last_lt) = buffer.rfind('<') {
+                                    // Check if the content after '<' could be a start of "think>"
+                                    let remaining = &buffer[last_lt..];
+                                    if "<think>".starts_with(remaining) {
+                                        let to_yield = buffer[..last_lt].to_string();
+                                        buffer.drain(..last_lt);
+                                        let to_yield = match to_yield.trim().is_empty() {
+                                            true => None,
+                                            false => Some(to_yield),
+                                        };
+                                        if let Some(text) = to_yield {
+                                             yield Message {
+                                                content: Content::Text { text: Some(text), thinking: None },
+                                                tokens,
+                                            }
+                                        }
+                                        break; // Wait for next chunk
+                                    }
+                                }
+
+                                let to_yield = buffer.clone();
+                                buffer.clear();
+                                let to_yield = match to_yield.trim().is_empty() {
+                                    true => None,
+                                    false => Some(to_yield),
+                                };
+                                if let Some(text) = to_yield {
+                                    yield Message {
+                                        content: Content::Text { text: Some(text), thinking: None },
+                                        tokens,
+                                    }
+                                }
+                                break;
+                            }
+                        } else if let Some(pos) = buffer.find("</think>") {
+                            let thinking = buffer[..pos].to_string();
+                            buffer.drain(..pos + 8);
+                            in_think_block = false;
+
+                            let thinking = match thinking.trim().is_empty() {
+                                true => None,
+                                false => Some(thinking),
+                            };
+
+                            yield Message {
+                                content: Content::Text { text: None, thinking },
+                                tokens: None,
+                            }
+                        } else {
+                            // No </think> tag found.
+                            // We can yield everything up to the last '<' to avoid yielding a partial tag.
+                            if let Some(last_lt) = buffer.rfind('<') {
+                                let remaining = &buffer[last_lt..];
+                                if "</think>".starts_with(remaining) {
+                                    let to_yield = buffer[..last_lt].to_string();
+                                    buffer.drain(..last_lt);
+                                    let to_yield = match to_yield.trim().is_empty() {
+                                        true => None,
+                                        false => Some(to_yield),
+                                    };
+                                    if let Some(thinking) = to_yield {
+                                         yield Message {
+                                            content: Content::Text { text: None, thinking: Some(thinking) },
+                                            tokens,
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+
+                            let to_yield = buffer.clone();
+                            buffer.clear();
+                            let to_yield = match to_yield.trim().is_empty() {
+                                true => None,
+                                false => Some(to_yield),
+                            };
+                            if let Some(thinking) = to_yield {
+                                yield Message {
+                                    content: Content::Text { text: None, thinking: Some(thinking) },
+                                    tokens,
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    .boxed()
 }
 
 #[instrument(skip(openai_config, messages))]
@@ -401,4 +441,154 @@ pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
 
     let res: T = serde_json::from_value(response.arguments)?;
     Ok((res, llm_response.tokens))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_openai::types::chat::{
+        ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, CreateChatCompletionResponse,
+        CreateChatCompletionStreamResponse,
+    };
+    use futures::stream;
+
+    #[test]
+    fn test_non_streaming_no_tools() {
+        let json = r#"{
+            "id": "test",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "test",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "<think>thinking hard</think>The answer is 42"
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30
+            }
+        }"#;
+        let response: CreateChatCompletionResponse = serde_json::from_str(json).unwrap();
+
+        let message: Message = response.try_into().unwrap();
+        if let Content::Text { text, thinking } = message.content {
+            assert_eq!(thinking, Some("thinking hard".to_string()));
+            assert_eq!(text, Some("The answer is 42".to_string()));
+        } else {
+            panic!("Expected Text content");
+        }
+    }
+
+    #[test]
+    fn test_non_streaming_with_tools() {
+        let json = r#"{
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "test_tool",
+                "arguments": "{\"arg\": \"<think>parsing json</think>value\"}"
+            }
+        }"#;
+        let tool_call: ChatCompletionMessageToolCall = serde_json::from_str(json).unwrap();
+
+        let response = ToolCallResponse::try_from(tool_call).unwrap();
+        assert_eq!(response.name, "test_tool");
+        assert_eq!(response.thinking, Some("parsing json".to_string()));
+        assert_eq!(response.arguments["arg"], "value");
+    }
+
+    #[tokio::test]
+    async fn test_streaming_no_tools() {
+        let chunks = vec![
+            Ok(serde_json::from_str::<CreateChatCompletionStreamResponse>(
+                r#"{
+                "id": "1",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "content": "Hello <thi"
+                        }
+                    }
+                ]
+            }"#,
+            )
+            .unwrap()),
+            Ok(serde_json::from_str::<CreateChatCompletionStreamResponse>(
+                r#"{
+                "id": "2",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "content": "nk>thought</think>world"
+                        }
+                    }
+                ]
+            }"#,
+            )
+            .unwrap()),
+        ];
+
+        let stream = stream::iter(chunks);
+        let mut processed = process_stream(stream);
+
+        // First message should be "Hello "
+        let msg1 = processed.next().await.unwrap().unwrap();
+        if let Content::Text { text, thinking } = msg1.content {
+            assert_eq!(text, Some("Hello ".to_string()));
+            assert_eq!(thinking, None);
+        } else {
+            panic!("Expected Text content");
+        }
+
+        // Second message should be the thinking block
+        let msg2 = processed.next().await.unwrap().unwrap();
+        if let Content::Text { text, thinking } = msg2.content {
+            assert_eq!(text, None);
+            assert_eq!(thinking, Some("thought".to_string()));
+        } else {
+            panic!("Expected Text content");
+        }
+
+        // Third message should be "world"
+        let msg3 = processed.next().await.unwrap().unwrap();
+        if let Content::Text { text, thinking } = msg3.content {
+            assert_eq!(text, Some("world".to_string()));
+            assert_eq!(thinking, None);
+        } else {
+            panic!("Expected Text content");
+        }
+    }
+
+    #[test]
+    fn test_streaming_with_tools() {
+        let json = r#"{
+            "index": 0,
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "test_tool",
+                "arguments": "{\"arg\": \"<think>streaming tool thoughts</think>done\"}"
+            }
+        }"#;
+        let tool_call_chunk: ChatCompletionMessageToolCallChunk = serde_json::from_str(json).unwrap();
+
+        let response = ToolCallResponse::try_from(tool_call_chunk).unwrap();
+        assert_eq!(response.name, "test_tool");
+        assert_eq!(response.thinking, Some("streaming tool thoughts".to_string()));
+        assert_eq!(response.arguments["arg"], "done");
+    }
 }

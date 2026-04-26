@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(field.r#type, "string");
         assert_eq!(
             &field.description.unwrap(),
-            "extraction_value (e.g.:\nBeispiel 1\nBeispiel 2)"
+            "extraction_value\n<examples>\nBeispiel 1<sep>Beispiel 2\n</examples>\n"
         );
     }
 }

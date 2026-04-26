@@ -218,7 +218,6 @@ mod tests {
         }
 
         let schema = ToolSchema(schemars::schema_for!(MyTestTool));
-        print!("{:#?}", schema);
 
         let openai_tool: ChatCompletionTools = schema.try_into().expect("Failed to convert to OpenAI tool");
 
@@ -230,10 +229,14 @@ mod tests {
                     Some("A test tool for demonstration purposes")
                 );
                 let params = f.function.parameters.as_ref().expect("Parameters should exist");
-                assert_eq!(params["name"]["type"], "string");
-                assert_eq!(params["name"]["description"], "The name of the person");
-                assert_eq!(params["age"]["description"], "Optional age");
-                assert_eq!(params["enum_field"]["description"], "An enum field for demonstration");
+                assert_eq!(params["type"], "object");
+                assert_eq!(params["properties"]["name"]["type"], "string");
+                assert_eq!(params["properties"]["name"]["description"], "The name of the person");
+                assert_eq!(params["properties"]["age"]["description"], "Optional age");
+                assert_eq!(
+                    params["properties"]["enum_field"]["description"],
+                    "An enum field for demonstration"
+                );
             }
             _ => panic!("Expected Function tool"),
         }
