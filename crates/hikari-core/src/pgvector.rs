@@ -85,7 +85,7 @@ impl PgVector<'_> {
             document.link(),
             new_hash,
             new_hash_algorithm,
-            &chunks,
+            chunks,
         )
         .await?;
 
@@ -101,7 +101,7 @@ impl PgVector<'_> {
         file_link: &str,
         hash: Option<&str>,
         hash_algorithm: Option<&str>,
-        chunks: &[LlmEmbeddingChunk],
+        chunks: Vec<LlmEmbeddingChunk>,
     ) -> Result<(), PgVectorError> {
         let txn = self.conn.begin().await?;
         let hash = hash.map(std::string::ToString::to_string);
@@ -122,16 +122,16 @@ impl PgVector<'_> {
         let file_id = Value::from(file_id);
 
         // Split in content and metadata
-        let (contents, pages): (Vec<String>, Vec<Vec<u32>>) =
-            chunks.iter().map(|c| (c.content.clone(), c.pages.clone())).unzip();
+        let (contents, pages): (Vec<String>, Vec<Vec<u32>>) = chunks.into_iter().map(|c| (c.content, c.pages)).unzip();
 
+        // Here the contents were cloned one time wihtin embed but should be dropped after the function is finished
         let embeddings = self.embedder.embed(contents.as_slice()).await?;
 
-        if contents.len() != embeddings.len() || contents.len() != pages.len() {
+        if contents.len() != embeddings.len() {
             return Err(PgVectorError::VectorMissMatch);
         }
 
-        for ((content, embedding), pages) in contents.iter().zip(embeddings).zip(pages) {
+        for ((content, embedding), pages) in contents.into_iter().zip(embeddings).zip(pages) {
             let statement = Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 format! {r"

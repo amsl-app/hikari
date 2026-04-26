@@ -19,7 +19,6 @@ impl Embedder {
 
     pub async fn embed<T: Into<Vec<String>>>(&self, texts: T) -> Result<Vec<Vec<f64>>, PgVectorError> {
         let string_array = texts.into();
-        tracing::debug!(count = %string_array.len(), "embeddings chunks");
 
         if string_array.is_empty() {
             tracing::warn!("mo sentences provided to embed");
