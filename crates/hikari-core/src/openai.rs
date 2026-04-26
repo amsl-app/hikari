@@ -74,8 +74,18 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
                 false => Some(text),
             };
 
-            tracing::debug!(content = &content, thinking = ?thinking, "cleaned message content");
+            let content_len = content.len();
+            let thinking_len = thinking.as_ref().map(std::string::String::len);
+            let text_len = text.as_ref().map(std::string::String::len);
 
+            tracing::debug!(
+                content_len,
+                has_thinking = thinking.is_some(),
+                thinking_len,
+                has_text = text.is_some(),
+                text_len,
+                "cleaned message content"
+            );
             Ok(Message {
                 content: Content::Text { text, thinking },
                 tokens,
