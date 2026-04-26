@@ -31,6 +31,11 @@ pub struct TextDocument {
     pub link: String,
 }
 
+pub struct Sentence {
+    pub content: String,
+    pub page_number: usize,
+}
+
 impl PgVectorDocumentTrait for TextDocument {
     fn id(&self) -> &str {
         &self.id
@@ -79,7 +84,7 @@ impl PgVectorDocumentTrait for TextDocument {
                 .flat_map(|(i, page)| {
                     page.unicode_sentences()
                         .map(std::string::ToString::to_string)
-                        .filter(|s| !s.is_empty())
+                        .filter(|s| !s.trim().is_empty())
                         .map(|s| (s, i))
                         .collect::<Vec<(String, usize)>>()
                 })
