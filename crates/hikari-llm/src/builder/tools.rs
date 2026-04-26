@@ -49,14 +49,12 @@ impl Tool {
                 let mut properties: HashMap<&str, OpenApiField> = HashMap::new();
                 let mut required: Vec<&str> = Vec::new();
                 for output in goals {
-                    let name = output.name.0.as_str().unwrap_or_else(|| {
-                        tracing::warn!("goal name could not be parsed as string, using default name 'default_name'");
-                        output.name.to_string().as_str()
-                    });
-                    let goal = output.goal.0.as_str().unwrap_or_else(|| {
+                    let name = &output.name;
+
+                    let goal = output.goal.0.as_str().map_or_else(|| {
                         tracing::warn!("goal description could not be parsed as string, using default description 'default_description'");
-                        output.goal.to_string().as_str()
-                    });
+                        output.goal.to_string()
+                    }, |s| s.to_string());
 
                         let examples = if output.examples.is_empty() {
                                 "".to_string()
@@ -73,13 +71,13 @@ impl Tool {
                         let value_description = format!("True, wenn das Konversationsziel '''{name}''' erfüllt ist: {goal}{examples}");
                         let explanation_description =
                             "Erkläre, deinen Gedanken, warum du so entschieden hast.".to_string();
+                        required.push(name);
                         properties.insert(name, OpenApiField::object().properties(
                             HashMap::from([
                                 ("decision", OpenApiField::new("boolean").description(value_description)),
                                 ("explanation", OpenApiField::new("string").description(explanation_description))
                             ])
                         ).required(vec!["decision", "explanation"]));
-                        required.push(name);
                 }
 
                 OpenApiField::object().title("Validation").description("This tool is used to validate the conversation. Always use this tool when you need to validate a chat. The function receives the input whether the defined goals were achieved or not.").properties(properties).required(required).into()
@@ -178,7 +176,7 @@ mod tests {
     #[test]
     fn test_validation_tool() {
         let goals = vec![ConversationGoal {
-            name: Template(Value::String("goal_1".to_string())),
+            name: "goal_1".to_string(),
             goal: Template(Value::String("First goal description".to_string())),
             examples: vec![Template(Value::String("Example 1".to_string()))],
         }];

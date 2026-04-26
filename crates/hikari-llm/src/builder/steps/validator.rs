@@ -23,7 +23,7 @@ const TEMPERATURE_KEY: &str = "VALIDATOR_TEMPERATURE";
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConversationGoal {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Template,
+    pub name: String,
     pub goal: Template,
     #[serde(default)]
     pub examples: Vec<Template>,
@@ -32,7 +32,6 @@ pub struct ConversationGoal {
 impl SlotsTrait for ConversationGoal {
     fn injection_slots(&self) -> Vec<SlotPath> {
         let mut slots = self.goal.injection_slots();
-        slots.extend(self.name.injection_slots());
         slots.extend(self.examples.iter().flat_map(super::SlotsTrait::injection_slots));
         slots
     }
@@ -41,7 +40,7 @@ impl SlotsTrait for ConversationGoal {
 impl InjectionTrait for ConversationGoal {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         ConversationGoal {
-            name: self.name.inject(values),
+            name: self.name.clone(),
             goal: self.goal.inject(values),
             examples: self.examples.iter().map(|e| e.inject(values)).collect(),
         }
