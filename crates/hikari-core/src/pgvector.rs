@@ -158,6 +158,7 @@ impl PgVector<'_> {
         limit: u32,
         documents: &[String],
     ) -> Result<Vec<LlmEmbeddingQueryResult>, PgVectorError> {
+        let start = tokio::time::Instant::now();
         let query_vector = self.embedder.embed(&[query.to_owned()]).await?.swap_remove(0);
         let query_vector_string = query_vector
             .iter()
@@ -203,6 +204,7 @@ impl PgVector<'_> {
         );
 
         let rows = self.conn.query_all(statement).await?;
+        metrics::histogram!("pgvector_retrieval_time_ms").record(start.elapsed().as_millis() as f64);
         Self::handle_rows(&rows)
     }
 
