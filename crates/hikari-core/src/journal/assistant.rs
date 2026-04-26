@@ -105,7 +105,7 @@ pub async fn generate_prompt(
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_prompt".to_owned()).await?;
+        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assistant_prompt".to_owned()).await?;
     }
 
     res.fix_escapes();
@@ -364,7 +364,7 @@ Generiere aus Fragen und Antworten verschiedene, vollständige Formulierungen au
 Liefere zwei bis drei Alternativen.\n\
 Alle alternativen sollen aus der Ich-Perspektive geschrieben sein.
 
-Rufe die Funktion `TextZusammnfuehren` auf um die Formulierungen zurückzugeben. Verwende für den Funktionsaufruf valides JSON."
+Rufe die Funktion `TextZusammenfuehren` auf um die Formulierungen zurückzugeben. Verwende für den Funktionsaufruf valides JSON."
         ).build().map_err(OpenAiError::from)?.into());
 
     tracing::info!("sending {} messages to openAI", messages.len());
