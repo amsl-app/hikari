@@ -3253,6 +3253,7 @@ dependencies = [
  "serde_with",
  "serial_test",
  "strum 0.28.0",
+ "sysinfo",
  "test-log",
  "thiserror 2.0.18",
  "timeago",

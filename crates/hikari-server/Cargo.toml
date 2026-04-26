@@ -79,6 +79,7 @@ mime = "0.3.17"
 pin-project = "1.1.10"
 bytes = "1.11.1"
 hashbrown = "0.17.0"
+sysinfo = "0.38.4"
 
 [dev-dependencies]
 hikari-test-helpers = { path = "../hikari-test-helpers" }

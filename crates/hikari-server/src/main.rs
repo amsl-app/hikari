@@ -151,6 +151,16 @@ async fn run(opt: Run) -> Result<()> {
             .build(),
     )?;
 
+    // ---- Memory monitoring
+    tokio::spawn(async move {
+        loop {
+            log_memory("Running");
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        }
+    });
+
+    log_memory("Startup");
+
     //TODO (Prio?) replace by command line argument
     let db_engine_type = env::var("ENGINE_DB_TYPE").map_err(|e| anyhow!("Cant find env: \"DATABASE_URL\" {e:?}"))?;
     let db_url_string = match db_engine_type.as_str() {
@@ -182,6 +192,7 @@ async fn run(opt: Run) -> Result<()> {
             Bots::default()
         }
     };
+    log_memory("Bots loaded");
 
     // ---- Load LLM
     let llm_structure_config = match &opt.llm_config.llm_structures {
@@ -192,6 +203,7 @@ async fn run(opt: Run) -> Result<()> {
         }
     };
     let document_collection = load_documents(&llm_rag_documents_path, &loader_handler).await?;
+    log_memory("Documents loaded");
     let constants = load_constants(opt.llm_config.constants.as_ref(), &loader_handler).await?;
 
     // ---- Load Assessments
@@ -202,6 +214,7 @@ async fn run(opt: Run) -> Result<()> {
 
     // ---- Load Modules
     let module_config = load_modules(&opt.config, &loader_handler, &global_config, &document_collection).await?;
+    log_memory("Modules loaded");
 
     module_config.validate(
         &assessment_config.ids(),
@@ -261,6 +274,7 @@ async fn run(opt: Run) -> Result<()> {
         llm_config,
         llm_data,
     );
+    log_memory("AppConfig created");
 
     let app = app::create_app(app_config, auth, deletable, seaorm_pool).await?;
 
@@ -268,6 +282,7 @@ async fn run(opt: Run) -> Result<()> {
 
     let service = app.into_make_service();
     tracing::info!(local_addr = %listener.local_addr()?, "starting app");
+    log_memory("Server starting");
     serve::serve(listener, service).await?;
     Ok(())
 }
@@ -394,9 +409,11 @@ async fn upload_documents(
         if let Some(pgvector_document) = pgvector_document {
             upload_document(&retriever, pgvector_document, file_metadata).await?;
         }
+        log_memory("Document processed");
         tokio::task::yield_now().await;
     }
     tracing::info!("All rag documents uploaded successfully");
+    log_memory("Documents uploaded");
     Ok(())
 }
 
@@ -410,6 +427,28 @@ fn build_connect_options(db_options: &Db, db_url: Url) -> ConnectOptions {
     }
     seaorm_pool_options.sqlx_logging_level(log::LevelFilter::Debug);
     seaorm_pool_options
+}
+
+fn log_memory(milestone: &str) {
+    use sysinfo::{IS_SUPPORTED_SYSTEM, ProcessRefreshKind, System};
+
+    if !IS_SUPPORTED_SYSTEM {
+        return;
+    }
+
+    let mut sys = System::new();
+    let pid = sysinfo::get_current_pid().expect("Failed to get current PID");
+    sys.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[pid]),
+        false,
+        ProcessRefreshKind::nothing().with_memory(),
+    );
+
+    if let Some(process) = sys.process(pid) {
+        let memory_mb = process.memory() / 1024 / 1024;
+        let virtual_memory_mb = process.virtual_memory() / 1024 / 1024;
+        tracing::info!(%milestone, %memory_mb, %virtual_memory_mb, "Process memory consumption");
+    }
 }
 
 fn main() -> Result<()> {
