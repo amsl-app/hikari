@@ -49,8 +49,14 @@ impl Tool {
                 let mut properties: HashMap<&str, OpenApiField> = HashMap::new();
                 let mut required: Vec<&str> = Vec::new();
                 for output in goals {
-                    let name = output.name.0.as_str().unwrap_or_default();
-                    let goal = output.goal.0.as_str().unwrap_or_default();
+                    let name = output.name.0.as_str().unwrap_or_else(|| {
+                        tracing::warn!("goal name could not be parsed as string, using default name 'default_name'");
+                        output.name.to_string().as_str()
+                    });
+                    let goal = output.goal.0.as_str().unwrap_or_else(|| {
+                        tracing::warn!("goal description could not be parsed as string, using default description 'default_description'");
+                        output.goal.to_string().as_str()
+                    });
 
                         let examples = if output.examples.is_empty() {
                                 "".to_string()
