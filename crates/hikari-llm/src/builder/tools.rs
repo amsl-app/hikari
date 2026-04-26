@@ -65,14 +65,14 @@ impl Tool {
                             };
 
                         let value_description = format!("True, wenn das Konversationsziel '''{name}''' erfüllt ist: {goal}{examples}");
-                        let explaination_description =
+                        let explanation_description =
                             "Erkläre, deinen Gedanken, warum du so entschieden hast.".to_string();
                         properties.insert(name, OpenApiField::object().properties(
                             HashMap::from([
-                                ("decision", OpenApiField::new("string").description(value_description)),
-                                ("explaination", OpenApiField::new("string").description(explaination_description))
+                                ("decision", OpenApiField::new("boolean").description(value_description)),
+                                ("explanation", OpenApiField::new("string").description(explanation_description))
                             ])
-                        ).required(vec!["decision", "explaination"]));
+                        ).required(vec!["decision", "explanation"]));
                         required.push(name);
                 }
 
