@@ -16,10 +16,6 @@ pub struct LlmServices {
     #[arg(long, required = false)]
     pub kit_default_model: Option<String>,
     #[arg(long, required = false)]
-    pub custom_key: Option<String>,
-    #[arg(long, required = false)]
-    pub custom_default_model: Option<String>,
-    #[arg(long, required = false)]
     pub journaling_model: Option<String>,
     #[arg(long, required = false)]
     pub journaling_service: Option<String>,
