@@ -6,6 +6,7 @@ use hikari_utils::args::{
     llm::{LlmConfig, LlmServices},
     s3::S3,
 };
+use hikari_utils::tracing::LogFormat;
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -76,7 +77,7 @@ pub(crate) struct Run {
     pub(crate) workers: Option<usize>,
 
     #[arg(long, help = "The url were the csml files are stored")]
-    pub(crate) csml: Url,
+    pub(crate) csml: Option<Url>,
 
     #[arg(short, long, help = "The url were config files are stored")]
     pub(crate) config: Url,
@@ -108,4 +109,7 @@ pub(crate) struct Run {
 
     #[arg(long)]
     pub(crate) otlp_endpoint: Option<String>,
+
+    #[arg(long)]
+    pub(crate) log_format: Option<LogFormat>,
 }

@@ -1,17 +1,12 @@
-use hikari_entity::{
-    oidc_mapping,
-    oidc_mapping::{ActiveModel, Entity, Model},
-};
-
-use crate::util::FlattenTransactionResultExt;
+use hikari_entity::oidc_mapping::{ActiveModel, Entity, Model};
 use sea_orm::ActiveValue::Set;
+use sea_orm::TransactionTrait;
 use sea_orm::prelude::*;
-use sea_orm::{TransactionTrait, sea_query};
 
 pub struct Mutation;
 
 impl Mutation {
-    pub async fn create_oidc_mapping<C: TransactionTrait>(
+    pub async fn create_oidc_mapping<C: ConnectionTrait + TransactionTrait>(
         conn: &C,
         user_id: Uuid,
         oidc_sub: String,
@@ -22,26 +17,7 @@ impl Mutation {
             ..Default::default()
         };
 
-        conn.transaction(|txn| {
-            Box::pin(async move {
-                // Can't use returning because of how sea_orm works
-                Entity::insert(oidc_mapping)
-                    .on_conflict(
-                        sea_query::OnConflict::column(oidc_mapping::Column::OidcSub)
-                            .do_nothing()
-                            .clone(),
-                    )
-                    .do_nothing()
-                    .exec(txn)
-                    .await?;
-                let mapping = Entity::find()
-                    .filter(oidc_mapping::Column::OidcSub.eq(oidc_sub))
-                    .one(txn)
-                    .await?;
-                mapping.ok_or_else(|| DbErr::RecordNotFound("Mapping not found after insertion".to_owned()))
-            })
-        })
-        .await
-        .flatten_res()
+        let mapping = Entity::insert(oidc_mapping).exec_with_returning(conn).await?;
+        Ok(mapping)
     }
 }

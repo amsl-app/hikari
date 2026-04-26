@@ -66,6 +66,15 @@ pub struct UserPath {
     pub path: String,
 }
 
+#[derive(Deserialize, Debug, Clone, Default, Hash, Eq, PartialEq, JsonSchema)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct UserConfigPath {
+    /// # `JsonPath` to values of the user profile
+    pub path: String,
+    /// Key of the user config to load from
+    pub key: String,
+}
+
 #[derive(Deserialize, Debug, Clone, Default, Hash, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ModulePath {

@@ -48,9 +48,11 @@ pub fn message_from_csml_message_data(message: csml_engine::data::models::Messag
 }
 
 #[derive(Debug)]
+#[derive(Default)]
 pub(crate) struct Bots {
     bots: Vec<CsmlBot>,
 }
+
 
 impl Bots {
     pub fn new(bots: Vec<CsmlBot>) -> Self {

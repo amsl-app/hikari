@@ -21,7 +21,7 @@ semver = "1.0.27"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "registry", "std", "fmt"] }
-test-log = { version = "0.2.18", default-features = false, features = ["trace"] }
+test-log = { version = "0.2.20", default-features = false, features = ["trace"] }
 
 [lints.clippy]
 # Custom lint config because this is test code
