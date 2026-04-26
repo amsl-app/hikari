@@ -105,7 +105,7 @@ pub async fn generate_prompt(
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_prompt".to_owned()).await?;
+        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assistant_prompt".to_owned()).await?;
     }
 
     res.fix_escapes();
