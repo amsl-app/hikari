@@ -139,19 +139,11 @@ fn build_merge_map(merge_actions: &[MergeAction]) -> Vec<MergePair> {
 #[instrument(skip_all, fields(page_count = pages_embeddings.len(), merge_count = merge_map.len()))]
 fn apply_merges(pages_embeddings: &mut [EmbeddedPage], merge_map: &[MergePair]) {
     // Perform merges, starting with forward merges (to avoid index shifting issues)
-    let forward_merges: Vec<&MergePair> = merge_map.iter().filter(|(from, to)| from < to).collect();
-    let backward_merges: Vec<&MergePair> = merge_map.iter().filter(|(from, to)| from > to).collect();
+    let forward_merges = merge_map.iter().filter(|(from, to)| from < to).rev();
+    let backward_merges = merge_map.iter().filter(|(from, to)| from > to);
+    let merges = forward_merges.chain(backward_merges);
 
-    for (from, to) in forward_merges.iter().rev() {
-        if let (Some((from_chunk, _)), Some((to_chunk, _))) =
-            (pages_embeddings.get(*from).cloned(), pages_embeddings.get_mut(*to))
-        {
-            tracing::debug!("Merging page {} into page {}", from + 1, to + 1);
-            to_chunk.push_sentence(&from_chunk.content, from_chunk.pages);
-        }
-    }
-
-    for (from, to) in &backward_merges {
+    for (from, to) in merges {
         if let (Some((from_chunk, _)), Some((to_chunk, _))) =
             (pages_embeddings.get(*from).cloned(), pages_embeddings.get_mut(*to))
         {
