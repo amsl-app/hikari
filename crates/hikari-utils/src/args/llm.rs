@@ -1,4 +1,5 @@
 use clap::Args;
+use heck::ToKebabCase;
 use std::collections::HashMap;
 use std::str::FromStr;
 use strum::{Display, EnumString};
@@ -32,7 +33,7 @@ enum KeyValueMapError {
 }
 
 trait IdValue: FromStr + ToString {
-    const ALLOWED_VALUES: &'static str;
+    fn allowed_values() -> String;
 }
 
 struct ParsedValues {
@@ -61,14 +62,18 @@ fn parse_key_value_map(input: &str, id_field: &'static str) -> Result<ParsedValu
     Ok(ParsedValues { id, values })
 }
 
-fn allowed_fields_string(id_field: &str, settings: &[&str]) -> String {
+fn kebab_case(input: &str) -> String {
+    input.to_kebab_case()
+}
+
+fn allowed_fields_string(id_field: &str, settings: &[String]) -> String {
     let mut fields = Vec::with_capacity(settings.len() + 1);
     fields.push(id_field.to_owned());
-    fields.extend(settings.iter().map(|field| (*field).to_owned()));
+    fields.extend(settings.iter().cloned());
     fields.join(", ")
 }
 
-fn missing_settings_string(settings: &[&str]) -> String {
+fn missing_settings_string(settings: &[String]) -> String {
     match settings {
         [] => String::new(),
         [single] => format!("'{single}'"),
@@ -81,71 +86,54 @@ fn missing_settings_string(settings: &[&str]) -> String {
     }
 }
 
-macro_rules! join_literals {
-    ($single:literal) => {
-        $single
-    };
-    ($first:literal, $($rest:literal),+ $(,)?) => {
-        concat!($first, ", ", join_literals!($($rest),+))
-    };
-}
-
-macro_rules! setting_key {
-    ($field:ident) => {
-        stringify!($field)
-    };
-    ($field:ident => $key:literal) => {
-        $key
-    };
-}
-
 macro_rules! define_llm_arg {
     (
-        field_name: $field_name:literal,
-        struct $target:ident {
-            $target_id:ident : $id_ty:ident {
-                $( $variant:ident = $value:literal ),+ $(,)?
-            },
-            $( $field:ident : $field_ty:ty $(=> $map_key:literal)? ),+ $(,)?
-        }
+        type: $target:ident,
+        id_field: $target_id:ident : $id_ty:ident: {
+            $( $variant:ident ),+ $(,)?
+        },
+        settings: [ $( $field:ident ),+ $(,)? ]
     ) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+        #[strum(serialize_all = "kebab-case")]
         pub enum $id_ty {
-            $(
-                #[strum(serialize = $value)]
-                $variant,
-            )+
+            $( $variant, )+
         }
 
         impl IdValue for $id_ty {
-            const ALLOWED_VALUES: &'static str = join_literals!($( $value ),+);
+            fn allowed_values() -> String {
+                [$( kebab_case(stringify!($variant)) ),+].join(", ")
+            }
         }
 
         #[derive(Debug, Clone)]
         pub struct $target {
             pub $target_id: $id_ty,
-            $( pub $field: $field_ty, )+
+            $( pub $field: Option<String>, )+
         }
 
         impl TryFrom<ParsedValues> for $target {
             type Error = LlmArgParseError;
 
             fn try_from(mut parsed: ParsedValues) -> Result<Self, Self::Error> {
-                const SETTINGS: &[&str] = &[ $( setting_key!($field $(=> $map_key)?) ),+ ];
-                let allowed_fields = allowed_fields_string($field_name, SETTINGS);
-                let missing_settings = missing_settings_string(SETTINGS);
+                let settings = vec![$( kebab_case(stringify!($field)) ),+];
+                let allowed_fields = allowed_fields_string(stringify!($target_id), &settings);
+                let missing_settings = missing_settings_string(&settings);
 
                 let id_str = parsed.id;
                 let $target_id = id_str
                     .parse::<$id_ty>()
                     .map_err(|_| LlmArgParseError::InvalidId {
-                        kind: $field_name,
+                        kind: stringify!($target_id),
                         value: id_str,
-                        allowed_values: <$id_ty as IdValue>::ALLOWED_VALUES,
+                        allowed_values: <$id_ty as IdValue>::allowed_values(),
                     })?;
 
                 $(
-                    let $field = parsed.values.remove(setting_key!($field $(=> $map_key)?));
+                    let $field = {
+                        let key = kebab_case(stringify!($field));
+                        parsed.values.remove(key.as_str())
+                    };
                 )+
 
                 if let Some((unknown, _)) = parsed.values.into_iter().next() {
@@ -157,7 +145,7 @@ macro_rules! define_llm_arg {
 
                 if true $(&& $field.is_none())+ {
                     return Err(LlmArgParseError::MissingSetting {
-                        kind: $field_name,
+                        kind: stringify!($target_id),
                         id: $target_id.to_string(),
                         allowed_settings: missing_settings,
                     });
@@ -174,15 +162,15 @@ macro_rules! define_llm_arg {
             type Err = LlmArgParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                const SETTINGS: &[&str] = &[ $( setting_key!($field $(=> $map_key)?) ),+ ];
+                let settings = vec![$( kebab_case(stringify!($field)) ),+];
 
-                let values = parse_key_value_map(s, $field_name).map_err(|error| match error {
+                let values = parse_key_value_map(s, stringify!($target_id)).map_err(|error| match error {
                     KeyValueMapError::MissingSeparator(part) => LlmArgParseError::UnknownField {
                         field: part,
-                        allowed_fields: allowed_fields_string($field_name, SETTINGS),
+                        allowed_fields: allowed_fields_string(stringify!($target_id), &settings),
                     },
                     KeyValueMapError::EmptyValue(name) => LlmArgParseError::EmptyValue(name),
-                    KeyValueMapError::MissingId => LlmArgParseError::MissingId($field_name),
+                    KeyValueMapError::MissingId => LlmArgParseError::MissingId(stringify!($target_id)),
                 })?;
 
                 Self::try_from(values)
@@ -209,40 +197,25 @@ pub enum LlmArgParseError {
     InvalidId {
         kind: &'static str,
         value: String,
-        allowed_values: &'static str,
+        allowed_values: String,
     },
 }
 
 define_llm_arg!(
-    field_name: "service",
-    struct LlmServiceArg {
-        service: LlmServiceType {
-            Openai = "openai",
-            Gwdg = "gwdg",
-            Kit = "kit",
-        },
-        key: Option<String>,
-        default_model: Option<String> => "default-model",
-    }
+    type: LlmServiceArg,
+    id_field: service: LlmServiceType: { Openai, Gwdg, Kit },
+    settings: [key, default_model]
 );
 
 define_llm_arg!(
-    field_name: "feature",
-    struct LlmFeatureArg {
-        feature: LlmFeatureType {
-            Journaling = "journaling",
-            Embedding = "embedding",
-            Quiz = "quiz",
-        }
-        ,
-        service: Option<String>,
-        model: Option<String>,
-    }
+    type: LlmFeatureArg,
+    id_field: feature: LlmFeatureType: { Journaling, Embedding, Quiz },
+    settings: [service, model]
 );
 
 #[cfg(test)]
 mod tests {
-    use super::{LlmFeatureType, LlmServiceType, LlmServices};
+    use super::LlmServices;
     use clap::Parser;
 
     #[derive(Debug, Parser)]
@@ -259,7 +232,7 @@ mod tests {
             .expect("llm-config should parse");
 
         let cfg = &cli.llm_services.llm_config[0];
-        assert_eq!(cfg.service, LlmServiceType::Kit);
+        assert_eq!(cfg.service.to_string(), "kit");
         assert_eq!(cfg.key.as_deref(), Some("abc"));
         assert_eq!(cfg.default_model.as_deref(), Some("model-a"));
     }
@@ -276,8 +249,8 @@ mod tests {
         .expect("repeated llm-config should parse");
 
         assert_eq!(cli.llm_services.llm_config.len(), 2);
-        assert_eq!(cli.llm_services.llm_config[0].service, LlmServiceType::Openai);
-        assert_eq!(cli.llm_services.llm_config[1].service, LlmServiceType::Gwdg);
+        assert_eq!(cli.llm_services.llm_config[0].service.to_string(), "openai");
+        assert_eq!(cli.llm_services.llm_config[1].service.to_string(), "gwdg");
         assert_eq!(cli.llm_services.llm_config[0].key.as_deref(), Some("openai-key"));
         assert_eq!(cli.llm_services.llm_config[1].default_model.as_deref(), Some("llama"));
     }
@@ -309,7 +282,7 @@ mod tests {
         .expect("llm-feature-config should parse");
 
         let cfg = &cli.llm_services.llm_feature_config[0];
-        assert_eq!(cfg.feature, LlmFeatureType::Journaling);
+        assert_eq!(cfg.feature.to_string(), "journaling");
         assert_eq!(cfg.service.as_deref(), Some("kit"));
         assert_eq!(cfg.model.as_deref(), Some("model-a"));
     }
@@ -324,11 +297,8 @@ mod tests {
         .expect("repeated llm-feature-config should parse");
 
         assert_eq!(cli.llm_services.llm_feature_config.len(), 2);
-        assert_eq!(
-            cli.llm_services.llm_feature_config[0].feature,
-            LlmFeatureType::Embedding
-        );
-        assert_eq!(cli.llm_services.llm_feature_config[1].feature, LlmFeatureType::Quiz);
+        assert_eq!(cli.llm_services.llm_feature_config[0].feature.to_string(), "embedding");
+        assert_eq!(cli.llm_services.llm_feature_config[1].feature.to_string(), "quiz");
         assert_eq!(
             cli.llm_services.llm_feature_config[0].service.as_deref(),
             Some("openai")
