@@ -40,6 +40,7 @@ services:
 
       - "--openai-key=${OPENAI_KEY}"
       - "--gwdg-key=${GWDG_KEY}"
+      - "--kit-key=${KIT_KEY}"
       - "--journaling-service=${JOURNALING_SERVICE}"
       - "--journaling-model=${JOURNALING_MODEL}"
       - "--embedding-service=${EMBEDDING_SERVICE}"
@@ -91,6 +92,7 @@ services:
 
       - "--openai-key=${OPENAI_KEY}"
       - "--gwdg-key=${GWDG_KEY}"
+      - "--kit-key=${KIT_KEY}"
       - "--journaling-service=${JOURNALING_SERVICE}"
       - "--journaling-model=${JOURNALING_MODEL}"
 
