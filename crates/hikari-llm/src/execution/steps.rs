@@ -96,7 +96,7 @@ pub trait LlmStepTrait: Send + Sync {
             let res = match res {
                 Ok(res) => Ok(res),
                 Err(err) => {
-                    tracing::error!(error = &err as &dyn Error, id = %self.id(), "Error in step, try one more time");
+                    tracing::error!(error = &err as &dyn Error, id = %self.id(), "error in step, try one more time");
                     self.call(
                         config,
                         conversation_id,
@@ -111,7 +111,7 @@ pub trait LlmStepTrait: Send + Sync {
             };
             match res {
                 Err(err) => {
-                    tracing::error!(error = ?err, id = %self.id(), "Error in step, second try failed");
+                    tracing::error!(error = ?err, id = %self.id(), "error in step, second try failed");
                     self.set_status(LlmStepStatus::Error);
                     Err(err)
                 }

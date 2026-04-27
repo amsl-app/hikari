@@ -503,7 +503,7 @@ pub(crate) fn process_stream(
     .boxed()
 }
 
-#[instrument(skip(openai_config, messages))]
+#[instrument(skip(openai_config, messages), err)]
 pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
     config: CallConfig,
     openai_config: OpenAIConfig,

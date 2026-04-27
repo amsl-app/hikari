@@ -106,7 +106,7 @@ struct Key {
 static LOADING_SUMMARIES: LazyLock<Mutex<HashMap<Key, Arc<Mutex<Option<SummaryResponse>>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-#[instrument(skip_all)]
+#[instrument(skip_all, err)]
 pub async fn summarize<C: ConnectionTrait + TransactionTrait + Send + Clone + 'static>(
     conn: C,
     user_id: Uuid,
@@ -220,7 +220,7 @@ type SummaryData = (
 );
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip_all)]
+#[instrument(skip_all, err)]
 async fn generate_summary<C: ConnectionTrait + TransactionTrait>(
     conn: &C,
     llm_config: &LlmConfig,
