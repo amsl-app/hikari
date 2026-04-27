@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_openai::config::OpenAIConfig;
 use hikari_config::module::llm_agent::LlmService;
-use hikari_utils::args::llm::LlmServices as LlmServiceArgs;
+use hikari_utils::args::llm::{LlmServiceType, LlmServices as LlmServiceArgs};
 #[derive(Debug, Clone)]
 pub struct LlmServiceConfig {
     pub key: Option<String>,
@@ -27,6 +27,34 @@ pub struct LlmConfig {
 
 impl From<LlmServiceArgs> for LlmConfig {
     fn from(config: LlmServiceArgs) -> LlmConfig {
+        let mut openai = LlmServiceConfig {
+            key: None,
+            default_model: None,
+        };
+        let mut gwdg = LlmServiceConfig {
+            key: None,
+            default_model: None,
+        };
+        let mut kit = LlmServiceConfig {
+            key: None,
+            default_model: None,
+        };
+
+        for service_config in config.llm_config {
+            let target = match service_config.service {
+                LlmServiceType::Openai => &mut openai,
+                LlmServiceType::Gwdg => &mut gwdg,
+                LlmServiceType::Kit => &mut kit,
+            };
+
+            if let Some(key) = service_config.key {
+                target.key = Some(key);
+            }
+            if let Some(default_model) = service_config.default_model {
+                target.default_model = Some(default_model);
+            }
+        }
+
         let embedding_service = config
             .embedding_service
             .as_deref()
@@ -43,18 +71,9 @@ impl From<LlmServiceArgs> for LlmConfig {
             .map(|s| LlmService::from_str(s).expect("Invalid quiz_service string"));
 
         Self {
-            openai: LlmServiceConfig {
-                key: config.openai_key,
-                default_model: config.openai_default_model,
-            },
-            gwdg: LlmServiceConfig {
-                key: config.gwdg_key,
-                default_model: config.gwdg_default_model,
-            },
-            kit: LlmServiceConfig {
-                key: config.kit_key,
-                default_model: config.kit_default_model,
-            },
+            openai,
+            gwdg,
+            kit,
             embedding_config: LlmFeatureConfig {
                 service: embedding_service,
                 model: config.embedding_model,
