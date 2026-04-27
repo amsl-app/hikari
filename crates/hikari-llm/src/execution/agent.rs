@@ -42,6 +42,7 @@ pub struct LlmAgent {
     llm_service: LlmService,
     conn: DatabaseConnection,
     current_action: Option<Arc<Mutex<LlmStep>>>,
+    start_time: Option<tokio::time::Instant>,
 }
 
 impl LlmAgent {
@@ -77,6 +78,7 @@ impl LlmAgent {
             llm_service,
             conn,
             current_action,
+            start_time: None,
         };
         // We return the current action state to trigger the current step in the websocket if needed (if state is running / error)
         Ok(agent)
@@ -88,6 +90,8 @@ impl LlmAgent {
     ) -> Pin<Box<dyn Stream<Item = Result<Response, LlmExecutionError>> + '_ + Send>> {
         tracing::debug!("starting chat with LLM agent");
         Box::pin(try_stream! {
+                let start_time = tokio::time::Instant::now();
+                self.start_time = Some(start_time);
                 if history_needed {
                     let messages = get_memory(&self.conn, &self.conversation_id, None, None).await?;
                     yield Response::History(messages);
@@ -147,7 +151,8 @@ impl LlmAgent {
                             yield item;
                         }
                     }
-            }
+                }
+                metrics::histogram!("agent_time_to_last_token_ms").record(start_time.elapsed().as_millis() as f64);
         })
     }
 
@@ -182,6 +187,11 @@ impl LlmAgent {
                     while let Some(result) = message.next().await {
                         match result {
                             Ok(value) => {
+                                // Check if agent has start times present and take it to send time to first token metric
+                                if let Some(start_time) = self.start_time.take() {
+                                    let elapsed = start_time.elapsed().as_millis() as f64;
+                                    metrics::histogram!("agent_time_to_first_token_ms").record(elapsed);
+                                }
                                 tracing::trace!(?value, "message chunk");
                                 let content = if let Content::Text { text, .. } = &value.content {
                                         Ok(text.as_deref().unwrap_or(""))
@@ -234,6 +244,7 @@ impl LlmAgent {
                             }
                         }
                     }
+
                     match id {
                         Some(id) => {
                             let chunk = complete_message[offset..].to_string();

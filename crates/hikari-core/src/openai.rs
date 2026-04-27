@@ -2,11 +2,11 @@ use crate::openai::error::OpenAiError;
 use crate::openai::streaming::MessageStream;
 use crate::openai::tools::{ToolChoice, ToolSchema};
 use async_openai::Client;
-use async_openai::config::OpenAIConfig;
+use async_openai::config::{Config, OpenAIConfig};
 use async_openai::types::chat::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionMessageToolCalls,
     ChatCompletionRequestMessage, ChatCompletionTools, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
-    FunctionCall, FunctionCallStream, ReasoningEffort,
+    FunctionCall, FunctionCallStream,
 };
 use async_stream::try_stream;
 use backoff::ExponentialBackoffBuilder;
@@ -14,19 +14,60 @@ use futures::Stream;
 use futures::StreamExt;
 use regex::Regex;
 use schemars::JsonSchema;
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::error::Error;
+use std::fmt::Display;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::time::Duration;
+use tokio::time::Instant;
 use tracing::instrument;
 use typed_builder::TypedBuilder;
 
 pub mod error;
 pub mod streaming;
 pub mod tools;
+
+#[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ReasoningEffort {
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+}
+
+impl Display for ReasoningEffort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let label = match self {
+            ReasoningEffort::None => "none",
+            ReasoningEffort::Minimal => "minimal",
+            ReasoningEffort::Low => "low",
+            ReasoningEffort::Medium => "medium",
+            ReasoningEffort::High => "high",
+            ReasoningEffort::Xhigh => "xhigh",
+        };
+        write!(f, "{}", label)
+    }
+}
+
+impl From<ReasoningEffort> for async_openai::types::chat::ReasoningEffort {
+    fn from(value: ReasoningEffort) -> Self {
+        match value {
+            ReasoningEffort::None => async_openai::types::chat::ReasoningEffort::None,
+            ReasoningEffort::Minimal => async_openai::types::chat::ReasoningEffort::Minimal,
+            ReasoningEffort::Low => async_openai::types::chat::ReasoningEffort::Low,
+            ReasoningEffort::Medium => async_openai::types::chat::ReasoningEffort::Medium,
+            ReasoningEffort::High => async_openai::types::chat::ReasoningEffort::High,
+            ReasoningEffort::Xhigh => async_openai::types::chat::ReasoningEffort::Xhigh,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -198,7 +239,16 @@ pub enum OpenAiCallResult {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip(openai_config, messages, tools, tool_choice))]
+#[instrument(skip(
+    config,
+    openai_config,
+    temperature,
+    reasoning_effort,
+    model,
+    messages,
+    tools,
+    tool_choice
+))]
 pub async fn openai_call_with_timeout(
     config: CallConfig,
     openai_config: OpenAIConfig,
@@ -210,6 +260,10 @@ pub async fn openai_call_with_timeout(
     tools: Vec<ToolSchema>,
     tool_choice: Option<ToolChoice>,
 ) -> Result<OpenAiCallResult, OpenAiError> {
+    let start_time = Instant::now();
+    let model_label = model.to_string();
+    let service = openai_config.api_base().to_string();
+
     let mut request = CreateChatCompletionRequestArgs::default();
     request.model(model).messages(messages);
 
@@ -261,7 +315,7 @@ pub async fn openai_call_with_timeout(
         let res = client.chat().create_stream(request).await;
         match res {
             Ok(stream) => {
-                let stream = process_stream(stream);
+                let stream = process_stream(stream, start_time, service, model_label);
                 Ok(OpenAiCallResult::Stream(MessageStream::new(stream)))
             }
             Err(error) => Err(OpenAiError::Api(error)),
@@ -269,6 +323,15 @@ pub async fn openai_call_with_timeout(
     } else {
         let res: Result<CreateChatCompletionResponse, async_openai::error::OpenAIError> =
             client.chat().create(request).await;
+
+        let elapsed = start_time.elapsed();
+        metrics::histogram!(
+            "llm_time_to_last_token_ms",
+            "service" => service,
+            "model" => model_label,
+        )
+        .record(elapsed.as_millis() as f64);
+
         tracing::debug!(?res, "received OpenAI response");
         let chat_completion = res.map_err(|error| {
             tracing::warn!(error = &error as &dyn Error, "open AI call failed");
@@ -286,11 +349,15 @@ pub(crate) fn process_stream(
     > + Unpin
     + Send
     + 'static,
+    start_time: Instant,
+    service: String,
+    model: String,
 ) -> Pin<Box<dyn Stream<Item = Result<Message, crate::openai::error::StreamingError>> + Send>> {
     let mut in_think_block = false;
     let mut buffer = String::new();
 
     try_stream! {
+        let mut first_token_received = false;
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             let tokens = chunk.usage.map(|u| u.total_tokens);
@@ -298,6 +365,15 @@ pub(crate) fn process_stream(
             let first = chunk.choices.into_iter().next();
 
             if let Some(first) = first {
+                if !first_token_received
+                    && (first.delta.content.is_some() || first.delta.tool_calls.is_some()) {
+                        first_token_received = true;
+                        metrics::histogram!(
+                            "llm_time_to_first_token_ms",
+                            "service" => service.clone(),
+                            "model" => model.clone(),
+                        ).record(start_time.elapsed().as_millis() as f64);
+                    }
                 if let Some(tool_calls) = first.delta.tool_calls {
                     let tool_calls: Vec<ToolCallResponse> =
                         tool_calls.into_iter().map(std::convert::TryInto::try_into).collect::<Result<_, _>>()?;
@@ -418,6 +494,11 @@ pub(crate) fn process_stream(
                 }
             }
         }
+        metrics::histogram!(
+            "llm_time_to_last_token_ms",
+            "service" => service,
+            "model" => model,
+        ).record(start_time.elapsed().as_millis() as f64);
     }
     .boxed()
 }
@@ -568,7 +649,7 @@ mod tests {
         ];
 
         let stream = stream::iter(chunks);
-        let mut processed = process_stream(stream);
+        let mut processed = process_stream(stream, Instant::now(), "test".to_string(), "test".to_string());
 
         // First message should be "Hello "
         let msg1 = processed.next().await.unwrap().unwrap();

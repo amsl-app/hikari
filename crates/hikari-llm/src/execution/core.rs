@@ -98,7 +98,7 @@ impl LlmCore {
             openai_config,
             false,
             self.model.temperature,
-            self.model.reasining_effort.map(Into::into),
+            self.model.reasining_effort,
             model,
             prompt,
             tools,

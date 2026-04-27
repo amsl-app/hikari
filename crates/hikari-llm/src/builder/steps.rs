@@ -12,6 +12,7 @@ use crate::builder::steps::summarizer::SummarizerBuilder;
 use crate::builder::steps::validator::ValidatorBuilder;
 use crate::execution::steps::LlmStep;
 use crate::execution::steps::combined_step::CombinedStep;
+use hikari_core::openai::ReasoningEffort;
 use hikari_utils::values::ValueDecoder;
 use indexmap::{IndexMap, indexmap};
 use llm::MemorySelector;
@@ -80,28 +81,6 @@ pub struct LlmModel {
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasining_effort: Option<ReasoningEffort>,
-}
-
-#[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub enum ReasoningEffort {
-    None,
-    Minimal,
-    Low,
-    Medium,
-    High,
-}
-
-impl From<ReasoningEffort> for async_openai::types::chat::ReasoningEffort {
-    fn from(value: ReasoningEffort) -> Self {
-        match value {
-            ReasoningEffort::None => async_openai::types::chat::ReasoningEffort::None,
-            ReasoningEffort::Minimal => async_openai::types::chat::ReasoningEffort::Minimal,
-            ReasoningEffort::Low => async_openai::types::chat::ReasoningEffort::Low,
-            ReasoningEffort::Medium => async_openai::types::chat::ReasoningEffort::Medium,
-            ReasoningEffort::High => async_openai::types::chat::ReasoningEffort::High,
-        }
-    }
 }
 
 impl LlmModel {
