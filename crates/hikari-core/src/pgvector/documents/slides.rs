@@ -18,32 +18,20 @@ type MergePair = (usize, usize);
 #[instrument(skip_all, fields(file_key = %file.metadata.key))]
 fn extract_pdf_pages(file: &File) -> Result<Vec<String>, PgVectorError> {
     tracing::debug!("Extracting text from PDF");
-    let mut pages = pdf_extract::extract_text_from_mem_by_pages(&file.content)?;
-    for page in &mut pages {
-        if page.is_empty() {
-            // Preserve empty pages with a space
-            *page = " ".to_string();
-        }
-    }
+    let pages = pdf_extract::extract_text_from_mem_by_pages(&file.content)?;
     Ok(pages)
 }
 
-#[instrument(skip_all, fields(page_count = pages.len(), exclude_len = exclude.len()))]
-fn build_pages_embeddings(pages: Vec<String>, embeddings: Vec<Vec<f64>>, exclude: &[usize]) -> Vec<EmbeddedPage> {
-    tracing::debug!("Excluding pages {:?}", exclude);
+#[instrument(skip_all, fields(page_count = pages.len()))]
+fn build_pages_embeddings(pages: Vec<(String, usize)>, embeddings: Vec<Vec<f64>>) -> Vec<EmbeddedPage> {
     pages
         .into_iter()
         .zip(embeddings)
-        .enumerate()
-        .filter_map(|(i, (content, embedding))| {
-            if exclude.contains(&(i + 1)) {
-                tracing::debug!(%content, page = i + 1, "Excluding page");
-                return None;
-            }
-            Some((
-                LlmEmbeddingChunk::new(content, vec![u32::try_from(i + 1).unwrap_or(0)]),
+        .map(|((content, page_number), embedding)| {
+            (
+                LlmEmbeddingChunk::new(content, vec![u32::try_from(page_number).unwrap_or(0)]),
                 embedding,
-            ))
+            )
         })
         .collect()
 }
@@ -105,7 +93,11 @@ fn build_merge_map(merge_actions: &[MergeAction]) -> Vec<MergePair> {
 
             if prev_targets.contains(new_target) {
                 // This would create a cycle, skip it
-                tracing::warn!("Skipping merge from {} to {} to avoid cycle", target + 1, new_target + 1);
+                tracing::warn!(
+                    "Skipping merge from {} to {} to avoid cycle",
+                    target + 1,
+                    new_target + 1
+                );
                 break;
             }
             prev_targets.push(target);
@@ -145,6 +137,14 @@ fn remove_merged_pages(pages_embeddings: &mut Vec<EmbeddedPage>, indices_to_remo
     }
 }
 
+#[instrument(skip_all, fields(page_count = pages.len(), exclude_len = exclude.len()))]
+pub(super) fn filter_excluded_pages(pages: Vec<(String, usize)>, exclude: &[usize]) -> Vec<(String, usize)> {
+    pages
+        .into_iter()
+        .filter(|(content, page_number)| !content.trim().is_empty() && !exclude.contains(page_number))
+        .collect()
+}
+
 #[instrument(skip_all, fields(file_key = %file.metadata.key, exclude_len = exclude.len()))]
 pub fn chunks<'a>(
     file: &'a File,
@@ -160,9 +160,17 @@ pub fn chunks<'a>(
 
         // Get pages and embeddings
         let pages = extract_pdf_pages(file)?;
-        let embeddings = embedder.embed(pages.as_slice()).await?;
 
-        let mut pages_embeddings = build_pages_embeddings(pages, embeddings, exclude);
+        let pages_numbered = filter_excluded_pages(
+            pages.into_iter().enumerate().map(|(i, c)| (c, i + 1)).collect(),
+            exclude,
+        );
+
+        let contents: Vec<String> = pages_numbered.iter().map(|(content, _)| content.clone()).collect();
+        let embeddings = embedder.embed(contents).await?;
+
+        let mut pages_embeddings = build_pages_embeddings(pages_numbered, embeddings);
+
         // We get pages which are short (< 100)
         // Check if append to previous or next page makes sense
         // Both are present => highest similarity wins (if > 0.5)
@@ -171,7 +179,8 @@ pub fn chunks<'a>(
         let small_pages_idx = pages_embeddings
             .iter()
             .enumerate()
-            .filter(|&(_idx, (c, _))| c.content.len() < MIN_CHUNK_SIZE ).map(|(idx, (_c, _))| u32::try_from(idx).unwrap_or(0))
+            .filter(|&(_idx, (c, _))| c.content.len() < MIN_CHUNK_SIZE)
+            .map(|(idx, (_c, _))| u32::try_from(idx).unwrap_or(0))
             .rev();
         let (merge_actions, indices_to_remove) = build_merge_actions(&pages_embeddings, small_pages_idx);
         let merge_map = build_merge_map(&merge_actions);
