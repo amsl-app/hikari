@@ -49,30 +49,15 @@ fn build_pages_embeddings(pages: Vec<String>, embeddings: Vec<Vec<f64>>, exclude
 }
 
 #[instrument(skip_all, fields(page_count = pages_embeddings.len()))]
-fn small_page_indices(pages_embeddings: &[EmbeddedPage]) -> Vec<u32> {
-    // We get pages which are short (< 100)
-    // Check if append to previous or next page makes sense
-    // Both are present => highest similarity wins (if > 0.5)
-    // Just prev or next => merge if similarity > 0.5
-    // If similarity is not > 0.5, remove the page => it is probably noise or title page
-    let small_pages_idx = pages_embeddings
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, (c, _))| {
-            (c.content.len() < MIN_CHUNK_SIZE).then(|| u32::try_from(idx).unwrap_or(0))
-        })
-        .collect::<Vec<u32>>();
-    tracing::debug!("Small pages idx: {:?}", small_pages_idx);
-    small_pages_idx
-}
-
-#[instrument(skip_all, fields(page_count = pages_embeddings.len(), small_count = small_pages_idx.len()))]
-fn build_merge_actions(pages_embeddings: &[EmbeddedPage], small_pages_idx: &[u32]) -> (Vec<MergeAction>, HashSet<usize>) {
+fn build_merge_actions<I>(pages_embeddings: &[EmbeddedPage], small_pages_idx: I) -> (Vec<MergeAction>, HashSet<usize>)
+where
+    I: Iterator<Item = u32>,
+{
     // Calculate inital merge actions by checking similarity to previous and next page
     let mut merge_actions = Vec::new();
     let mut indices_to_remove = HashSet::new();
 
-    for &position in small_pages_idx.iter().rev() {
+    for position in small_pages_idx {
         let position = usize::try_from(position).unwrap_or(0);
 
         let Some((_, current_emb)) = pages_embeddings.get(position) else {
@@ -178,8 +163,17 @@ pub fn chunks<'a>(
         let embeddings = embedder.embed(pages.as_slice()).await?;
 
         let mut pages_embeddings = build_pages_embeddings(pages, embeddings, exclude);
-        let small_pages_idx = small_page_indices(&pages_embeddings);
-        let (merge_actions, indices_to_remove) = build_merge_actions(&pages_embeddings, &small_pages_idx);
+        // We get pages which are short (< 100)
+        // Check if append to previous or next page makes sense
+        // Both are present => highest similarity wins (if > 0.5)
+        // Just prev or next => merge if similarity > 0.5
+        // If similarity is not > 0.5, remove the page => it is probably noise or title page
+        let small_pages_idx = pages_embeddings
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, (c, _))| (c.content.len() < MIN_CHUNK_SIZE).then(|| u32::try_from(idx).unwrap_or(0)))
+            .rev();
+        let (merge_actions, indices_to_remove) = build_merge_actions(&pages_embeddings, small_pages_idx);
         let merge_map = build_merge_map(&merge_actions);
         apply_merges(&mut pages_embeddings, &merge_map);
         remove_merged_pages(&mut pages_embeddings, &indices_to_remove);
