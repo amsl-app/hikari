@@ -38,14 +38,11 @@ services:
       - "--db-max-connections=${DB_MAX_CONNECTIONS}"
       - "--worker-url=http://hikari-worker:3035"
 
-      - "--openai-key=${OPENAI_KEY}"
-      - "--gwdg-key=${GWDG_KEY}"
-      - "--journaling-service=${JOURNALING_SERVICE}"
-      - "--journaling-model=${JOURNALING_MODEL}"
-      - "--embedding-service=${EMBEDDING_SERVICE}"
-      - "--embedding-model=${EMBEDDING_MODEL}"
-      - "--quiz-service=${QUIZ_SERVICE}"
-      - "--quiz-model=${QUIZ_MODEL}"
+      - "--llm-config=service=openai,key=${OPENAI_KEY}"
+      - "--llm-config=service=gwdg,key=${GWDG_KEY}"
+      - "--llm-feature-config=feature=journaling,service=${JOURNALING_SERVICE},model=${JOURNALING_MODEL}"
+      - "--llm-feature-config=feature=embedding,service=${EMBEDDING_SERVICE},model=${EMBEDDING_MODEL}"
+      - "--llm-feature-config=feature=quiz,service=${QUIZ_SERVICE},model=${QUIZ_MODEL}"
 
       - "--s3-endpoint=${S3_ENDPOINT}"
       - "--s3-region=${S3_REGION}"
@@ -89,10 +86,9 @@ services:
       - "--db-min-connections=${DB_MIN_CONNECTIONS}"
       - "--db-max-connections=${DB_MAX_CONNECTIONS}"
 
-      - "--openai-key=${OPENAI_KEY}"
-      - "--gwdg-key=${GWDG_KEY}"
-      - "--journaling-service=${JOURNALING_SERVICE}"
-      - "--journaling-model=${JOURNALING_MODEL}"
+      - "--llm-config=service=openai,key=${OPENAI_KEY}"
+      - "--llm-config=service=gwdg,key=${GWDG_KEY}"
+      - "--llm-feature-config=feature=journaling,service=${JOURNALING_SERVICE},model=${JOURNALING_MODEL}"
 
       - "--s3-endpoint=${S3_ENDPOINT}"
       - "--s3-region=${S3_REGION}"
