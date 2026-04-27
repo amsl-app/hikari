@@ -171,7 +171,7 @@ pub fn chunks<'a>(
         let small_pages_idx = pages_embeddings
             .iter()
             .enumerate()
-            .filter_map(|(idx, (c, _))| (c.content.len() < MIN_CHUNK_SIZE).then(|| u32::try_from(idx).unwrap_or(0)))
+            .filter(|&(_idx, (c, _))| c.content.len() < MIN_CHUNK_SIZE ).map(|(idx, (_c, _))| u32::try_from(idx).unwrap_or(0))
             .rev();
         let (merge_actions, indices_to_remove) = build_merge_actions(&pages_embeddings, small_pages_idx);
         let merge_map = build_merge_map(&merge_actions);
