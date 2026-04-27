@@ -21,10 +21,6 @@ pub trait PgVectorDocumentTrait: Send {
 
     fn get_load_fn(&mut self) -> Option<RagDocumentLoaderFn>;
 
-    fn get_loaded_file(&self) -> Option<&File>;
-
-    fn set_loaded_file(&mut self, file: File) -> &File;
-
     fn chunks<'a>(&'a mut self, embedder: &'a Embedder)
     -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>>;
 
@@ -32,30 +28,10 @@ pub trait PgVectorDocumentTrait: Send {
         async move {
             if let Some(load_fn) = self.get_load_fn() {
                 let file = load_fn().await?;
-                Ok(self.set_loaded_file(file).clone())
+                Ok(file)
             } else {
                 Err(LoadingError::FileAlreadyLoaded)
             }
-        }
-        .boxed()
-    }
-
-    fn file(&mut self) -> BoxFuture<'_, Result<&File, LoadingError>> {
-        async move {
-            // Note: The nicer implementation (see below) is currently not possible because of the infamous Problem Case #3.
-            // See https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
-            // let Some(loaded_file) = self.get_loaded_file() else {
-            //     let file = self.load_file().await?;
-            //     return Ok(self.set_loaded_file(file));
-            // };
-            // Ok(loaded_file)
-            if self.get_loaded_file().is_none() {
-                let file = self.load_file().await?;
-                return Ok(self.set_loaded_file(file));
-            }
-            Ok(self
-                .get_loaded_file()
-                .expect("Option None that we just checked that it's not None"))
         }
         .boxed()
     }
@@ -92,20 +68,6 @@ impl PgVectorDocumentTrait for PgVectorDocument {
         match self {
             PgVectorDocument::Text(doc) => doc.get_load_fn(),
             PgVectorDocument::Slides(doc) => doc.get_load_fn(),
-        }
-    }
-
-    fn get_loaded_file(&self) -> Option<&File> {
-        match self {
-            PgVectorDocument::Text(doc) => doc.get_loaded_file(),
-            PgVectorDocument::Slides(doc) => doc.get_loaded_file(),
-        }
-    }
-
-    fn set_loaded_file(&mut self, file: File) -> &File {
-        match self {
-            PgVectorDocument::Text(doc) => doc.set_loaded_file(file),
-            PgVectorDocument::Slides(doc) => doc.set_loaded_file(file),
         }
     }
 

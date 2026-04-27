@@ -390,7 +390,7 @@ async fn upload_documents(
                     id: file_id.clone(),
                     load_fn: Some(load_file),
                     exclude: document.exclude,
-                    loaded_file: None,
+
                     name,
                     link,
                 },
@@ -400,7 +400,7 @@ async fn upload_documents(
                     id: file_id.clone(),
                     load_fn: Some(load_file),
                     exclude: document.exclude,
-                    loaded_file: None,
+
                     name,
                     link,
                 },
