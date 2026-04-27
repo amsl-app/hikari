@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_openai::config::OpenAIConfig;
 use hikari_config::module::llm_agent::LlmService;
-use hikari_utils::args::llm::{LlmServiceType, LlmServices as LlmServiceArgs};
+use hikari_utils::args::llm::{LlmFeatureType, LlmServiceType, LlmServices as LlmServiceArgs};
 #[derive(Debug, Clone)]
 pub struct LlmServiceConfig {
     pub key: Option<String>,
@@ -55,37 +55,41 @@ impl From<LlmServiceArgs> for LlmConfig {
             }
         }
 
-        let embedding_service = config
-            .embedding_service
-            .as_deref()
-            .map(|s| LlmService::from_str(s).expect("Invalid embedding_service string"));
+        let mut embedding_config = LlmFeatureConfig {
+            service: None,
+            model: None,
+        };
+        let mut journaling_config = LlmFeatureConfig {
+            service: None,
+            model: None,
+        };
+        let mut quiz_config = LlmFeatureConfig {
+            service: None,
+            model: None,
+        };
 
-        let journaling_service = config
-            .journaling_service
-            .as_deref()
-            .map(|s| LlmService::from_str(s).expect("Invalid journaling_service string"));
+        for feature_config in config.llm_feature_config {
+            let target = match feature_config.feature {
+                LlmFeatureType::Embedding => &mut embedding_config,
+                LlmFeatureType::Journaling => &mut journaling_config,
+                LlmFeatureType::Quiz => &mut quiz_config,
+            };
 
-        let quiz_service = config
-            .quiz_service
-            .as_deref()
-            .map(|s| LlmService::from_str(s).expect("Invalid quiz_service string"));
+            if let Some(service) = feature_config.service {
+                target.service = Some(LlmService::from_str(&service).expect("Invalid llm-feature-config service"));
+            }
+            if let Some(model) = feature_config.model {
+                target.model = Some(model);
+            }
+        }
 
         Self {
             openai,
             gwdg,
             kit,
-            embedding_config: LlmFeatureConfig {
-                service: embedding_service,
-                model: config.embedding_model,
-            },
-            journaling_config: LlmFeatureConfig {
-                service: journaling_service,
-                model: config.journaling_model,
-            },
-            quiz_config: LlmFeatureConfig {
-                service: quiz_service,
-                model: config.quiz_model,
-            },
+            embedding_config,
+            journaling_config,
+            quiz_config,
         }
     }
 }

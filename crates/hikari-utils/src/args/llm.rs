@@ -9,17 +9,7 @@ pub struct LlmServices {
     #[arg(long, required = false)]
     pub llm_config: Vec<LlmServiceArg>,
     #[arg(long, required = false)]
-    pub journaling_model: Option<String>,
-    #[arg(long, required = false)]
-    pub journaling_service: Option<String>,
-    #[arg(long, required = false)]
-    pub embedding_model: Option<String>,
-    #[arg(long, required = false)]
-    pub embedding_service: Option<String>,
-    #[arg(long, required = false)]
-    pub quiz_model: Option<String>,
-    #[arg(long, required = false)]
-    pub quiz_service: Option<String>,
+    pub llm_feature_config: Vec<LlmFeatureArg>,
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +88,82 @@ impl FromStr for LlmServiceArg {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct LlmFeatureArg {
+    pub feature: LlmFeatureType,
+    pub service: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
+pub enum LlmFeatureType {
+    Journaling,
+    Embedding,
+    Quiz,
+}
+
+#[derive(Debug, Error)]
+pub enum LlmFeatureArgError {
+    #[error("Missing required 'feature' field")]
+    MissingFeature,
+    #[error("At least one setting is required for feature '{0}'. Set 'service' and/or 'model'")]
+    MissingSetting(LlmFeatureType),
+    #[error("Unknown field '{0}'. Allowed fields: feature, service, model")]
+    UnknownField(String),
+    #[error("Field '{0}' must not be empty")]
+    EmptyValue(String),
+    #[error("Unknown feature '{0}'. Allowed features: journaling, embedding, quiz")]
+    InvalidFeature(String),
+}
+
+impl FromStr for LlmFeatureArg {
+    type Err = LlmFeatureArgError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut feature = None;
+        let mut service = None;
+        let mut model = None;
+
+        for part in s.split(',').map(str::trim).filter(|part| !part.is_empty()) {
+            let (name, value) = part
+                .split_once('=')
+                .map(|(name, value)| (name.trim(), value.trim()))
+                .ok_or_else(|| LlmFeatureArgError::UnknownField(part.to_string()))?;
+
+            if value.is_empty() {
+                return Err(LlmFeatureArgError::EmptyValue(name.to_string()));
+            }
+
+            match name {
+                "feature" => {
+                    feature = Some(
+                        value
+                            .parse::<LlmFeatureType>()
+                            .map_err(|_| LlmFeatureArgError::InvalidFeature(value.to_owned()))?,
+                    )
+                }
+                "service" => service = Some(value.to_owned()),
+                "model" => model = Some(value.to_owned()),
+                _ => return Err(LlmFeatureArgError::UnknownField(name.to_string())),
+            }
+        }
+
+        let Some(feature) = feature else {
+            return Err(LlmFeatureArgError::MissingFeature);
+        };
+        if service.is_none() && model.is_none() {
+            return Err(LlmFeatureArgError::MissingSetting(feature));
+        }
+
+        Ok(Self {
+            feature,
+            service,
+            model,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Args)]
 #[allow(clippy::struct_field_names)]
 pub struct LlmConfig {
@@ -111,7 +177,7 @@ pub struct LlmConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{LlmServiceType, LlmServices};
+    use super::{LlmFeatureType, LlmServiceType, LlmServices};
     use clap::Parser;
 
     #[derive(Debug, Parser)]
@@ -167,6 +233,54 @@ mod tests {
     #[test]
     fn test_rejects_missing_setting() {
         let result = TestCli::try_parse_from(["test-bin", "--llm-config=service=kit"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parses_single_llm_feature_config() {
+        let cli = TestCli::try_parse_from([
+            "test-bin",
+            "--llm-feature-config=feature=journaling,service=kit,model=model-a",
+        ])
+        .expect("llm-feature-config should parse");
+
+        let cfg = &cli.llm_services.llm_feature_config[0];
+        assert_eq!(cfg.feature, LlmFeatureType::Journaling);
+        assert_eq!(cfg.service.as_deref(), Some("kit"));
+        assert_eq!(cfg.model.as_deref(), Some("model-a"));
+    }
+
+    #[test]
+    fn test_parses_repeated_llm_feature_config_values() {
+        let cli = TestCli::try_parse_from([
+            "test-bin",
+            "--llm-feature-config=feature=embedding,service=openai",
+            "--llm-feature-config=feature=quiz,model=gpt-4.1-mini",
+        ])
+        .expect("repeated llm-feature-config should parse");
+
+        assert_eq!(cli.llm_services.llm_feature_config.len(), 2);
+        assert_eq!(cli.llm_services.llm_feature_config[0].feature, LlmFeatureType::Embedding);
+        assert_eq!(cli.llm_services.llm_feature_config[1].feature, LlmFeatureType::Quiz);
+        assert_eq!(cli.llm_services.llm_feature_config[0].service.as_deref(), Some("openai"));
+        assert_eq!(cli.llm_services.llm_feature_config[1].model.as_deref(), Some("gpt-4.1-mini"));
+    }
+
+    #[test]
+    fn test_rejects_missing_feature() {
+        let result = TestCli::try_parse_from(["test-bin", "--llm-feature-config=service=openai"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rejects_invalid_feature() {
+        let result = TestCli::try_parse_from(["test-bin", "--llm-feature-config=feature=foo,service=openai"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rejects_missing_feature_setting() {
+        let result = TestCli::try_parse_from(["test-bin", "--llm-feature-config=feature=quiz"]);
         assert!(result.is_err());
     }
 }
