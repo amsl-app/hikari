@@ -12,7 +12,7 @@ use hikari_config::documents::document::{DocumentMetadata, DocumentType};
 use hikari_config::global::GlobalConfig;
 use hikari_config::module::ModuleConfig;
 use hikari_core::llm_config::LlmConfig;
-use hikari_core::pgvector::documents::{PgVectorDocument, RagDocumentLoaderFn};
+use hikari_core::pgvector::documents::{ChunkKind, PgVectorDocument, RagDocumentLoaderFn};
 use hikari_core::pgvector::error::PgVectorError;
 use hikari_core::pgvector::{PgVector, upload_document};
 use hikari_llm::builder::LlmStructureConfig;
@@ -35,39 +35,28 @@ pub async fn upload_documents(
     for (file_id, document) in documents.documents {
         tracing::info!(document = ?document.file, "Uploading document");
         let file_metadata = document.file_metadata;
-
+        let kind = match document.r#type {
+            DocumentType::Slides => ChunkKind::Slides,
+            DocumentType::Text | DocumentType::Book | DocumentType::Paper => ChunkKind::Text,
+        };
+        let exclude = document.exclude;
+        let file = document.file;
         let DocumentMetadata { name, link } = document.metadata;
 
         let loader_to_move = file_loader.clone();
 
-        let load_file: RagDocumentLoaderFn =
-            Box::new(|| async move { loader_to_move.load_file(document.file.clone()).await }.boxed());
+        let load_file: RagDocumentLoaderFn = Box::new(|| async move { loader_to_move.load_file(file).await }.boxed());
 
-        let pgvector_document: Option<PgVectorDocument> = match document.r#type {
-            DocumentType::Slides => Some(PgVectorDocument::Slides(
-                hikari_core::pgvector::documents::slides::SlidesDocument {
-                    id: file_id.clone(),
-                    load_fn: Some(load_file),
-                    exclude: document.exclude,
-                    loaded_file: None,
-                    name,
-                    link,
-                },
-            )),
-            DocumentType::Text | DocumentType::Book | DocumentType::Paper => Some(PgVectorDocument::Text(
-                hikari_core::pgvector::documents::text::TextDocument {
-                    id: file_id.clone(),
-                    load_fn: Some(load_file),
-                    exclude: document.exclude,
-                    loaded_file: None,
-                    name,
-                    link,
-                },
-            )),
+        let pgvector_document = PgVectorDocument {
+            id: file_id.clone(),
+            exclude,
+            load_fn: Some(load_file),
+            loaded_file: None,
+            name,
+            link,
+            kind,
         };
-        if let Some(pgvector_document) = pgvector_document {
-            upload_document(&retriever, pgvector_document, file_metadata).await?;
-        }
+        upload_document(&retriever, pgvector_document, file_metadata).await?;
         tokio::task::yield_now().await;
     }
     tracing::info!("All rag documents uploaded successfully");

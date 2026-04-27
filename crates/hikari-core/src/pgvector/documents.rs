@@ -61,63 +61,69 @@ pub trait PgVectorDocumentTrait: Send {
     }
 }
 
-pub enum PgVectorDocument {
-    Text(text::TextDocument),
-    Slides(slides::SlidesDocument),
+#[derive(Debug, Clone, Copy)]
+pub enum ChunkKind {
+    Text,
+    Slides,
+}
+
+pub struct PgVectorDocument {
+    pub id: String,
+
+    pub exclude: Vec<usize>, // Pages to exclude
+
+    pub load_fn: Option<RagDocumentLoaderFn>,
+
+    pub loaded_file: Option<File>,
+
+    pub name: String,
+
+    pub link: String,
+
+    pub kind: ChunkKind,
 }
 
 impl PgVectorDocumentTrait for PgVectorDocument {
     fn id(&self) -> &str {
-        match self {
-            PgVectorDocument::Text(doc) => doc.id(),
-            PgVectorDocument::Slides(doc) => doc.id(),
-        }
+        &self.id
     }
 
     fn name(&self) -> &str {
-        match self {
-            PgVectorDocument::Text(doc) => doc.name(),
-            PgVectorDocument::Slides(doc) => doc.name(),
-        }
+        &self.name
     }
 
     fn link(&self) -> &str {
-        match self {
-            PgVectorDocument::Text(doc) => doc.link(),
-            PgVectorDocument::Slides(doc) => doc.link(),
-        }
+        &self.link
     }
 
     fn get_load_fn(&mut self) -> Option<RagDocumentLoaderFn> {
-        match self {
-            PgVectorDocument::Text(doc) => doc.get_load_fn(),
-            PgVectorDocument::Slides(doc) => doc.get_load_fn(),
-        }
+        self.load_fn.take()
     }
 
     fn get_loaded_file(&self) -> Option<&File> {
-        match self {
-            PgVectorDocument::Text(doc) => doc.get_loaded_file(),
-            PgVectorDocument::Slides(doc) => doc.get_loaded_file(),
-        }
+        self.loaded_file.as_ref()
     }
 
     fn set_loaded_file(&mut self, file: File) -> &File {
-        match self {
-            PgVectorDocument::Text(doc) => doc.set_loaded_file(file),
-            PgVectorDocument::Slides(doc) => doc.set_loaded_file(file),
-        }
+        self.loaded_file.insert(file)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(id = self.id, kind = ?self.kind))]
     fn chunks<'a>(
         &'a mut self,
         embedder: &'a Embedder,
     ) -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>> {
-        match self {
-            PgVectorDocument::Text(doc) => doc.chunks(embedder),
-            PgVectorDocument::Slides(doc) => doc.chunks(embedder),
+        async move {
+            let kind = self.kind;
+            let exclude = self.exclude.clone();
+            let file = self.file().await?.clone();
+
+            match kind {
+                ChunkKind::Text => text::chunks(&file, &exclude, embedder).await,
+                ChunkKind::Slides => slides::chunks(&file, &exclude, embedder).await,
+            }
         }
+        .boxed()
     }
 }
 
