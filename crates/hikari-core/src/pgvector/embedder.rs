@@ -3,6 +3,7 @@ use async_openai::{
     config::OpenAIConfig,
     types::embeddings::{CreateEmbeddingRequestArgs, EmbeddingInput},
 };
+use tracing::instrument;
 
 use crate::pgvector::error::PgVectorError;
 
@@ -17,6 +18,7 @@ impl Embedder {
         Self { model, client }
     }
 
+    #[instrument(skip_all, fields(model = %self.model))]
     pub async fn embed<T: Into<Vec<String>>>(&self, texts: T) -> Result<Vec<Vec<f64>>, PgVectorError> {
         let req = CreateEmbeddingRequestArgs::default()
             .model(&self.model)

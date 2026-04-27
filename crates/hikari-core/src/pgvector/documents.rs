@@ -104,6 +104,7 @@ fn cosine_similarity(v1: &[f64], v2: &[f64]) -> f64 {
 
 const MIN_CHUNK_SIZE: usize = 300;
 const LOOSE_MAX_CHUNK_SIZE: usize = 800;
+#[cfg(test)]
 mod test {
     #[test]
     fn test_cosine_similarity() {
