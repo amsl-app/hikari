@@ -1,6 +1,5 @@
 use clap::Args;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 use thiserror::Error;
@@ -32,22 +31,16 @@ enum KeyValueMapError {
     MissingId,
 }
 
-trait IdField {
-    const FIELD: &'static str;
-    type IdEnum: IdValue;
-}
-
 trait IdValue: FromStr + ToString {
     const ALLOWED_VALUES: &'static str;
 }
 
-struct ParsedValues<I: IdField> {
+struct ParsedValues {
     id: String,
     values: HashMap<String, String>,
-    _marker: PhantomData<I>,
 }
 
-fn parse_key_value_map<I: IdField>(input: &str) -> Result<ParsedValues<I>, KeyValueMapError> {
+fn parse_key_value_map(input: &str, id_field: &'static str) -> Result<ParsedValues, KeyValueMapError> {
     let mut values = HashMap::new();
 
     for part in input.split(',').map(str::trim).filter(|part| !part.is_empty()) {
@@ -63,13 +56,9 @@ fn parse_key_value_map<I: IdField>(input: &str) -> Result<ParsedValues<I>, KeyVa
         values.insert(name.to_owned(), value.to_owned());
     }
 
-    let id = values.remove(I::FIELD).ok_or(KeyValueMapError::MissingId)?;
+    let id = values.remove(id_field).ok_or(KeyValueMapError::MissingId)?;
 
-    Ok(ParsedValues {
-        id,
-        values,
-        _marker: PhantomData,
-    })
+    Ok(ParsedValues { id, values })
 }
 
 fn allowed_fields_string(id_field: &str, settings: &[&str]) -> String {
@@ -101,52 +90,62 @@ macro_rules! join_literals {
     };
 }
 
-macro_rules! define_id_enum {
+macro_rules! setting_key {
+    ($field:ident) => {
+        stringify!($field)
+    };
+    ($field:ident => $key:literal) => {
+        $key
+    };
+}
+
+macro_rules! define_llm_arg {
     (
-        $vis:vis enum $name:ident {
-            $( $variant:ident = $value:literal ),+ $(,)?
+        field_name: $field_name:literal,
+        struct $target:ident {
+            $target_id:ident : $id_ty:ident {
+                $( $variant:ident = $value:literal ),+ $(,)?
+            },
+            $( $field:ident : $field_ty:ty $(=> $map_key:literal)? ),+ $(,)?
         }
     ) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
-        $vis enum $name {
+        pub enum $id_ty {
             $(
                 #[strum(serialize = $value)]
                 $variant,
             )+
         }
 
-        impl IdValue for $name {
+        impl IdValue for $id_ty {
             const ALLOWED_VALUES: &'static str = join_literals!($( $value ),+);
         }
-    };
-}
 
-macro_rules! impl_parse_from_parsed_values {
-    (
-        id_field: $id_field:ty,
-        target: $target:ty,
-        target_id: $target_id:ident,
-        settings: { $( $map_key:literal => $field:ident ),+ $(,)? }
-    ) => {
-        impl TryFrom<ParsedValues<$id_field>> for $target {
+        #[derive(Debug, Clone)]
+        pub struct $target {
+            pub $target_id: $id_ty,
+            $( pub $field: $field_ty, )+
+        }
+
+        impl TryFrom<ParsedValues> for $target {
             type Error = LlmArgParseError;
 
-            fn try_from(mut parsed: ParsedValues<$id_field>) -> Result<Self, Self::Error> {
-                const SETTINGS: &[&str] = &[ $( $map_key ),+ ];
-                let allowed_fields = allowed_fields_string(<$id_field as IdField>::FIELD, SETTINGS);
+            fn try_from(mut parsed: ParsedValues) -> Result<Self, Self::Error> {
+                const SETTINGS: &[&str] = &[ $( setting_key!($field $(=> $map_key)?) ),+ ];
+                let allowed_fields = allowed_fields_string($field_name, SETTINGS);
                 let missing_settings = missing_settings_string(SETTINGS);
 
                 let id_str = parsed.id;
                 let $target_id = id_str
-                    .parse::<<$id_field as IdField>::IdEnum>()
+                    .parse::<$id_ty>()
                     .map_err(|_| LlmArgParseError::InvalidId {
-                        kind: <$id_field as IdField>::FIELD,
+                        kind: $field_name,
                         value: id_str,
-                        allowed_values: <<$id_field as IdField>::IdEnum as IdValue>::ALLOWED_VALUES,
+                        allowed_values: <$id_ty as IdValue>::ALLOWED_VALUES,
                     })?;
 
                 $(
-                    let $field = parsed.values.remove($map_key);
+                    let $field = parsed.values.remove(setting_key!($field $(=> $map_key)?));
                 )+
 
                 if let Some((unknown, _)) = parsed.values.into_iter().next() {
@@ -158,7 +157,7 @@ macro_rules! impl_parse_from_parsed_values {
 
                 if true $(&& $field.is_none())+ {
                     return Err(LlmArgParseError::MissingSetting {
-                        kind: <$id_field as IdField>::FIELD,
+                        kind: $field_name,
                         id: $target_id.to_string(),
                         allowed_settings: missing_settings,
                     });
@@ -175,15 +174,15 @@ macro_rules! impl_parse_from_parsed_values {
             type Err = LlmArgParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                const SETTINGS: &[&str] = &[ $( $map_key ),+ ];
+                const SETTINGS: &[&str] = &[ $( setting_key!($field $(=> $map_key)?) ),+ ];
 
-                let values = parse_key_value_map::<$id_field>(s).map_err(|error| match error {
+                let values = parse_key_value_map(s, $field_name).map_err(|error| match error {
                     KeyValueMapError::MissingSeparator(part) => LlmArgParseError::UnknownField {
                         field: part,
-                        allowed_fields: allowed_fields_string(<$id_field as IdField>::FIELD, SETTINGS),
+                        allowed_fields: allowed_fields_string($field_name, SETTINGS),
                     },
                     KeyValueMapError::EmptyValue(name) => LlmArgParseError::EmptyValue(name),
-                    KeyValueMapError::MissingId => LlmArgParseError::MissingId(<$id_field as IdField>::FIELD),
+                    KeyValueMapError::MissingId => LlmArgParseError::MissingId($field_name),
                 })?;
 
                 Self::try_from(values)
@@ -191,28 +190,6 @@ macro_rules! impl_parse_from_parsed_values {
         }
     };
 }
-
-struct ServiceIdField;
-
-impl IdField for ServiceIdField {
-    const FIELD: &'static str = "service";
-    type IdEnum = LlmServiceType;
-}
-
-#[derive(Debug, Clone)]
-pub struct LlmServiceArg {
-    pub service: LlmServiceType,
-    pub key: Option<String>,
-    pub default_model: Option<String>,
-}
-
-define_id_enum!(
-    pub enum LlmServiceType {
-        Openai = "openai",
-        Gwdg = "gwdg",
-        Kit = "kit",
-    }
-);
 
 #[derive(Debug, Error)]
 pub enum LlmArgParseError {
@@ -236,45 +213,30 @@ pub enum LlmArgParseError {
     },
 }
 
-impl_parse_from_parsed_values!(
-    id_field: ServiceIdField,
-    target: LlmServiceArg,
-    target_id: service,
-    settings: {
-        "key" => key,
-        "default-model" => default_model
+define_llm_arg!(
+    field_name: "service",
+    struct LlmServiceArg {
+        service: LlmServiceType {
+            Openai = "openai",
+            Gwdg = "gwdg",
+            Kit = "kit",
+        },
+        key: Option<String>,
+        default_model: Option<String> => "default-model",
     }
 );
 
-struct FeatureIdField;
-
-impl IdField for FeatureIdField {
-    const FIELD: &'static str = "feature";
-    type IdEnum = LlmFeatureType;
-}
-
-#[derive(Debug, Clone)]
-pub struct LlmFeatureArg {
-    pub feature: LlmFeatureType,
-    pub service: Option<String>,
-    pub model: Option<String>,
-}
-
-define_id_enum!(
-    pub enum LlmFeatureType {
-        Journaling = "journaling",
-        Embedding = "embedding",
-        Quiz = "quiz",
-    }
-);
-
-impl_parse_from_parsed_values!(
-    id_field: FeatureIdField,
-    target: LlmFeatureArg,
-    target_id: feature,
-    settings: {
-        "service" => service,
-        "model" => model
+define_llm_arg!(
+    field_name: "feature",
+    struct LlmFeatureArg {
+        feature: LlmFeatureType {
+            Journaling = "journaling",
+            Embedding = "embedding",
+            Quiz = "quiz",
+        }
+        ,
+        service: Option<String>,
+        model: Option<String>,
     }
 );
 
