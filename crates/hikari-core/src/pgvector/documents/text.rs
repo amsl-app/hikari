@@ -31,11 +31,6 @@ pub struct TextDocument {
     pub link: String,
 }
 
-pub struct Sentence {
-    pub content: String,
-    pub page_number: usize,
-}
-
 impl PgVectorDocumentTrait for TextDocument {
     fn id(&self) -> &str {
         &self.id

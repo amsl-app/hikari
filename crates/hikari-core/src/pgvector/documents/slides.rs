@@ -60,30 +60,35 @@ impl PgVectorDocumentTrait for SlidesDocument {
 
             if file.metadata.key.ends_with("pdf") {
                 // Get pages and embeddings
-                tracing::debug!("Extracting text from PDF");
-                let mut pages = pdf_extract::extract_text_from_mem_by_pages(&file.content)?;
-                for page in &mut pages {
-                    if page.is_empty() {
-                        *page = " ".to_string(); // Preserve empty pages with a space
-                    }
-                }
-                let embeddings = embedder.embed(pages.as_slice()).await?;
+                tracing::debug!("extracting text from PDF");
+                let pages = pdf_extract::extract_text_from_mem_by_pages(&file.content)?;
+                let pages_numbered: Vec<(String, usize)> = pages
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, content)| {
+                        let page_number = i + 1;
+                        if content.trim().is_empty() || self.exclude.contains(&page_number) {
+                            None
+                        } else {
+                            Some((content, page_number))
+                        }
+                    })
+                    .collect();
 
-                tracing::debug!("Excluding pages {:?}", self.exclude);
+                let contents: Vec<String> = pages_numbered.iter().map(|(content, _)| content.clone()).collect();
 
-                let mut pages_embeddings: Vec<(LlmEmbeddingChunk, Vec<f64>)> = pages
+                let embeddings = embedder.embed(contents).await?;
+
+                tracing::debug!(execlude = ?self.exclude, "excluding pages");
+
+                let mut pages_embeddings: Vec<(LlmEmbeddingChunk, Vec<f64>)> = pages_numbered
                     .into_iter()
                     .zip(embeddings)
-                    .enumerate()
-                    .filter_map(|(i, (content, embedding))| {
-                        if self.exclude.contains(&(i + 1)) {
-                            tracing::debug!(%content, page = i + 1, "Excluding page");
-                            return None;
-                        }
-                        Some((
-                            LlmEmbeddingChunk::new(content, vec![u32::try_from(i + 1).unwrap_or(0)]),
+                    .map(|((content, page_number), embedding)| {
+                        (
+                            LlmEmbeddingChunk::new(content, vec![u32::try_from(page_number).unwrap_or(0)]),
                             embedding,
-                        ))
+                        )
                     })
                     .collect();
 
@@ -106,7 +111,7 @@ impl PgVectorDocumentTrait for SlidesDocument {
                     })
                     .collect();
 
-                tracing::debug!("Small pages idx: {:?}", small_pages_idx);
+                tracing::debug!(?small_pages_idx, "small pages idx");
 
                 // Calculate inital merge actions by checking similarity to previous and next page
                 let mut merge_actions = Vec::new();
@@ -152,15 +157,11 @@ impl PgVectorDocumentTrait for SlidesDocument {
                     let mut target = *to;
 
                     while let Some((_, new_target, _)) = merge_actions.iter().find(|&(f, _, _)| *f == target) {
-                        tracing::debug!("Following merge chain: {} -> {}", target + 1, new_target + 1);
+                        tracing::debug!("following merge chain: {} -> {}", target + 1, new_target + 1);
 
                         if prev_targets.contains(new_target) {
                             // This would create a cycle, skip it
-                            tracing::warn!(
-                                "Skipping merge from {} to {} to avoid cycle",
-                                target + 1,
-                                new_target + 1
-                            );
+                            tracing::warn!(from = target + 1, to = new_target + 1, "skipping merge");
                             break;
                         }
                         prev_targets.push(target);
@@ -175,28 +176,26 @@ impl PgVectorDocumentTrait for SlidesDocument {
                 let backward_merges: Vec<&(usize, usize)> = merge_map.iter().filter(|(from, to)| from > to).collect();
 
                 for (from, to) in forward_merges.iter().rev() {
-                    if let (Some((from_chunk, _)), Some((to_chunk, _))) =
-                        (pages_embeddings.get(*from).cloned(), pages_embeddings.get_mut(*to))
-                    {
-                        tracing::debug!("Merging page {} into page {}", from + 1, to + 1);
-                        to_chunk.push_sentence(&from_chunk.content, from_chunk.pages);
-                    }
+                    tracing::debug!(from = from + 1, to = to + 1, "merging page");
+                    #[allow(clippy::indexing_slicing)]
+                    let from = std::mem::take(&mut pages_embeddings[*from]).0;
+                    #[allow(clippy::indexing_slicing)]
+                    pages_embeddings[*to].0.push_sentence(&from.content, from.pages);
                 }
 
                 for (from, to) in &backward_merges {
-                    if let (Some((from_chunk, _)), Some((to_chunk, _))) =
-                        (pages_embeddings.get(*from).cloned(), pages_embeddings.get_mut(*to))
-                    {
-                        tracing::debug!("Merging page {} into page {}", from + 1, to + 1);
-                        to_chunk.push_sentence(&from_chunk.content, from_chunk.pages);
-                    }
+                    tracing::debug!(from = from + 1, to = to + 1, "merging page");
+                    #[allow(clippy::indexing_slicing)]
+                    let from = std::mem::take(&mut pages_embeddings[*from]).0;
+                    #[allow(clippy::indexing_slicing)]
+                    pages_embeddings[*to].0.push_sentence(&from.content, from.pages);
                 }
 
                 let mut indices_vec: Vec<&usize> = indices_to_remove.iter().collect();
                 indices_vec.sort_by(|a, b| b.cmp(a)); // Sort in descending order
 
                 for index in indices_vec {
-                    tracing::debug!("Removing page {}", index + 1);
+                    tracing::debug!(page = index + 1, "removing page");
                     pages_embeddings.remove(*index);
                 }
 

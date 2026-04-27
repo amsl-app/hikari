@@ -124,7 +124,6 @@ impl PgVector<'_> {
         // Split in content and metadata
         let (contents, pages): (Vec<String>, Vec<Vec<u32>>) = chunks.into_iter().map(|c| (c.content, c.pages)).unzip();
 
-        // Here the contents were cloned one time wihtin embed but should be dropped after the function is finished
         let embeddings = self.embedder.embed(contents.as_slice()).await?;
 
         if contents.len() != embeddings.len() {

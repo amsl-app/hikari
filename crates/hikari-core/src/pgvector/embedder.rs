@@ -21,7 +21,7 @@ impl Embedder {
         let string_array = texts.into();
 
         if string_array.is_empty() {
-            tracing::warn!("mo sentences provided to embed");
+            tracing::warn!("no sentences provided to embed");
             return Ok(vec![]);
         }
 
