@@ -1,6 +1,7 @@
 use clap::Args;
-use heck::ToKebabCase;
+use heck::{AsKebabCase, ToKebabCase};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 use thiserror::Error;
@@ -62,18 +63,7 @@ fn parse_key_value_map(input: &str, id_field: &'static str) -> Result<ParsedValu
     Ok(ParsedValues { id, values })
 }
 
-fn kebab_case(input: &str) -> String {
-    input.to_kebab_case()
-}
-
-fn allowed_fields_string(id_field: &str, settings: &[String]) -> String {
-    let mut fields = Vec::with_capacity(settings.len() + 1);
-    fields.push(id_field.to_owned());
-    fields.extend(settings.iter().cloned());
-    fields.join(", ")
-}
-
-fn missing_settings_string(settings: &[String]) -> String {
+fn missing_settings_string<T: Display>(settings: &[T]) -> String {
     match settings {
         [] => String::new(),
         [single] => format!("'{single}'"),
@@ -102,7 +92,7 @@ macro_rules! define_llm_arg {
 
         impl IdValue for $id_ty {
             fn allowed_values() -> String {
-                [$( kebab_case(stringify!($variant)) ),+].join(", ")
+                [$( stringify!($variant).to_kebab_case() ),+].join(", ")
             }
         }
 
@@ -112,14 +102,16 @@ macro_rules! define_llm_arg {
             $( pub $field: Option<String>, )+
         }
 
+        impl $target {
+            fn allowed_fields_string() -> String {
+                [stringify!($target_id).to_kebab_case(), $( stringify!($field).to_kebab_case() ),+].join(", ")
+            }
+        }
+
         impl TryFrom<ParsedValues> for $target {
             type Error = LlmArgParseError;
 
             fn try_from(mut parsed: ParsedValues) -> Result<Self, Self::Error> {
-                let settings = vec![$( kebab_case(stringify!($field)) ),+];
-                let allowed_fields = allowed_fields_string(stringify!($target_id), &settings);
-                let missing_settings = missing_settings_string(&settings);
-
                 let id_str = parsed.id;
                 let $target_id = id_str
                     .parse::<$id_ty>()
@@ -131,7 +123,7 @@ macro_rules! define_llm_arg {
 
                 $(
                     let $field = {
-                        let key = kebab_case(stringify!($field));
+                        let key = stringify!($field).to_kebab_case();
                         parsed.values.remove(key.as_str())
                     };
                 )+
@@ -139,15 +131,16 @@ macro_rules! define_llm_arg {
                 if let Some((unknown, _)) = parsed.values.into_iter().next() {
                     return Err(LlmArgParseError::UnknownField {
                         field: unknown,
-                        allowed_fields,
+                        allowed_fields: $target::allowed_fields_string(),
                     });
                 }
 
                 if true $(&& $field.is_none())+ {
+                    let settings = [$( AsKebabCase(stringify!($field)) ),+];
                     return Err(LlmArgParseError::MissingSetting {
                         kind: stringify!($target_id),
                         id: $target_id.to_string(),
-                        allowed_settings: missing_settings,
+                        allowed_settings: missing_settings_string(&settings),
                     });
                 }
 
@@ -162,12 +155,10 @@ macro_rules! define_llm_arg {
             type Err = LlmArgParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                let settings = vec![$( kebab_case(stringify!($field)) ),+];
-
                 let values = parse_key_value_map(s, stringify!($target_id)).map_err(|error| match error {
                     KeyValueMapError::MissingSeparator(part) => LlmArgParseError::UnknownField {
                         field: part,
-                        allowed_fields: allowed_fields_string(stringify!($target_id), &settings),
+                        allowed_fields: $target::allowed_fields_string(),
                     },
                     KeyValueMapError::EmptyValue(name) => LlmArgParseError::EmptyValue(name),
                     KeyValueMapError::MissingId => LlmArgParseError::MissingId(stringify!($target_id)),
