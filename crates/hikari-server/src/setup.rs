@@ -16,6 +16,7 @@ use hikari_core::pgvector::documents::{PgVectorDocument, RagDocumentLoaderFn};
 use hikari_core::pgvector::error::PgVectorError;
 use hikari_core::pgvector::{PgVector, upload_document};
 use hikari_llm::builder::LlmStructureConfig;
+use hikari_utils::loader::error::LoadingError;
 use hikari_utils::loader::{Loader, LoaderHandler, LoaderTrait};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sea_orm::DatabaseConnection;
@@ -113,12 +114,15 @@ pub async fn load_modules(
 pub async fn load_llm_structures(
     structured_url: &Url,
     loader_handler: &LoaderHandler,
-) -> anyhow::Result<LlmStructureConfig> {
+) -> Result<LlmStructureConfig, LoadingError> {
     let llm_structures = hikari_llm::builder::load(loader_handler.loader(structured_url)?).await?;
     Ok(llm_structures)
 }
 
-pub async fn load_documents(documents_url: &Url, loader_handler: &LoaderHandler) -> anyhow::Result<DocumentCollection> {
+pub async fn load_documents(
+    documents_url: &Url,
+    loader_handler: &LoaderHandler,
+) -> Result<DocumentCollection, LoadingError> {
     let documents = hikari_config::documents::load(loader_handler.loader(documents_url)?).await?;
     Ok(documents)
 }
@@ -126,7 +130,7 @@ pub async fn load_documents(documents_url: &Url, loader_handler: &LoaderHandler)
 pub async fn load_constants(
     constants_url: Option<&Url>,
     loader_handler: &LoaderHandler,
-) -> anyhow::Result<ConstantCollection> {
+) -> Result<ConstantCollection, LoadingError> {
     let constants = if let Some(path_or_url) = constants_url {
         hikari_config::constants::load(loader_handler.loader(path_or_url)?).await?
     } else {
