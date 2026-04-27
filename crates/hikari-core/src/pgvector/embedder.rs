@@ -20,9 +20,15 @@ impl Embedder {
 
     #[instrument(skip_all, fields(model = %self.model))]
     pub async fn embed<T: Into<Vec<String>>>(&self, texts: T) -> Result<Vec<Vec<f64>>, PgVectorError> {
+        let text_vec = texts.into();
+        if text_vec.is_empty() {
+            tracing::warn!("no texts provided for embedding. Returning empty vector.");
+            return Ok(vec![]);
+        }
+
         let req = CreateEmbeddingRequestArgs::default()
             .model(&self.model)
-            .input(EmbeddingInput::StringArray(texts.into()))
+            .input(EmbeddingInput::StringArray(text_vec))
             .build()?;
 
         let response = self.client.embeddings().create(req).await?;
