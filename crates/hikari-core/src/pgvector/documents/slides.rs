@@ -201,3 +201,62 @@ pub fn chunks<'a>(
     }
     .boxed()
 }
+
+#[cfg(test)]
+mod test {
+    use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingChunk;
+
+    use super::apply_merges;
+
+    fn embedded_page(content: &str, page: u32) -> (LlmEmbeddingChunk, Vec<f64>) {
+        (LlmEmbeddingChunk::new(content.to_string(), vec![page]), vec![])
+    }
+
+    #[test]
+    fn test_apply_merges_forward() {
+        let mut pages = vec![
+            embedded_page("p0", 0),
+            embedded_page("p1", 1),
+            embedded_page("p2", 2),
+            embedded_page("p3", 3),
+        ];
+
+        apply_merges(&mut pages, &[(0, 2), (1, 2)]);
+
+        assert_eq!(pages[2].0.content, "p2 p1 p0");
+        assert_eq!(pages[2].0.pages, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_apply_merges_backward() {
+        let mut pages = vec![
+            embedded_page("p0", 0),
+            embedded_page("p1", 1),
+            embedded_page("p2", 2),
+            embedded_page("p3", 3),
+        ];
+
+        apply_merges(&mut pages, &[(3, 1), (2, 1)]);
+
+        assert_eq!(pages[1].0.content, "p1 p3 p2");
+        assert_eq!(pages[1].0.pages, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_apply_merges_mixed() {
+        let mut pages = vec![
+            embedded_page("p0", 0),
+            embedded_page("p1", 1),
+            embedded_page("p2", 2),
+            embedded_page("p3", 3),
+            embedded_page("p4", 4),
+        ];
+
+        apply_merges(&mut pages, &[(0, 2), (4, 2), (3, 1)]);
+
+        assert_eq!(pages[2].0.content, "p2 p0 p4");
+        assert_eq!(pages[2].0.pages, vec![0, 2, 4]);
+        assert_eq!(pages[1].0.content, "p1 p3");
+        assert_eq!(pages[1].0.pages, vec![1, 3]);
+    }
+}
