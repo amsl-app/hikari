@@ -19,5 +19,6 @@ run-local.sh
 /schemas/
 /tools/
 .gemini
+.claude
 GEMINI.md
 CLAUDE.md

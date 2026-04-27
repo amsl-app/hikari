@@ -47,10 +47,15 @@ impl PgVectorDocumentTrait for SlidesDocument {
     ) -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>> {
         async move {
             let file = self.load_file().await?;
+            let file_key = file.metadata.key.clone();
 
-            if file.metadata.key.ends_with("pdf") {
+            if file_key.ends_with("pdf") {
                 tracing::debug!("extracting text from PDF");
-                let pages = pdf_extract::extract_text_from_mem_by_pages(&file.content)?;
+                let pages = {
+                    let pages = pdf_extract::extract_text_from_mem_by_pages(&file.content)?;
+                    drop(file);
+                    pages
+                };
                 let pages_numbered = filter_excluded_pages(
                     pages.into_iter().enumerate().map(|(i, c)| (c, i + 1)).collect(),
                     &self.exclude,
@@ -75,9 +80,7 @@ impl PgVectorDocumentTrait for SlidesDocument {
 
                 Ok(merge_small_pages(pages_embeddings))
             } else {
-                Err(PgVectorError::LoadingError(LoadingError::UnsupportedFileType(
-                    file.metadata.key.clone(),
-                )))
+                Err(PgVectorError::LoadingError(LoadingError::UnsupportedFileType(file_key)))
             }
         }
         .boxed()

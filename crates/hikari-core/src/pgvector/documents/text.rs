@@ -52,15 +52,16 @@ impl PgVectorDocumentTrait for TextDocument {
         embedder: &'a Embedder,
     ) -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>> {
         async move {
-            let file = self.load_file().await?;
-
-            let pages = if file.metadata.key.ends_with("pdf") {
-                tracing::debug!("Extracting text from PDF");
-                pdf_extract::extract_text_from_mem_by_pages(&file.content)?
-            } else {
-                let content = String::from_utf8(file.content.clone())
-                    .map_err(|e| PgVectorError::LoadingError(LoadingError::from(e)))?;
-                vec![content]
+            let pages = {
+                let file = self.load_file().await?;
+                if file.metadata.key.ends_with("pdf") {
+                    tracing::debug!("Extracting text from PDF");
+                    pdf_extract::extract_text_from_mem_by_pages(&file.content)?
+                } else {
+                    let content = String::from_utf8(file.content)
+                        .map_err(|e| PgVectorError::LoadingError(LoadingError::from(e)))?;
+                    vec![content]
+                }
             };
 
             let (all_sentences, all_indices): (Vec<String>, Vec<usize>) = pages
