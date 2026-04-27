@@ -222,18 +222,13 @@ async fn run(opt: Run) -> Result<()> {
     let seaorm_pool_clone = seaorm_pool.clone();
 
     tokio::spawn(async move {
-        if let Err(error) = setup::upload_documents(
+        setup::upload_documents(
             document_collection,
             llm_config_clone,
             seaorm_pool_clone,
             document_loader,
         )
-        .await
-        {
-            tracing::error!(error = &error as &dyn Error, "Failed to upload collections");
-        } else {
-            tracing::info!("Successfully uploaded collections");
-        }
+        .await;
     });
 
     let Run {

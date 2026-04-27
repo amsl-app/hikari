@@ -13,7 +13,6 @@ use hikari_config::global::GlobalConfig;
 use hikari_config::module::ModuleConfig;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::pgvector::documents::{ChunkKind, PgVectorDocument, RagDocumentLoaderFn};
-use hikari_core::pgvector::error::PgVectorError;
 use hikari_core::pgvector::{PgVector, upload_document};
 use hikari_llm::builder::LlmStructureConfig;
 use hikari_utils::loader::error::LoadingError;
@@ -30,8 +29,10 @@ pub async fn upload_documents(
     llm_config: LlmConfig,
     seaorm_pool: DatabaseConnection,
     file_loader: Loader,
-) -> Result<(), PgVectorError> {
+) {
     let retriever = PgVector::new(&llm_config, &seaorm_pool);
+
+    let mut failures = Vec::new();
 
     for (file_id, document) in documents.documents {
         tracing::info!(document = ?document.file, "Uploading document");
@@ -57,11 +58,17 @@ pub async fn upload_documents(
             link,
             kind,
         };
-        upload_document(&retriever, pgvector_document, file_metadata).await?;
+        let res = upload_document(&retriever, pgvector_document, file_metadata).await;
+        match res {
+            Ok(_) => tracing::info!(file_id, "document uploaded successfully"),
+            Err(e) => {
+                tracing::error!(file_id, error = ?e, "failed to upload document");
+                failures.push((file_id, e));
+            }
+        }
         tokio::task::yield_now().await;
     }
     tracing::info!("All rag documents uploaded successfully");
-    Ok(())
 }
 
 pub async fn load_config(global_cfg: Option<&Url>, loader_handler: &LoaderHandler) -> anyhow::Result<GlobalConfig> {
