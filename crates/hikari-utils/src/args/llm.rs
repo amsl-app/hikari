@@ -34,6 +34,11 @@ enum KeyValueMapError {
 
 trait IdField {
     const FIELD: &'static str;
+    type IdEnum: IdValue;
+}
+
+trait IdValue: FromStr + ToString {
+    const ALLOWED_VALUES: &'static str;
 }
 
 struct ParsedValues<I: IdField> {
@@ -67,10 +72,131 @@ fn parse_key_value_map<I: IdField>(input: &str) -> Result<ParsedValues<I>, KeyVa
     })
 }
 
+fn allowed_fields_string(id_field: &str, settings: &[&str]) -> String {
+    let mut fields = Vec::with_capacity(settings.len() + 1);
+    fields.push(id_field.to_owned());
+    fields.extend(settings.iter().map(|field| (*field).to_owned()));
+    fields.join(", ")
+}
+
+fn missing_settings_string(settings: &[&str]) -> String {
+    match settings {
+        [] => String::new(),
+        [single] => format!("'{single}'"),
+        [first, second] => format!("'{first}' and/or '{second}'"),
+        many => many
+            .iter()
+            .map(|setting| format!("'{setting}'"))
+            .collect::<Vec<_>>()
+            .join(", and/or "),
+    }
+}
+
+macro_rules! join_literals {
+    ($single:literal) => {
+        $single
+    };
+    ($first:literal, $($rest:literal),+ $(,)?) => {
+        concat!($first, ", ", join_literals!($($rest),+))
+    };
+}
+
+macro_rules! define_id_enum {
+    (
+        $vis:vis enum $name:ident {
+            $( $variant:ident = $value:literal ),+ $(,)?
+        }
+    ) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
+        $vis enum $name {
+            $(
+                #[strum(serialize = $value)]
+                $variant,
+            )+
+        }
+
+        impl IdValue for $name {
+            const ALLOWED_VALUES: &'static str = join_literals!($( $value ),+);
+        }
+    };
+}
+
+macro_rules! impl_parse_from_parsed_values {
+    (
+        id_field: $id_field:ty,
+        target: $target:ty,
+        target_id: $target_id:ident,
+        settings: { $( $map_key:literal => $field:ident ),+ $(,)? }
+    ) => {
+        impl TryFrom<ParsedValues<$id_field>> for $target {
+            type Error = LlmArgParseError;
+
+            fn try_from(mut parsed: ParsedValues<$id_field>) -> Result<Self, Self::Error> {
+                const SETTINGS: &[&str] = &[ $( $map_key ),+ ];
+                let allowed_fields = allowed_fields_string(<$id_field as IdField>::FIELD, SETTINGS);
+                let missing_settings = missing_settings_string(SETTINGS);
+
+                let id_str = parsed.id;
+                let $target_id = id_str
+                    .parse::<<$id_field as IdField>::IdEnum>()
+                    .map_err(|_| LlmArgParseError::InvalidId {
+                        kind: <$id_field as IdField>::FIELD,
+                        value: id_str,
+                        allowed_values: <<$id_field as IdField>::IdEnum as IdValue>::ALLOWED_VALUES,
+                    })?;
+
+                $(
+                    let $field = parsed.values.remove($map_key);
+                )+
+
+                if let Some((unknown, _)) = parsed.values.into_iter().next() {
+                    return Err(LlmArgParseError::UnknownField {
+                        field: unknown,
+                        allowed_fields,
+                    });
+                }
+
+                if true $(&& $field.is_none())+ {
+                    return Err(LlmArgParseError::MissingSetting {
+                        kind: <$id_field as IdField>::FIELD,
+                        id: $target_id.to_string(),
+                        allowed_settings: missing_settings,
+                    });
+                }
+
+                Ok(Self {
+                    $target_id,
+                    $( $field, )+
+                })
+            }
+        }
+
+        impl FromStr for $target {
+            type Err = LlmArgParseError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                const SETTINGS: &[&str] = &[ $( $map_key ),+ ];
+
+                let values = parse_key_value_map::<$id_field>(s).map_err(|error| match error {
+                    KeyValueMapError::MissingSeparator(part) => LlmArgParseError::UnknownField {
+                        field: part,
+                        allowed_fields: allowed_fields_string(<$id_field as IdField>::FIELD, SETTINGS),
+                    },
+                    KeyValueMapError::EmptyValue(name) => LlmArgParseError::EmptyValue(name),
+                    KeyValueMapError::MissingId => LlmArgParseError::MissingId(<$id_field as IdField>::FIELD),
+                })?;
+
+                Self::try_from(values)
+            }
+        }
+    };
+}
+
 struct ServiceIdField;
 
 impl IdField for ServiceIdField {
     const FIELD: &'static str = "service";
+    type IdEnum = LlmServiceType;
 }
 
 #[derive(Debug, Clone)]
@@ -80,72 +206,51 @@ pub struct LlmServiceArg {
     pub default_model: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
-#[strum(serialize_all = "lowercase")]
-pub enum LlmServiceType {
-    Openai,
-    Gwdg,
-    Kit,
-}
+define_id_enum!(
+    pub enum LlmServiceType {
+        Openai = "openai",
+        Gwdg = "gwdg",
+        Kit = "kit",
+    }
+);
 
 #[derive(Debug, Error)]
-pub enum LlmServiceArgError {
-    #[error("Missing required 'service' field")]
-    MissingService,
-    #[error("At least one setting is required for service '{0}'. Set 'key' and/or 'default-model'")]
-    MissingSetting(LlmServiceType),
-    #[error("Unknown field '{0}'. Allowed fields: service, key, default-model")]
-    UnknownField(String),
+pub enum LlmArgParseError {
+    #[error("Missing required '{0}' field")]
+    MissingId(&'static str),
+    #[error("At least one setting is required for {kind} '{id}'. Set {allowed_settings}")]
+    MissingSetting {
+        kind: &'static str,
+        id: String,
+        allowed_settings: String,
+    },
+    #[error("Unknown field '{field}'. Allowed fields: {allowed_fields}")]
+    UnknownField { field: String, allowed_fields: String },
     #[error("Field '{0}' must not be empty")]
     EmptyValue(String),
-    #[error("Unknown service '{0}'. Allowed services: openai, gwdg, kit")]
-    InvalidService(String),
+    #[error("Unknown {kind} '{value}'. Allowed {kind}s: {allowed_values}")]
+    InvalidId {
+        kind: &'static str,
+        value: String,
+        allowed_values: &'static str,
+    },
 }
 
-impl TryFrom<ParsedValues<ServiceIdField>> for LlmServiceArg {
-    type Error = LlmServiceArgError;
-
-    fn try_from(mut parsed: ParsedValues<ServiceIdField>) -> Result<Self, Self::Error> {
-        let service_str = parsed.id;
-        let service = service_str
-            .parse::<LlmServiceType>()
-            .map_err(|_| LlmServiceArgError::InvalidService(service_str))?;
-
-        let key = parsed.values.remove("key");
-        let default_model = parsed.values.remove("default-model");
-
-        if let Some((unknown, _)) = parsed.values.into_iter().next() {
-            return Err(LlmServiceArgError::UnknownField(unknown));
-        }
-        if key.is_none() && default_model.is_none() {
-            return Err(LlmServiceArgError::MissingSetting(service));
-        }
-
-        Ok(Self {
-            service,
-            key,
-            default_model,
-        })
+impl_parse_from_parsed_values!(
+    id_field: ServiceIdField,
+    target: LlmServiceArg,
+    target_id: service,
+    settings: {
+        "key" => key,
+        "default-model" => default_model
     }
-}
-
-impl FromStr for LlmServiceArg {
-    type Err = LlmServiceArgError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let values = parse_key_value_map::<ServiceIdField>(s).map_err(|error| match error {
-            KeyValueMapError::MissingSeparator(part) => LlmServiceArgError::UnknownField(part),
-            KeyValueMapError::EmptyValue(name) => LlmServiceArgError::EmptyValue(name),
-            KeyValueMapError::MissingId => LlmServiceArgError::MissingService,
-        })?;
-        Self::try_from(values)
-    }
-}
+);
 
 struct FeatureIdField;
 
 impl IdField for FeatureIdField {
     const FIELD: &'static str = "feature";
+    type IdEnum = LlmFeatureType;
 }
 
 #[derive(Debug, Clone)]
@@ -155,67 +260,23 @@ pub struct LlmFeatureArg {
     pub model: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
-#[strum(serialize_all = "lowercase")]
-pub enum LlmFeatureType {
-    Journaling,
-    Embedding,
-    Quiz,
-}
-
-#[derive(Debug, Error)]
-pub enum LlmFeatureArgError {
-    #[error("Missing required 'feature' field")]
-    MissingFeature,
-    #[error("At least one setting is required for feature '{0}'. Set 'service' and/or 'model'")]
-    MissingSetting(LlmFeatureType),
-    #[error("Unknown field '{0}'. Allowed fields: feature, service, model")]
-    UnknownField(String),
-    #[error("Field '{0}' must not be empty")]
-    EmptyValue(String),
-    #[error("Unknown feature '{0}'. Allowed features: journaling, embedding, quiz")]
-    InvalidFeature(String),
-}
-
-impl TryFrom<ParsedValues<FeatureIdField>> for LlmFeatureArg {
-    type Error = LlmFeatureArgError;
-
-    fn try_from(mut parsed: ParsedValues<FeatureIdField>) -> Result<Self, Self::Error> {
-        let feature_str = parsed.id;
-        let feature = feature_str
-            .parse::<LlmFeatureType>()
-            .map_err(|_| LlmFeatureArgError::InvalidFeature(feature_str))?;
-
-        let service = parsed.values.remove("service");
-        let model = parsed.values.remove("model");
-
-        if let Some((unknown, _)) = parsed.values.into_iter().next() {
-            return Err(LlmFeatureArgError::UnknownField(unknown));
-        }
-        if service.is_none() && model.is_none() {
-            return Err(LlmFeatureArgError::MissingSetting(feature));
-        }
-
-        Ok(Self {
-            feature,
-            service,
-            model,
-        })
+define_id_enum!(
+    pub enum LlmFeatureType {
+        Journaling = "journaling",
+        Embedding = "embedding",
+        Quiz = "quiz",
     }
-}
+);
 
-impl FromStr for LlmFeatureArg {
-    type Err = LlmFeatureArgError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let values = parse_key_value_map::<FeatureIdField>(s).map_err(|error| match error {
-            KeyValueMapError::MissingSeparator(part) => LlmFeatureArgError::UnknownField(part),
-            KeyValueMapError::EmptyValue(name) => LlmFeatureArgError::EmptyValue(name),
-            KeyValueMapError::MissingId => LlmFeatureArgError::MissingFeature,
-        })?;
-        Self::try_from(values)
+impl_parse_from_parsed_values!(
+    id_field: FeatureIdField,
+    target: LlmFeatureArg,
+    target_id: feature,
+    settings: {
+        "service" => service,
+        "model" => model
     }
-}
+);
 
 #[cfg(test)]
 mod tests {
@@ -232,11 +293,8 @@ mod tests {
 
     #[test]
     fn test_parses_single_llm_config() {
-        let cli = TestCli::try_parse_from([
-            "test-bin",
-            "--llm-config=service=kit,key=abc,default-model=model-a",
-        ])
-        .expect("llm-config should parse");
+        let cli = TestCli::try_parse_from(["test-bin", "--llm-config=service=kit,key=abc,default-model=model-a"])
+            .expect("llm-config should parse");
 
         let cfg = &cli.llm_services.llm_config[0];
         assert_eq!(cfg.service, LlmServiceType::Kit);
@@ -304,10 +362,19 @@ mod tests {
         .expect("repeated llm-feature-config should parse");
 
         assert_eq!(cli.llm_services.llm_feature_config.len(), 2);
-        assert_eq!(cli.llm_services.llm_feature_config[0].feature, LlmFeatureType::Embedding);
+        assert_eq!(
+            cli.llm_services.llm_feature_config[0].feature,
+            LlmFeatureType::Embedding
+        );
         assert_eq!(cli.llm_services.llm_feature_config[1].feature, LlmFeatureType::Quiz);
-        assert_eq!(cli.llm_services.llm_feature_config[0].service.as_deref(), Some("openai"));
-        assert_eq!(cli.llm_services.llm_feature_config[1].model.as_deref(), Some("gpt-4.1-mini"));
+        assert_eq!(
+            cli.llm_services.llm_feature_config[0].service.as_deref(),
+            Some("openai")
+        );
+        assert_eq!(
+            cli.llm_services.llm_feature_config[1].model.as_deref(),
+            Some("gpt-4.1-mini")
+        );
     }
 
     #[test]
