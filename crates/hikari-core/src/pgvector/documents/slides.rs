@@ -59,11 +59,7 @@ fn small_page_indices(pages_embeddings: &[EmbeddedPage]) -> Vec<u32> {
         .iter()
         .enumerate()
         .filter_map(|(idx, (c, _))| {
-            if c.content.len() < MIN_CHUNK_SIZE {
-                Some(u32::try_from(idx).unwrap_or(0))
-            } else {
-                None
-            }
+            (c.content.len() < MIN_CHUNK_SIZE).then(|| u32::try_from(idx).unwrap_or(0))
         })
         .collect::<Vec<u32>>();
     tracing::debug!("Small pages idx: {:?}", small_pages_idx);
