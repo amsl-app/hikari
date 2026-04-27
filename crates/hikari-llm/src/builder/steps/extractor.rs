@@ -204,15 +204,21 @@ impl InjectionTrait for ExtractionSchema {
 
 impl<'a> AsOpenApiField<'a> for ExtractionSchema {
     fn openapi_field(&'a self) -> OpenApiField<'a> {
-        let description = format!(
-            "{} (e.g.:\n{})",
-            self.description,
-            self.examples
+        let examples = if self.examples.is_empty() {
+            "".to_string()
+        } else {
+            let example_strings = self
+                .examples
                 .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join("\n")
-        );
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("<sep>");
+
+            format!("\n<examples>\n{}\n</examples>\n", example_strings)
+        };
+
+        let description = format!("{}{}", self.description, examples);
+
         let mut field = OpenApiField::new(self.r#type.as_str()).description(description);
         if let Some(items) = &self.r#items {
             field = field.items(items.openapi_field());
@@ -259,7 +265,7 @@ mod tests {
         assert_eq!(field.r#type, "string");
         assert_eq!(
             &field.description.unwrap(),
-            "extraction_value (e.g.:\nBeispiel 1\nBeispiel 2)"
+            "extraction_value\n<examples>\nBeispiel 1<sep>Beispiel 2\n</examples>\n"
         );
     }
 }

@@ -1,23 +1,21 @@
 pub mod error;
 use crate::journal::summarize::error::SummarizeError;
 use crate::llm_config::LlmConfig;
-
-use crate::openai::{CallConfig, FunctionResponse, openai_call_function_with_timeout};
+use crate::openai::error::OpenAiError;
+use crate::openai::{CallConfig, openai_single_tool_call};
+use async_openai::types::chat::{
+    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+};
 use base64::Engine;
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
-
 use hikari_db::journal;
 use hikari_db::journal::journal_summary;
 use hikari_model::journal::MetaJournalEntryWithMetaContent;
 use hikari_utils::date::get_day_bounds;
-
-use async_openai::types::chat::{
-    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-};
+use schemars::JsonSchema;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use serde_derive::{Deserialize, Serialize};
-use serde_json::{Value, json};
 use sha2::Digest;
 use sha2::Sha256;
 use std::collections::HashMap;
@@ -25,16 +23,33 @@ use std::error::Error;
 use std::ops::Add;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
-
 use tokio::sync::Mutex;
 use tracing::{Instrument, instrument};
-
-use crate::openai::error::OpenAiError;
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
+#[derive(Debug, Clone, ToSchema, Serialize, Deserialize, JsonSchema, Default)]
+#[schemars(
+    description = "Die Zusammenfassung des Journals. Die Zusammenfassung ist in zwei Komponenten aufgeteilt. Die erste Komponente ist die Gesamtzusammenfassung der Journaleinträge. Die zweite Komponente sind die Zusammenfassungen der Kernthemen."
+)]
+pub struct Summary {
+    /// Gesamtzusammenfassung in der der Nutzer geduzt wird (zweite Person). Die Zusammenfassung sollte maximal 6 Sätze lang sein und sollte, wenn möglich, nicht mit den Kernthemen überlappen. Beispiele: \"Die letzten Tage hattest du viel Stress. Dennoch ging es dir überwiegend gut auch wenn du einen Tag hattest an dem deine Stimmung schlecht war. Beim Lernen konntest du dich dennoch gut konzentrieren.\"
+    pub summary: String,
+    pub topic_summaries: Vec<TopicSummary>,
+}
+
+impl Summary {
+    fn fix_escapes(&mut self) {
+        self.summary = html_escape::decode_html_entities(&self.summary).to_string();
+        self.topic_summaries.iter_mut().for_each(TopicSummary::fix_escapes);
+    }
+}
+
+#[derive(Debug, Clone, ToSchema, Serialize, Deserialize, JsonSchema)]
+#[schemars(inline)]
 pub struct TopicSummary {
+    /// Der name des Kernthemas in wenigen Worten. Beispiele: \"Stress\", \"Motivation beim Lernen\", \"Freunde\"
     pub topic: String,
+    /// Zusammenfassung des Kernthemas in ein bis zwei Sätzen. Die Zusammenfassung sollte den Nutzer duzen (in zweiter Person geschrieben sein). Beispiele: \"Du hattest viel Stress und Probleme damit umzugehen\", \"Deine Motivation beim Lernen kam ganz auf das Fach an. Bei Mathe hast du dich Angestrengt, aber für Urheberrecht konntest du dich nicht begeistern.\"
     pub summary: String,
 }
 
@@ -42,60 +57,6 @@ impl TopicSummary {
     fn fix_escapes(&mut self) {
         self.topic = html_escape::decode_html_entities(&self.topic).to_string();
         self.summary = html_escape::decode_html_entities(&self.summary).to_string();
-    }
-}
-
-#[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
-pub struct SummaryFunctionResponse {
-    pub summary: String,
-    #[serde(default)]
-    pub topic_summaries: Vec<TopicSummary>,
-}
-
-impl FunctionResponse for SummaryFunctionResponse {
-    fn function_name() -> &'static str {
-        "summary"
-    }
-
-    fn function_description() -> &'static str {
-        "Gibt die Zusammenfassung des Journals zurück. Die Zusammenfassung ist in zwei Komponenten aufgeteilt. Die erste Komponente ist die Gesamtzusammenfassung der Journaleinträge. Die zweite Komponente sind die Zusammenfassungen der Kernthemen."
-    }
-
-    fn function_definition() -> Value {
-        json! (
-            {
-              "type": "object",
-              "properties": {
-                "summary": {
-                  "type": "string",
-                  "description": "Gesamtzusammenfassung in der der Nutzer geduzt wird (zweite Person). Die Zusammenfassung sollte maximal 6 Sätze lang sein und sollte, wenn möglich, nicht mit den Kernthemen überlappen. Beispiele: \"Die letzten Tage hattest du viel Stress. Dennoch ging es dir überwiegend gut auch wenn du einen Tag hattest an dem deine Stimmung schlecht war. Beim Lernen konntest du dich dennoch gut konzentrieren.\""
-                },
-                "topic_summaries": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "topic": {
-                        "type": "string",
-                        "description": "Der name des Kernthemas in wenigen Worten. Beispiele: \"Stress\", \"Motivation beim Lernen\", \"Freunde\""
-                      },
-                      "summary": {
-                        "type": "string",
-                        "description": "Zusammenfassung des Kernthemas in ein bis zwei Sätzen. Die Zusammenfassung sollte den Nutzer duzen (in zweiter Person geschrieben sein). Beispiele: \"Du hattest viel Stress und Probleme damit umzugehen\", \"Deine Motivation beim Lernen kam ganz auf das Fach an. Bei Mathe hast du dich Angestrengt, aber für Urheberrecht konntest du dich nicht begeistern.\""
-                      }
-                    },
-                  },
-                  "description": "Unterthemen und deren zusammenfassung."
-                },
-              },
-              "required": ["summary"]
-            }
-        )
-    }
-
-    fn fix_escapes(&mut self) {
-        self.summary = html_escape::decode_html_entities(&self.summary).to_string();
-        self.topic_summaries.iter_mut().for_each(TopicSummary::fix_escapes);
     }
 }
 
@@ -116,7 +77,7 @@ pub(crate) fn generate_summary_response(
         });
     }
     SummaryResponse {
-        summary: Some(SummaryFunctionResponse {
+        summary: Some(Summary {
             summary: summary.summary,
             topic_summaries: topic_summaries
                 .into_iter()
@@ -132,7 +93,7 @@ pub(crate) fn generate_summary_response(
 
 #[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
 pub struct SummaryResponse {
-    pub summary: Option<SummaryFunctionResponse>,
+    pub summary: Option<Summary>,
     pub journal_entries: Vec<MetaJournalEntryWithMetaContent>,
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -395,15 +356,28 @@ Verwende Valides JSON als Argumente für den Funktionsaufruf.
         ).build().map_err(OpenAiError::from)?.into());
 
     tracing::info!(%user_id, timestamp = timestamp.to_rfc2822(), key = %str_key, "sending {} messages to openAI", messages.len());
-    let res: SummaryFunctionResponse = openai_call_function_with_timeout(
-        llm_config,
+
+    let openai_config = llm_config.get_journaling_openai_config();
+    let model = llm_config.get_journaling_model();
+
+    let (mut res, tokens) = openai_single_tool_call::<Summary>(
         CallConfig::builder()
             .total_timeout(Duration::from_secs(120))
-            .iteration_timeout(Duration::from_secs(60))
+            .iteration_timeout(Duration::from_secs(30))
             .build(),
+        openai_config,
+        None,
+        None,
+        model,
         messages,
     )
     .await?;
+
+    if let Some(usage) = tokens {
+        hikari_db::llm::usage::Mutation::add_usage(conn, &user_id, usage, "journal_summary".to_owned()).await?;
+    }
+
+    res.fix_escapes();
 
     let (summary, topic_summaries) = journal_summary::Mutation::create(
         conn,
@@ -500,7 +474,7 @@ mod tests {
             summary: "ts-b-s m&#228;&#223;ig".to_string(),
         };
 
-        let mut summary_response = SummaryFunctionResponse {
+        let mut summary_response = Summary {
             summary: "m&#228;&#223;ig".to_string(),
             topic_summaries: vec![topic_summary_a, topic_summary_b],
         };

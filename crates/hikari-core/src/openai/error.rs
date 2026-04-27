@@ -16,6 +16,9 @@ pub enum OpenAiError {
     #[error("No response from OpenAi")]
     EmptyResponse,
 
+    #[error("Unexpected response format")]
+    UnexpectedResponseFormat,
+
     #[error("Operation timed out")]
     Timeout,
 

@@ -1,6 +1,5 @@
 use crate::llm_config::LlmConfig;
-use crate::openai::tools::{OpenApiField, Tool, ToolChoice};
-use crate::openai::{CallConfig, Content, OpenAiCallResult, ToolCallResponse, openai_call_with_timeout};
+use crate::openai::{CallConfig, openai_single_tool_call};
 use crate::pgvector::search;
 use crate::quiz::error::QuizError;
 use crate::quiz::max_five_random_exam_questions;
@@ -9,19 +8,19 @@ use async_openai::types::chat::{
     ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
     ChatCompletionRequestUserMessageContent,
 };
-use async_trait::async_trait;
 use hikari_config::module::content::{ContentExam, QuestionBloomLevel};
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingQueryResult;
 use hikari_model::quiz::question::{Question, QuestionFeedback};
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use rand::rng;
 use rand::seq::IndexedRandom;
+use schemars::JsonSchema;
 use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::instrument;
 
 #[derive(Debug, Clone, Default)]
 struct Operators {
@@ -29,7 +28,56 @@ struct Operators {
     donts: Vec<&'static str>,
 }
 
+#[derive(Serialize, JsonSchema, Deserialize)]
+#[schemars(description = "Die generierte Frage. Es gibt entweder eine Textfrage oder eine Multiple Choice Frage.")]
+struct QuizQuestion {
+    question: QuestionType,
+}
+
+#[derive(Serialize, JsonSchema, Deserialize)]
+#[schemars(
+    description = "Die Art der Frage. Es gibt entweder eine Textfrage oder eine Multiple Choice Frage.",
+    inline
+)]
+#[serde(untagged)]
+enum QuestionType {
+    Text(TextQuestion),
+    MultipleChoice(MultipleChoiceQuestion),
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[schemars(description = "Dieses Tool sendet die textuelle Frage an den Nutzer.", inline)]
+struct TextQuestion {
+    /// Die Frage, die an den Nutzer gestellt werden soll.
+    question: String,
+    // Die richtige Antwort auf die Frage.
+    solution: String,
+}
+
+#[derive(Serialize, JsonSchema, Deserialize)]
+#[schemars(
+    description = "Dieses Tool sended die Multiple Choice frage an den Nutzer. \
+    Es enthält die Frage sowie die Antwortmöglichkeiten. Es muss mindestens eine richtige Antwortmöglichkeit geben.",
+    inline
+)]
+struct MultipleChoiceQuestion {
+    /// Die Frage, die an den Nutzer gestellt werden soll.
+    question: String,
+    /// Die Antwortmöglichkeiten. Ca. 4-5 Möglichkeiten wobei mindestens eine richtig sein soll.
+    options: Vec<MultipleChoiceOption>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[schemars(description = "Eine Antwortmöglichkeit für eine Multiple Choice Frage.", inline)]
+struct MultipleChoiceOption {
+    /// Die textuelle Anwortmöglichkeit
+    option: String,
+    /// True, wenn dies eine richtige Möglichkeit ist
+    correct: bool,
+}
+
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(exams, llm_config, conn))]
 pub async fn create_question(
     user_id: &Uuid,
     session_id: &str,
@@ -44,6 +92,7 @@ pub async fn create_question(
     let score: f64 =
         (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, session_id, topic).await?).unwrap_or(0.0);
     let level = random_bloom_level(score);
+    tracing::debug!(%score, ?level, "determined bloom level for question generation");
 
     let old_questions = hikari_db::quiz::question::Query::get_question_by_user_topic_level(
         conn,
@@ -207,57 +256,46 @@ pub async fn create_question(
     let openai_config = llm_config.get_quiz_openai_config();
     let model = llm_config.get_quiz_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (question, tokens) = openai_single_tool_call::<QuizQuestion>(
         CallConfig::builder()
             .total_timeout(Duration::from_secs(120))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,
-        false,
+        None,
         None,
         model,
         prompt_messages,
-        vec![
-            Box::new(TextQuestionTool::new()),
-            Box::new(MultipleChoiceQuestionTool::new()),
-        ],
-        Some(ToolChoice::Required),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(QuizError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_evaluation".to_owned()).await?;
+    if let Some(usage) = tokens {
+        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_generation".to_owned()).await?;
     }
 
-    if let Content::Tool(tool_calls) = llm_response.content {
-        let first = tool_calls
-            .into_iter()
-            .next()
-            .ok_or(QuizError::UnexpectedResponseFormat)?;
+    match question.question {
+        QuestionType::Text(text_question) => {
+            let question = hikari_db::quiz::question::Mutation::create_text_question(
+                conn,
+                quiz_id,
+                &text_question.question,
+                &text_question.solution,
+                &level.into_db_model(),
+                session_id,
+                topic,
+                content,
+            )
+            .await?
+            .into_model();
 
-        let ToolCallResponse { arguments, name } = first;
-
-        // FIXME: This should probably be checked
-        let question = arguments
-            .get("question")
-            .expect("missing question")
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        let question_model = if name == "MultipleChoiceQuestionTool" {
-            // FIXME: This should probably be checked
-            let options = arguments.get("options").expect("missing question options").to_string();
-
+            Ok(question)
+        }
+        QuestionType::MultipleChoice(multiple_choice_question) => {
+            let options = serde_json::to_string(&multiple_choice_question.options)?;
             let question = hikari_db::quiz::question::Mutation::create_multiple_choice_question(
                 conn,
                 quiz_id,
-                &question,
+                &multiple_choice_question.question,
                 &options,
                 &level.into_db_model(),
                 session_id,
@@ -268,36 +306,7 @@ pub async fn create_question(
             .into_model();
 
             Ok(question)
-        } else if name == "TextQuestionTool" {
-            // FIXME: This should probably be checked
-            let solution = arguments
-                .get("solution")
-                .expect("missing solution")
-                .as_str()
-                .unwrap_or("")
-                .to_string();
-
-            let question = hikari_db::quiz::question::Mutation::create_text_question(
-                conn,
-                quiz_id,
-                &question,
-                &solution,
-                &level.into_db_model(),
-                session_id,
-                topic,
-                content,
-            )
-            .await?
-            .into_model();
-
-            Ok(question)
-        } else {
-            Err(QuizError::UnexpectedResponseFormat)
-        }?;
-
-        Ok(question_model)
-    } else {
-        Err(QuizError::UnexpectedResponseFormat)
+        }
     }
 }
 
@@ -314,96 +323,6 @@ impl TextQuestionTool {
     #[must_use]
     pub fn new() -> TextQuestionTool {
         TextQuestionTool {}
-    }
-}
-
-#[async_trait]
-impl Tool for TextQuestionTool {
-    fn name(&self) -> &'static str {
-        "TextQuestionTool"
-    }
-
-    fn description(&self) -> &'static str {
-        "Dieses Tool sendet die textuelle Frage an den Nutzer."
-    }
-
-    fn parameters(&self) -> Value {
-        let field = OpenApiField::object()
-            .properties(HashMap::from([
-                (
-                    "question",
-                    OpenApiField::new("string").description("Die Frage, die an den Nutzer gestellt werden soll."),
-                ),
-                (
-                    "solution",
-                    OpenApiField::new("string").description("Die richtige Antwort auf die Prüfungsfrage."),
-                ),
-            ]))
-            .required(vec!["question", "solution"]);
-
-        serde_json::to_value(field).expect("Serialization failed that should not fail")
-    }
-}
-#[derive(Serialize)]
-pub struct MultipleChoiceQuestionTool {}
-
-impl Default for MultipleChoiceQuestionTool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MultipleChoiceQuestionTool {
-    #[must_use]
-    pub fn new() -> MultipleChoiceQuestionTool {
-        MultipleChoiceQuestionTool {}
-    }
-}
-
-#[async_trait]
-impl Tool for MultipleChoiceQuestionTool {
-    fn name(&self) -> &'static str {
-        "MultipleChoiceQuestionTool"
-    }
-
-    fn description(&self) -> &'static str {
-        "Dieses Tool sended die Multiple Choice frage an den Nutzer"
-    }
-
-    fn parameters(&self) -> Value {
-        let field = OpenApiField::object()
-            .properties(HashMap::from([
-                (
-                    "question",
-                    OpenApiField::new("string").description("Die Frage, die an den Nutzer gestellt werden soll."),
-                ),
-                (
-                    "options",
-                    OpenApiField::new("array")
-                        .description(
-                            "Die Antwortmöglichkeiten. Ca. 4-5 Möglichkeiten wobei mindestens eine richtig sein soll.",
-                        )
-                        .items(
-                            OpenApiField::object().properties(HashMap::from([
-                                (
-                                    "option",
-                                    OpenApiField::new("string").description("Die textuelle Anwortmöglichkeit"),
-                                ),
-                                (
-                                    "correct",
-                                    OpenApiField::new("boolean")
-                                        .description("True, wenn dies eine richtige Möglichkeit ist"),
-                                ),
-                            ])),
-                        )
-                        .required(vec!["option", "correct"])
-                        .min_items(2)
-                        .max_items(5),
-                ),
-            ]))
-            .required(vec!["question", "options"]);
-
-        serde_json::to_value(field).expect("Serialization failed that should not fail")
     }
 }
 

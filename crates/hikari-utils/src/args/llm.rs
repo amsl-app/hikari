@@ -12,9 +12,9 @@ pub struct LlmServices {
     #[arg(long, required = false)]
     pub gwdg_default_model: Option<String>,
     #[arg(long, required = false)]
-    pub win_key: Option<String>,
+    pub kit_key: Option<String>,
     #[arg(long, required = false)]
-    pub win_default_model: Option<String>,
+    pub kit_default_model: Option<String>,
     #[arg(long, required = false)]
     pub journaling_model: Option<String>,
     #[arg(long, required = false)]

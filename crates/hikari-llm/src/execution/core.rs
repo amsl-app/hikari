@@ -12,7 +12,9 @@ use crate::builder::{
 use async_openai::types::chat::ChatCompletionRequestMessage;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::openai::{
-    CallConfig, Message, OpenAiCallResult, openai_call_with_timeout, streaming::MessageStream, tools::ToolChoice,
+    CallConfig, Message, OpenAiCallResult, openai_call_with_timeout,
+    streaming::MessageStream,
+    tools::{ToolChoice, ToolSchema},
 };
 
 use hikari_core::llm_config::LlmConfig;
@@ -63,8 +65,22 @@ impl LlmCore {
         previous_response: Option<String>,
     ) -> Result<Message, LlmExecutionError> {
         let (prompt, tool) = self
-            .inner(conversation_id, user_id, module_id, session_id, conn, previous_response)
+            .inner(
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                conn.clone(),
+                previous_response,
+            )
             .await?;
+
+        let tool_choice = tool
+            .as_ref()
+            .and_then(|tool| tool.name().map(ToString::to_string))
+            .map(ToolChoice::Named);
+
+        let tools: Vec<ToolSchema> = tool.into_iter().collect();
 
         let openai_config = config.get_openai_config(Some(&llm_service));
         let model = self
@@ -82,10 +98,11 @@ impl LlmCore {
             openai_config,
             false,
             self.model.temperature,
+            self.model.reasining_effort,
             model,
             prompt,
-            tool,
-            Some(ToolChoice::Required),
+            tools,
+            tool_choice,
         )
         .await?;
 
@@ -127,6 +144,7 @@ impl LlmCore {
             openai_config,
             true,
             self.model.temperature,
+            None,
             model,
             prompt,
             vec![],
@@ -149,13 +167,7 @@ impl LlmCore {
         session_id: &str,
         conn: DatabaseConnection,
         previous_response: Option<String>,
-    ) -> Result<
-        (
-            Vec<ChatCompletionRequestMessage>,
-            Vec<Box<dyn hikari_core::openai::tools::Tool>>,
-        ),
-        LlmExecutionError,
-    > {
+    ) -> Result<(Vec<ChatCompletionRequestMessage>, Option<ToolSchema>), LlmExecutionError> {
         let memory = self.generate_memory(&conn, conversation_id).await?;
         let values = get_slots(
             &conn,
@@ -167,12 +179,7 @@ impl LlmCore {
         )
         .await?;
 
-        let tool = self
-            .tool
-            .clone()
-            .map(|t| t.inject(&values).to_langchain_tool())
-            .into_iter()
-            .collect::<Vec<_>>();
+        let tool = self.tool.clone().map(|t| t.inject(&values).tool_schema());
 
         let mut formatted_prompt = Vec::with_capacity(self.prompt.len() + memory.len() + 1);
 

@@ -143,7 +143,7 @@ impl LlmStepTrait for SseCall {
                     };
 
                     yield Message {
-                        content: Content::Text(content), tokens: None
+                        content: Content::Text { text: Some(content), thinking: None }, tokens: None
                     };
                 }
             }

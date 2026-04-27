@@ -43,6 +43,7 @@ thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["full"] }
 typed-builder = "0.23.2"
 tracing = "0.1.41"
+metrics = "0.24.3"
 utoipa = { version = "5.4.0" }
 pdf-extract = "0.10.0"
 futures = "0.3.32"
@@ -56,3 +57,4 @@ rand = { version = "0.10.0", features = ["std"] }
 reqwest = "0.12.28"
 backoff = "0.4.0"
 num-traits = "0.2.19"
+schemars = { version = "1.1.0", features = ["raw_value", "chrono04", "url2"] }

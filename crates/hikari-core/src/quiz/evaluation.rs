@@ -1,6 +1,5 @@
 use crate::llm_config::LlmConfig;
-use crate::openai::tools::{OpenApiField, Tool, ToolChoice};
-use crate::openai::{CallConfig, Content, OpenAiCallResult, openai_call_with_timeout};
+use crate::openai::{CallConfig, openai_single_tool_call};
 use crate::pgvector::search;
 use crate::quiz::error::QuizError;
 use crate::quiz::max_five_random_exam_questions;
@@ -9,24 +8,36 @@ use async_openai::types::chat::{
     ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
     ChatCompletionRequestUserMessageContent,
 };
-use async_trait::async_trait;
 use hikari_config::module::content::ContentExam;
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingQueryResult;
 use hikari_model::quiz::question::Question;
 use hikari_model::quiz::question::QuestionType;
 use hikari_model_tools::convert::IntoModel;
-use num_traits::cast::ToPrimitive;
 use rand::rng;
 use rand::seq::{IndexedRandom, SliceRandom};
+use schemars::JsonSchema;
 use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
-use serde::Serialize;
-use serde_json::Value;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::vec;
+use tracing::instrument;
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[schemars(
+    description = "Dieses Tool verarbeitet und speichert die Bewertung einer Antwort auf eine Prüfungsfrage. \
+        Immer verwenden, wenn eine Bewertung einer Antwort erzeugt werden soll. \
+        Es erwartet eine Bewertung (grade) von 0 bis 5, eine textliche Begründung (evaluation) für die Bewertung, sowie Verbesserungsvorschläge (evaluation)."
+)]
+struct Evaluation {
+    /// Bewertung der Antwort von 0 (schlecht) bis 5 (perfekt)
+    grade: i32,
+    /// Hier eine Bewertung in ganzen Sätzen.
+    evaluation: String,
+}
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip(question, exams, llm_config, conn))]
 pub async fn evaluate_answer(
     user_id: &Uuid,
     module_id: &str,
@@ -263,117 +274,58 @@ pub async fn evaluate_answer(
     let openai_config = llm_config.get_quiz_openai_config();
     let model = llm_config.get_quiz_model();
 
-    let llm_response = openai_call_with_timeout(
+    let (evaluation, tokens) = openai_single_tool_call::<Evaluation>(
         CallConfig::builder()
             .total_timeout(Duration::from_secs(120))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,
-        false,
+        None,
         None,
         model,
         prompt_messages,
-        vec![Box::new(EvaluationTool {})],
-        Some(ToolChoice::Required),
     )
     .await?;
 
-    let llm_response = match llm_response {
-        OpenAiCallResult::Stream(_) => Err(QuizError::UnexpectedResponseFormat),
-        OpenAiCallResult::Message(msg) => Ok(msg),
-    }?;
-
-    if let Some(usage) = llm_response.tokens {
+    if let Some(usage) = tokens {
         hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_generation".to_owned()).await?;
     }
 
-    if let Content::Tool(tool_calls) = llm_response.content {
-        let first = tool_calls
-            .into_iter()
-            .next()
-            .ok_or(QuizError::UnexpectedResponseFormat)?;
-        let arguments = first.arguments;
+    let score_adjustment = f64::from(evaluation.grade) - 2.5;
+    tracing::debug!(grade = evaluation.grade, %score_adjustment, "evaluation result received");
 
-        // FIXME: These should probably be checked
-        let grade = arguments
-            .get("grade")
-            .expect("missing grade")
-            .as_f64()
-            .unwrap_or(0.0)
-            .to_i32()
-            .unwrap_or(0);
-        let evaluation = arguments
-            .get("evaluation")
-            .expect("missing evaluation")
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+    let current_score: f64 =
+        (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
+            .await?)
+            .unwrap_or(0.0);
 
-        let score_adjustment = f64::from(grade) - 2.5;
+    let mut new_score: f64 = current_score + score_adjustment;
 
-        let current_score: f64 =
-            (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
-                .await?)
-                .unwrap_or(0.0);
+    // Clamp the new_score between 0.0 and 30.0
+    new_score = new_score.clamp(0.0, 30.0);
 
-        let mut new_score: f64 = current_score + score_adjustment;
+    hikari_db::quiz::score::Mutation::upsert_score(
+        conn,
+        user_id,
+        module_id,
+        &question_session_id,
+        &question_topic,
+        &new_score,
+    )
+    .await?;
 
-        // Clamp the new_score between 0.0 and 30.0
-        new_score = new_score.clamp(0.0, 30.0);
+    let updated_question = hikari_db::quiz::question::Mutation::add_evaluation(
+        conn,
+        &question.id,
+        answer,
+        &evaluation.evaluation,
+        &evaluation.grade,
+    )
+    .await?;
 
-        hikari_db::quiz::score::Mutation::upsert_score(
-            conn,
-            user_id,
-            module_id,
-            &question_session_id,
-            &question_topic,
-            &new_score,
-        )
-        .await?;
+    let question_model: Question = updated_question.into_model();
 
-        let updated_question =
-            hikari_db::quiz::question::Mutation::add_evaluation(conn, &question.id, answer, &evaluation, &grade)
-                .await?;
-
-        let question_model: Question = updated_question.into_model();
-
-        Ok(question_model)
-    } else {
-        Err(QuizError::UnexpectedResponseFormat)
-    }
-}
-
-#[derive(Serialize)]
-pub struct EvaluationTool {}
-
-#[async_trait]
-impl Tool for EvaluationTool {
-    fn name(&self) -> &'static str {
-        "EvaluationTool"
-    }
-
-    fn description(&self) -> &'static str {
-        "Dieses Tool verarbeitet und speichert die Bewertung einer Antwort auf eine Prüfungsfrage. \
-        Immer verwenden, wenn eine Bewertung einer Antwort erzeugt werden soll. \
-        Es erwartet eine Bewertung (grade) von 0 bis 5, eine textliche Begründung (evaluation) für die Bewertung, sowie Verbesserungsvorschläge (evaluation)."
-    }
-
-    fn parameters(&self) -> Value {
-        let field = OpenApiField::object()
-            .properties(HashMap::from([
-                (
-                    "grade",
-                    OpenApiField::new("number").description("Bewertung der Antwort von 0 (schlecht) bis 5 (perfekt)"),
-                ),
-                (
-                    "evaluation",
-                    OpenApiField::new("string").description("Hier eine Bewertung in ganzen Sätzen."),
-                ),
-            ]))
-            .required(vec!["grade", "evaluation"]);
-
-        serde_json::to_value(field).expect("Serialization failed that should not fail")
-    }
+    Ok(question_model)
 }
 
 fn random_perfect_evaluation_response() -> &'static str {

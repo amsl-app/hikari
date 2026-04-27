@@ -12,6 +12,7 @@ use crate::builder::steps::summarizer::SummarizerBuilder;
 use crate::builder::steps::validator::ValidatorBuilder;
 use crate::execution::steps::LlmStep;
 use crate::execution::steps::combined_step::CombinedStep;
+use hikari_core::openai::ReasoningEffort;
 use hikari_utils::values::ValueDecoder;
 use indexmap::{IndexMap, indexmap};
 use llm::MemorySelector;
@@ -78,6 +79,8 @@ pub struct LlmModel {
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasining_effort: Option<ReasoningEffort>,
 }
 
 impl LlmModel {
@@ -85,6 +88,7 @@ impl LlmModel {
         Self {
             temperature: self.temperature.or(Some(temp)),
             model: self.model,
+            reasining_effort: self.reasining_effort,
         }
     }
 }

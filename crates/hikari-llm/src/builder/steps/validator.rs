@@ -13,9 +13,7 @@ use crate::execution::steps::LlmStep;
 use crate::execution::steps::conversation_validator::ConversationValidator;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::json;
 use std::collections::HashMap;
-use std::hash::BuildHasher;
 use yaml_serde::Value;
 
 const PROMPT_KEY: &str = "VALIDATOR_PREFIX";
@@ -25,7 +23,7 @@ const TEMPERATURE_KEY: &str = "VALIDATOR_TEMPERATURE";
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConversationGoal {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Template,
+    pub name: String,
     pub goal: Template,
     #[serde(default)]
     pub examples: Vec<Template>,
@@ -34,7 +32,6 @@ pub struct ConversationGoal {
 impl SlotsTrait for ConversationGoal {
     fn injection_slots(&self) -> Vec<SlotPath> {
         let mut slots = self.goal.injection_slots();
-        slots.extend(self.name.injection_slots());
         slots.extend(self.examples.iter().flat_map(super::SlotsTrait::injection_slots));
         slots
     }
@@ -43,7 +40,7 @@ impl SlotsTrait for ConversationGoal {
 impl InjectionTrait for ConversationGoal {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         ConversationGoal {
-            name: self.name.inject(values),
+            name: self.name.clone(),
             goal: self.goal.inject(values),
             examples: self.examples.iter().map(|e| e.inject(values)).collect(),
         }
@@ -152,41 +149,5 @@ impl IntoLlmStep for ValidatorBuilder {
             validation_type,
         ));
         Ok(conversation_validator)
-    }
-}
-
-impl<S: BuildHasher + Default> From<ConversationGoal> for HashMap<String, serde_json::Value, S> {
-    fn from(value: ConversationGoal) -> Self {
-        let name = value.name.to_string();
-        let goal = value.goal.to_string();
-        let examples = value
-            .examples
-            .iter()
-            .map(|e| format!("- {e}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        let value_description =
-            format!("True, wenn das Konversationsziel '''{name}''' erfüllt ist: {goal}\n Beispiele:\n{examples}");
-        let explaination_description =
-            format!("Erkläre, deinen Gedanken, warum du für '''{name}''' so entschieden hast.");
-        vec![
-            (
-                format!("{name}_decision"),
-                json!({
-                    "type": "boolean",
-                    "description": value_description
-                }),
-            ),
-            (
-                name,
-                json!({
-                    "type": "string",
-                    "description": explaination_description
-                }),
-            ),
-        ]
-        .into_iter()
-        .collect()
     }
 }

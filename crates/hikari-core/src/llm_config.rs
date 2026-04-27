@@ -19,7 +19,7 @@ pub struct LlmFeatureConfig {
 pub struct LlmConfig {
     openai: LlmServiceConfig,
     gwdg: LlmServiceConfig,
-    custom: LlmServiceConfig,
+    kit: LlmServiceConfig,
     pub embedding_config: LlmFeatureConfig,
     pub journaling_config: LlmFeatureConfig,
     pub quiz_config: LlmFeatureConfig,
@@ -51,9 +51,9 @@ impl From<LlmServiceArgs> for LlmConfig {
                 key: config.gwdg_key,
                 default_model: config.gwdg_default_model,
             },
-            custom: LlmServiceConfig {
-                key: config.win_key,
-                default_model: config.win_default_model,
+            kit: LlmServiceConfig {
+                key: config.kit_key,
+                default_model: config.kit_default_model,
             },
             embedding_config: LlmFeatureConfig {
                 service: embedding_service,
@@ -76,7 +76,7 @@ impl LlmConfig {
     pub fn new(
         openai: LlmServiceConfig,
         gwdg: LlmServiceConfig,
-        custom: LlmServiceConfig,
+        kit: LlmServiceConfig,
         embeddings: LlmFeatureConfig,
         journaling: LlmFeatureConfig,
         quiz: LlmFeatureConfig,
@@ -84,7 +84,7 @@ impl LlmConfig {
         Self {
             openai,
             gwdg,
-            custom,
+            kit,
             embedding_config: embeddings,
             journaling_config: journaling,
             quiz_config: quiz,
@@ -98,7 +98,8 @@ impl LlmConfig {
         match service {
             LlmService::OpenAI => self.openai.default_model.as_deref().unwrap_or("gpt-4.1-mini"),
             LlmService::Gwdg => self.gwdg.default_model.as_deref().unwrap_or("llama-3.3-70b-instruct"),
-            LlmService::Custom(_) => self.custom.default_model.as_deref().unwrap_or("llama-3.3-8b-instruct"),
+            LlmService::KIT => self.kit.default_model.as_deref().unwrap_or("minimax-m2.7-229b"),
+            LlmService::Custom(_) => "llama-3.3-8b-instruct", // Should be defined in the agent config manually
         }
     }
 
@@ -107,7 +108,8 @@ impl LlmConfig {
         match service {
             LlmService::OpenAI => self.openai.key.as_deref(),
             LlmService::Gwdg => self.gwdg.key.as_deref(),
-            LlmService::Custom(_) => self.custom.key.as_deref(),
+            LlmService::KIT => self.kit.key.as_deref(),
+            LlmService::Custom(_) => None,
         }
     }
 

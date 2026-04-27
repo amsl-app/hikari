@@ -25,6 +25,7 @@ pub enum LlmService {
     #[default]
     OpenAI,
     Gwdg,
+    KIT,
     Custom(Url),
 }
 
@@ -35,6 +36,10 @@ impl FromStr for LlmService {
         match s.to_lowercase().as_str() {
             "openai" => Ok(LlmService::OpenAI),
             "gwdg" => Ok(LlmService::Gwdg),
+            "kit" => Ok(LlmService::KIT),
+            url if url.starts_with("http://") || url.starts_with("https://") => Url::parse(url)
+                .map(LlmService::Custom)
+                .map_err(LlmServiceError::InvalidUrl),
             _ => Err(LlmServiceError::UnknownService(s.to_string())),
         }
     }
@@ -46,6 +51,7 @@ impl LlmService {
         match self {
             LlmService::OpenAI => "https://api.openai.com/v1".into(),
             LlmService::Gwdg => "https://chat-ai.academiccloud.de/v1".into(),
+            LlmService::KIT => "https://ki-toolbox.scc.kit.edu/api/v1".into(),
             LlmService::Custom(url) => Cow::from(url.as_str()),
         }
     }
