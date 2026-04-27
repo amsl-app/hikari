@@ -20,6 +20,7 @@ use hikari_utils::loader::error::LoadingError;
 use hikari_utils::loader::{Loader, LoaderHandler, LoaderTrait};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sea_orm::DatabaseConnection;
+use tokio::sync::{Mutex, OnceCell};
 use tracing::instrument;
 use url::Url;
 
@@ -50,8 +51,8 @@ pub async fn upload_documents(
         let pgvector_document = PgVectorDocument {
             id: file_id.clone(),
             exclude,
-            load_fn: Some(load_file),
-            loaded_file: None,
+            load_fn: Mutex::new(Some(load_file)),
+            loaded_file: OnceCell::new(),
             name,
             link,
             kind,

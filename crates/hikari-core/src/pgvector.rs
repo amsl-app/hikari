@@ -47,7 +47,7 @@ impl PgVector<'_> {
     #[instrument(skip_all, fields(?file_metadata), ret, err(level = Level::ERROR))]
     pub async fn upsert_file(
         &self,
-        mut document: PgVectorDocument,
+        document: PgVectorDocument,
         file_metadata: Option<FileMetadata>,
     ) -> Result<bool, PgVectorError> {
         let existing_file = vector_db::document::Query::get_file(self.conn, document.id()).await?;

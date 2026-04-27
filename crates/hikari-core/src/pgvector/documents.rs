@@ -6,6 +6,7 @@ use std::pin::Pin;
 use futures::{FutureExt, future::BoxFuture};
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingChunk;
 use hikari_utils::loader::{error::LoadingError, file::File};
+use tokio::sync::{Mutex, OnceCell};
 use tracing::instrument;
 
 use crate::pgvector::{embedder::Embedder, error::PgVectorError};
@@ -19,46 +20,7 @@ pub trait PgVectorDocumentTrait: Send {
 
     fn link(&self) -> &str;
 
-    fn get_load_fn(&mut self) -> Option<RagDocumentLoaderFn>;
-
-    fn get_loaded_file(&self) -> Option<&File>;
-
-    fn set_loaded_file(&mut self, file: File) -> &File;
-
-    fn chunks<'a>(&'a mut self, embedder: &'a Embedder)
-    -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>>;
-
-    fn load_file(&mut self) -> BoxFuture<'_, Result<File, LoadingError>> {
-        async move {
-            if let Some(load_fn) = self.get_load_fn() {
-                let file = load_fn().await?;
-                Ok(self.set_loaded_file(file).clone())
-            } else {
-                Err(LoadingError::FileAlreadyLoaded)
-            }
-        }
-        .boxed()
-    }
-
-    fn file(&mut self) -> BoxFuture<'_, Result<&File, LoadingError>> {
-        async move {
-            // Note: The nicer implementation (see below) is currently not possible because of the infamous Problem Case #3.
-            // See https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
-            // let Some(loaded_file) = self.get_loaded_file() else {
-            //     let file = self.load_file().await?;
-            //     return Ok(self.set_loaded_file(file));
-            // };
-            // Ok(loaded_file)
-            if self.get_loaded_file().is_none() {
-                let file = self.load_file().await?;
-                return Ok(self.set_loaded_file(file));
-            }
-            Ok(self
-                .get_loaded_file()
-                .expect("Option None that we just checked that it's not None"))
-        }
-        .boxed()
-    }
+    fn chunks<'a>(&'a self, embedder: &'a Embedder) -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,15 +34,32 @@ pub struct PgVectorDocument {
 
     pub exclude: Vec<usize>, // Pages to exclude
 
-    pub load_fn: Option<RagDocumentLoaderFn>,
+    pub load_fn: Mutex<Option<RagDocumentLoaderFn>>,
 
-    pub loaded_file: Option<File>,
+    pub loaded_file: OnceCell<File>,
 
     pub name: String,
 
     pub link: String,
 
     pub kind: ChunkKind,
+}
+
+impl PgVectorDocument {
+    fn file(&self) -> BoxFuture<'_, Result<&File, LoadingError>> {
+        async move {
+            self.loaded_file
+                .get_or_try_init(|| async {
+                    let mut load_fn_guard = self.load_fn.lock().await;
+                    let Some(load_fn) = load_fn_guard.take() else {
+                        return Err(LoadingError::FileAlreadyLoaded);
+                    };
+                    load_fn().await
+                })
+                .await
+        }
+        .boxed()
+    }
 }
 
 impl PgVectorDocumentTrait for PgVectorDocument {
@@ -96,31 +75,15 @@ impl PgVectorDocumentTrait for PgVectorDocument {
         &self.link
     }
 
-    fn get_load_fn(&mut self) -> Option<RagDocumentLoaderFn> {
-        self.load_fn.take()
-    }
-
-    fn get_loaded_file(&self) -> Option<&File> {
-        self.loaded_file.as_ref()
-    }
-
-    fn set_loaded_file(&mut self, file: File) -> &File {
-        self.loaded_file.insert(file)
-    }
-
     #[instrument(skip_all, fields(id = self.id, kind = ?self.kind))]
-    fn chunks<'a>(
-        &'a mut self,
-        embedder: &'a Embedder,
-    ) -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>> {
+    fn chunks<'a>(&'a self, embedder: &'a Embedder) -> BoxFuture<'a, Result<Vec<LlmEmbeddingChunk>, PgVectorError>> {
         async move {
-            let kind = self.kind;
-            let exclude = self.exclude.clone();
-            let file = self.file().await?.clone();
+            let file = self.file().await?;
+            let exclude = &self.exclude;
 
-            match kind {
-                ChunkKind::Text => text::chunks(&file, &exclude, embedder).await,
-                ChunkKind::Slides => slides::chunks(&file, &exclude, embedder).await,
+            match self.kind {
+                ChunkKind::Text => text::chunks(file, exclude, embedder).await,
+                ChunkKind::Slides => slides::chunks(file, exclude, embedder).await,
             }
         }
         .boxed()
