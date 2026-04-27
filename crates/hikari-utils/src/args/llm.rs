@@ -1,4 +1,6 @@
 use clap::Args;
+use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 use thiserror::Error;
@@ -10,6 +12,65 @@ pub struct LlmServices {
     pub llm_config: Vec<LlmServiceArg>,
     #[arg(long, required = false)]
     pub llm_feature_config: Vec<LlmFeatureArg>,
+}
+
+#[derive(Debug, Clone, Args)]
+#[allow(clippy::struct_field_names)]
+pub struct LlmConfig {
+    #[arg(long, required = false)]
+    pub llm_structures: Option<Url>,
+    #[arg(long, required = false)]
+    pub llm_collections: Url,
+    #[arg(long, required = false, help = "The url were the constants are stored")]
+    pub constants: Option<Url>,
+}
+
+#[derive(Debug)]
+enum KeyValueMapError {
+    MissingSeparator(String),
+    EmptyValue(String),
+    MissingId,
+}
+
+trait IdField {
+    const FIELD: &'static str;
+}
+
+struct ParsedValues<I: IdField> {
+    id: String,
+    values: HashMap<String, String>,
+    _marker: PhantomData<I>,
+}
+
+fn parse_key_value_map<I: IdField>(input: &str) -> Result<ParsedValues<I>, KeyValueMapError> {
+    let mut values = HashMap::new();
+
+    for part in input.split(',').map(str::trim).filter(|part| !part.is_empty()) {
+        let (name, value) = part
+            .split_once('=')
+            .map(|(name, value)| (name.trim(), value.trim()))
+            .ok_or_else(|| KeyValueMapError::MissingSeparator(part.to_string()))?;
+
+        if value.is_empty() {
+            return Err(KeyValueMapError::EmptyValue(name.to_string()));
+        }
+
+        values.insert(name.to_owned(), value.to_owned());
+    }
+
+    let id = values.remove(I::FIELD).ok_or(KeyValueMapError::MissingId)?;
+
+    Ok(ParsedValues {
+        id,
+        values,
+        _marker: PhantomData,
+    })
+}
+
+struct ServiceIdField;
+
+impl IdField for ServiceIdField {
+    const FIELD: &'static str = "service";
 }
 
 #[derive(Debug, Clone)]
@@ -41,41 +102,21 @@ pub enum LlmServiceArgError {
     InvalidService(String),
 }
 
-impl FromStr for LlmServiceArg {
-    type Err = LlmServiceArgError;
+impl TryFrom<ParsedValues<ServiceIdField>> for LlmServiceArg {
+    type Error = LlmServiceArgError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut service = None;
-        let mut key = None;
-        let mut default_model = None;
+    fn try_from(mut parsed: ParsedValues<ServiceIdField>) -> Result<Self, Self::Error> {
+        let service_str = parsed.id;
+        let service = service_str
+            .parse::<LlmServiceType>()
+            .map_err(|_| LlmServiceArgError::InvalidService(service_str))?;
 
-        for part in s.split(',').map(str::trim).filter(|part| !part.is_empty()) {
-            let (name, value) = part
-                .split_once('=')
-                .map(|(name, value)| (name.trim(), value.trim()))
-                .ok_or_else(|| LlmServiceArgError::UnknownField(part.to_string()))?;
+        let key = parsed.values.remove("key");
+        let default_model = parsed.values.remove("default-model");
 
-            if value.is_empty() {
-                return Err(LlmServiceArgError::EmptyValue(name.to_string()));
-            }
-
-            match name {
-                "service" => {
-                    service = Some(
-                        value
-                            .parse::<LlmServiceType>()
-                            .map_err(|_| LlmServiceArgError::InvalidService(value.to_owned()))?,
-                    )
-                }
-                "key" => key = Some(value.to_owned()),
-                "default-model" => default_model = Some(value.to_owned()),
-                _ => return Err(LlmServiceArgError::UnknownField(name.to_string())),
-            }
+        if let Some((unknown, _)) = parsed.values.into_iter().next() {
+            return Err(LlmServiceArgError::UnknownField(unknown));
         }
-
-        let Some(service) = service else {
-            return Err(LlmServiceArgError::MissingService);
-        };
         if key.is_none() && default_model.is_none() {
             return Err(LlmServiceArgError::MissingSetting(service));
         }
@@ -86,6 +127,25 @@ impl FromStr for LlmServiceArg {
             default_model,
         })
     }
+}
+
+impl FromStr for LlmServiceArg {
+    type Err = LlmServiceArgError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let values = parse_key_value_map::<ServiceIdField>(s).map_err(|error| match error {
+            KeyValueMapError::MissingSeparator(part) => LlmServiceArgError::UnknownField(part),
+            KeyValueMapError::EmptyValue(name) => LlmServiceArgError::EmptyValue(name),
+            KeyValueMapError::MissingId => LlmServiceArgError::MissingService,
+        })?;
+        Self::try_from(values)
+    }
+}
+
+struct FeatureIdField;
+
+impl IdField for FeatureIdField {
+    const FIELD: &'static str = "feature";
 }
 
 #[derive(Debug, Clone)]
@@ -117,41 +177,21 @@ pub enum LlmFeatureArgError {
     InvalidFeature(String),
 }
 
-impl FromStr for LlmFeatureArg {
-    type Err = LlmFeatureArgError;
+impl TryFrom<ParsedValues<FeatureIdField>> for LlmFeatureArg {
+    type Error = LlmFeatureArgError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut feature = None;
-        let mut service = None;
-        let mut model = None;
+    fn try_from(mut parsed: ParsedValues<FeatureIdField>) -> Result<Self, Self::Error> {
+        let feature_str = parsed.id;
+        let feature = feature_str
+            .parse::<LlmFeatureType>()
+            .map_err(|_| LlmFeatureArgError::InvalidFeature(feature_str))?;
 
-        for part in s.split(',').map(str::trim).filter(|part| !part.is_empty()) {
-            let (name, value) = part
-                .split_once('=')
-                .map(|(name, value)| (name.trim(), value.trim()))
-                .ok_or_else(|| LlmFeatureArgError::UnknownField(part.to_string()))?;
+        let service = parsed.values.remove("service");
+        let model = parsed.values.remove("model");
 
-            if value.is_empty() {
-                return Err(LlmFeatureArgError::EmptyValue(name.to_string()));
-            }
-
-            match name {
-                "feature" => {
-                    feature = Some(
-                        value
-                            .parse::<LlmFeatureType>()
-                            .map_err(|_| LlmFeatureArgError::InvalidFeature(value.to_owned()))?,
-                    )
-                }
-                "service" => service = Some(value.to_owned()),
-                "model" => model = Some(value.to_owned()),
-                _ => return Err(LlmFeatureArgError::UnknownField(name.to_string())),
-            }
+        if let Some((unknown, _)) = parsed.values.into_iter().next() {
+            return Err(LlmFeatureArgError::UnknownField(unknown));
         }
-
-        let Some(feature) = feature else {
-            return Err(LlmFeatureArgError::MissingFeature);
-        };
         if service.is_none() && model.is_none() {
             return Err(LlmFeatureArgError::MissingSetting(feature));
         }
@@ -164,15 +204,17 @@ impl FromStr for LlmFeatureArg {
     }
 }
 
-#[derive(Debug, Clone, Args)]
-#[allow(clippy::struct_field_names)]
-pub struct LlmConfig {
-    #[arg(long, required = false)]
-    pub llm_structures: Option<Url>,
-    #[arg(long, required = false)]
-    pub llm_collections: Url,
-    #[arg(long, required = false, help = "The url were the constants are stored")]
-    pub constants: Option<Url>,
+impl FromStr for LlmFeatureArg {
+    type Err = LlmFeatureArgError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let values = parse_key_value_map::<FeatureIdField>(s).map_err(|error| match error {
+            KeyValueMapError::MissingSeparator(part) => LlmFeatureArgError::UnknownField(part),
+            KeyValueMapError::EmptyValue(name) => LlmFeatureArgError::EmptyValue(name),
+            KeyValueMapError::MissingId => LlmFeatureArgError::MissingFeature,
+        })?;
+        Self::try_from(values)
+    }
 }
 
 #[cfg(test)]
@@ -194,7 +236,7 @@ mod tests {
             "test-bin",
             "--llm-config=service=kit,key=abc,default-model=model-a",
         ])
-            .expect("llm-config should parse");
+        .expect("llm-config should parse");
 
         let cfg = &cli.llm_services.llm_config[0];
         assert_eq!(cfg.service, LlmServiceType::Kit);
@@ -207,9 +249,11 @@ mod tests {
         let cli = TestCli::try_parse_from([
             "test-bin",
             "--llm-config=service=openai,key=openai-key",
-            "--other", "bar",
+            "--other",
+            "bar",
             "--llm-config=service=gwdg,default-model=llama",
-        ]).expect("repeated llm-config should parse");
+        ])
+        .expect("repeated llm-config should parse");
 
         assert_eq!(cli.llm_services.llm_config.len(), 2);
         assert_eq!(cli.llm_services.llm_config[0].service, LlmServiceType::Openai);
