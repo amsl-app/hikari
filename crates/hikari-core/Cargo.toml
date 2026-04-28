@@ -10,7 +10,7 @@ workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-async-openai = { version = "0.35.0", features = ["chat-completion", "embedding"] }
+async-openai = { version = "0.36.1", features = ["chat-completion", "embedding"] }
 base64 = "0.22.1"
 chrono = "0.4.42"
 futures-retry-policies = { version = "0.3.1", features = [
