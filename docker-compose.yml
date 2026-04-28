@@ -40,6 +40,7 @@ services:
 
       - "--llm-config=service=openai,key=${OPENAI_KEY}"
       - "--llm-config=service=gwdg,key=${GWDG_KEY}"
+      - "--llm-config=service=kit,key=${KIT_KEY}"
       - "--llm-feature-config=feature=journaling,service=${JOURNALING_SERVICE},model=${JOURNALING_MODEL}"
       - "--llm-feature-config=feature=embedding,service=${EMBEDDING_SERVICE},model=${EMBEDDING_MODEL}"
       - "--llm-feature-config=feature=quiz,service=${QUIZ_SERVICE},model=${QUIZ_MODEL}"
@@ -88,8 +89,9 @@ services:
 
       - "--llm-config=service=openai,key=${OPENAI_KEY}"
       - "--llm-config=service=gwdg,key=${GWDG_KEY}"
+      - "--llm-config=service=kit,key=${KIT_KEY}"
       - "--llm-feature-config=feature=journaling,service=${JOURNALING_SERVICE},model=${JOURNALING_MODEL}"
-
+      
       - "--s3-endpoint=${S3_ENDPOINT}"
       - "--s3-region=${S3_REGION}"
       - "--s3-access-key=${S3_ACCESS_KEY}"

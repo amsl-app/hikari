@@ -36,7 +36,7 @@ impl PromptResponse {
     }
 }
 
-#[instrument(skip(llm_config, conn))]
+#[instrument(skip(llm_config, conn), err)]
 pub async fn generate_prompt(
     user_id: &Uuid,
     prompt: String,
@@ -112,7 +112,7 @@ pub async fn generate_prompt(
     Ok(res)
 }
 
-#[instrument(skip(llm_config, conn))]
+#[instrument(skip(llm_config, conn), err)]
 pub async fn generate_text_prompt(
     user_id: &Uuid,
     prompts: Vec<String>,
@@ -231,7 +231,7 @@ impl MergeResponse {
     }
 }
 
-#[instrument(skip(llm_config, conn))]
+#[instrument(skip(llm_config, conn), err)]
 pub async fn merge_prompts(
     user_id: &Uuid,
     prompt_inputs: Vec<(String, String)>,
@@ -298,7 +298,7 @@ pub async fn merge_prompts(
     Ok(res)
 }
 
-#[instrument(skip(llm_config, conn))]
+#[instrument(skip(llm_config, conn), err)]
 pub async fn text_merge_prompts(
     user_id: &Uuid,
     original_input: String,

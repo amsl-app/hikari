@@ -228,7 +228,7 @@ impl PgVector<'_> {
     }
 }
 
-#[instrument(skip_all, fields(?file_metadata))]
+#[instrument(skip_all, fields(?file_metadata), err)]
 pub async fn upload_document(
     retriever: &PgVector<'_>,
     document: PgVectorDocument,

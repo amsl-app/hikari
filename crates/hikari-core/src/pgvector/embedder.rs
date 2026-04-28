@@ -18,7 +18,7 @@ impl Embedder {
         Self { model, client }
     }
 
-    #[instrument(skip_all, fields(model = %self.model))]
+    #[instrument(skip_all, fields(model = %self.model), err)]
     pub async fn embed<T: Into<Vec<String>>>(&self, texts: T) -> Result<Vec<Vec<f64>>, PgVectorError> {
         let text_vec = texts.into();
         if text_vec.is_empty() {

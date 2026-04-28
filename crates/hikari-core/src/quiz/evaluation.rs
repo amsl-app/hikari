@@ -37,7 +37,7 @@ struct Evaluation {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip(question, exams, llm_config, conn))]
+#[instrument(skip(question, exams, llm_config, conn), err)]
 pub async fn evaluate_answer(
     user_id: &Uuid,
     module_id: &str,

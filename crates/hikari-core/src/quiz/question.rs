@@ -77,7 +77,7 @@ struct MultipleChoiceOption {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[instrument(skip(exams, llm_config, conn))]
+#[instrument(skip(exams, llm_config, conn), err)]
 pub async fn create_question(
     user_id: &Uuid,
     session_id: &str,
