@@ -96,7 +96,7 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
         if let Some(tool_calls) = first.message.tool_calls {
             let tool_calls: Vec<ToolCallResponse> = tool_calls
                 .into_iter()
-                .map(std::convert::TryInto::try_into)
+                .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?;
 
             Ok(Message {
@@ -113,8 +113,8 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
             let text = if text.trim().is_empty() { None } else { Some(text) };
 
             let content_len = content.len();
-            let thinking_len = thinking.as_ref().map(std::string::String::len);
-            let text_len = text.as_ref().map(std::string::String::len);
+            let thinking_len = thinking.as_ref().map(String::len);
+            let text_len = text.as_ref().map(String::len);
 
             tracing::debug!(
                 content_len,
@@ -274,7 +274,7 @@ pub async fn openai_call_with_timeout(
 
     let tools = tools
         .into_iter()
-        .map(std::convert::TryInto::try_into)
+        .map(TryInto::try_into)
         .collect::<Result<Vec<ChatCompletionTools>, OpenAiError>>()?;
 
     request.tools(tools);
@@ -352,7 +352,7 @@ pub(crate) fn process_stream(
     start_time: Instant,
     service: String,
     model: String,
-) -> Pin<Box<dyn Stream<Item = Result<Message, crate::openai::error::StreamingError>> + Send>> {
+) -> Pin<Box<dyn Stream<Item = Result<Message, error::StreamingError>> + Send>> {
     let mut in_think_block = false;
     let mut buffer = String::new();
 
@@ -379,7 +379,7 @@ pub(crate) fn process_stream(
                     }
                 if let Some(tool_calls) = first.delta.tool_calls {
                     let tool_calls: Vec<ToolCallResponse> =
-                        tool_calls.into_iter().map(std::convert::TryInto::try_into).collect::<Result<_, _>>()?;
+                        tool_calls.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?;
 
                     yield Message {
                         content: Content::Tool(tool_calls),
