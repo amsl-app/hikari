@@ -12,7 +12,6 @@ workspace = true
 
 [dependencies]
 anyhow = "1.0"
-async-openai = { version = "0.35.0", features = ["chat-completion"] }
 axum = { version = "0.8.4", features = ["tracing", "ws"] }
 axum-auth = "0.8.1"
 axum-extra = { version = "0.12.6", features = ["cookie", "cookie-signed", "cached"] }
@@ -29,7 +28,6 @@ diesel = { version = "2.3.4", features = ["chrono", "uuid"] }
 diesel_migrations = { version = "2.3.1" }
 futures = { version = "0.3.32", features = ["async-await"] }
 futures-util = "0.3.31"
-html-escape = "0.2.13"
 hikari-common = { path = "../hikari-common" }
 hikari-core = { path = "../hikari-core" }
 hikari-db = { path = "../hikari-db" }

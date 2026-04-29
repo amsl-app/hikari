@@ -3000,11 +3000,9 @@ dependencies = [
  "csml_interpreter",
  "futures",
  "serde_json",
- "test-log",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "uuid",
 ]
 
@@ -3036,7 +3034,6 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "async-stream",
- "async-trait",
  "backoff",
  "base64 0.22.1",
  "chrono",
@@ -3051,7 +3048,6 @@ dependencies = [
  "hikari-utils",
  "html-escape",
  "metrics",
- "num-traits",
  "pdf-extract",
  "rand 0.10.1",
  "regex",
@@ -3088,7 +3084,6 @@ dependencies = [
  "test-log",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "uuid",
 ]
 
@@ -3196,7 +3191,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "typed-builder",
  "url",
 ]
@@ -3206,7 +3200,6 @@ name = "hikari-server"
 version = "0.3.10"
 dependencies = [
  "anyhow",
- "async-openai",
  "axum",
  "axum-auth",
  "axum-extra",
@@ -3233,7 +3226,6 @@ dependencies = [
  "hikari-oidc",
  "hikari-test-helpers",
  "hikari-utils",
- "html-escape",
  "http 1.4.0",
  "indexmap 2.14.0",
  "jsonwebtoken",
@@ -3290,7 +3282,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

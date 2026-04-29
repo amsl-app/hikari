@@ -28,7 +28,6 @@ hikari-entity = { path = "../hikari-entity" }
 
 [dev-dependencies]
 tokio = { version = "1.47.1", features = ["macros", "rt"] }
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "registry", "std"] }
 test-log = { version = "0.2.20", default-features = false, features = ["trace"] }
 
 [features]
