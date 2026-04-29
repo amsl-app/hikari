@@ -295,8 +295,8 @@ pub async fn evaluate_answer(
     tracing::debug!(grade = evaluation.grade, %score_adjustment, "evaluation result received");
 
     let current_score: f64 =
-        (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
-            .await?)
+        hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
+            .await?
             .unwrap_or(0.0);
 
     let mut new_score: f64 = current_score + score_adjustment;

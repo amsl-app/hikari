@@ -38,7 +38,7 @@ impl Mutation {
     }
 
     pub async fn remove_file(db: &DatabaseConnection, id: String) -> Result<(), DbErr> {
-        let file = hikari_entity::llm::vector::document::ActiveModel {
+        let file = document::ActiveModel {
             id: Set(id.clone()),
             ..Default::default()
         };

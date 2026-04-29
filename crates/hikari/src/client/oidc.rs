@@ -62,7 +62,7 @@ impl OidcClient {
             .map_err(|err| Error::Oidc(err.to_string()))?;
         token_response
             .id_token()
-            .map(std::string::ToString::to_string)
+            .map(ToString::to_string)
             .ok_or(Error::Oidc("Missing id Token in token response".to_owned()))
     }
 

@@ -1,4 +1,3 @@
-use crate::data;
 use crate::data::modules;
 use crate::db::error::DbError;
 use crate::routes::api::v0::{assessment, bots};
@@ -122,8 +121,8 @@ pub(crate) enum MessagingError {
     Exclusivity,
 }
 
-impl From<data::modules::error::ModuleError> for MessagingError {
-    fn from(error: data::modules::error::ModuleError) -> Self {
+impl From<modules::error::ModuleError> for MessagingError {
+    fn from(error: modules::error::ModuleError) -> Self {
         Self::Module(ModuleError::DataError(error))
     }
 }

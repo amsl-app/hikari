@@ -16,14 +16,8 @@ pub enum Tool {
 impl SlotsTrait for Tool {
     fn injection_slots(&self) -> Vec<SlotPath> {
         match self {
-            Tool::ValidationTool(goals) => goals
-                .iter()
-                .flat_map(super::steps::SlotsTrait::injection_slots)
-                .collect(),
-            Tool::ExtractionTool(values) => values
-                .iter()
-                .flat_map(super::steps::SlotsTrait::injection_slots)
-                .collect(),
+            Tool::ValidationTool(goals) => goals.iter().flat_map(SlotsTrait::injection_slots).collect(),
+            Tool::ExtractionTool(values) => values.iter().flat_map(SlotsTrait::injection_slots).collect(),
             Tool::Summarizer => vec![],
         }
     }
@@ -54,7 +48,7 @@ impl Tool {
                     let goal = output.goal.0.as_str().map_or_else(|| {
                         tracing::warn!("goal description could not be parsed as string, using default description 'default_description'");
                         output.goal.to_string()
-                    }, std::string::ToString::to_string);
+                    }, ToString::to_string);
 
                         let examples = if output.examples.is_empty() {
                                 String::new()
@@ -62,7 +56,7 @@ impl Tool {
                                 let example_strings = output
                                     .examples
                                     .iter()
-                                    .map(std::string::ToString::to_string)
+                                    .map(ToString::to_string)
                                     .collect::<Vec<_>>()
                                     .join("<sep>");
                                 format!("\n<examples>\n{example_strings}\n</examples>\n")

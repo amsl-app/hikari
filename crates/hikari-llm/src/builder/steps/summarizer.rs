@@ -37,7 +37,7 @@ impl SlotsTrait for SummarizerBuilder {
     fn injection_slots(&self) -> Vec<SlotPath> {
         self.prompts
             .iter()
-            .flat_map(super::SlotsTrait::injection_slots)
+            .flat_map(SlotsTrait::injection_slots)
             .collect::<Vec<_>>()
     }
 }

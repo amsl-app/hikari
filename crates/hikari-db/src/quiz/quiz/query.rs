@@ -42,7 +42,7 @@ impl Query {
 
     pub async fn get_quiz_sessions(db: &DatabaseConnection, quiz_id: &Uuid) -> Result<Vec<String>, DbErr> {
         let sessions = QuizSessions::find()
-            .filter(<QuizSessions as sea_orm::EntityTrait>::Column::QuizId.eq(*quiz_id))
+            .filter(<QuizSessions as EntityTrait>::Column::QuizId.eq(*quiz_id))
             .all(db)
             .await?;
 

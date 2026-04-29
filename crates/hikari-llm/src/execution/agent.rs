@@ -352,7 +352,7 @@ impl LlmAgent {
             self.conversation_id,
             message_order,
             message,
-            status.map(hikari_model_tools::convert::IntoDbModel::into_db_model),
+            status.map(IntoDbModel::into_db_model),
         )
         .await?;
         Ok(res.into_model())
