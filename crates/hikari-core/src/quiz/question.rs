@@ -258,7 +258,7 @@ pub async fn create_question(
 
     let (question, tokens) = openai_single_tool_call::<QuizQuestion>(
         CallConfig::builder()
-            .total_timeout(Duration::from_secs(120))
+            .total_timeout(Duration::from_mins(2))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,

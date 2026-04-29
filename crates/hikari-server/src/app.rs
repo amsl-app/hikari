@@ -94,7 +94,7 @@ pub async fn create_app(
 
     let refresh_jwk_client = Arc::clone(&jwk_client);
     task::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(60));
+        let mut interval = time::interval(Duration::from_mins(1));
         loop {
             interval.tick().await;
             if refresh_jwk_client.refresh() {
@@ -134,7 +134,7 @@ pub async fn create_app(
             Method::OPTIONS,
         ])
         .allow_credentials(true) // No credentials needed for login flow
-        .max_age(Duration::from_secs(3600));
+        .max_age(Duration::from_hours(1));
 
     // CORS for API routes - users have credentials for authenticated endpoints
     let api_cors = CorsLayer::new()
@@ -162,7 +162,7 @@ pub async fn create_app(
             Method::PATCH,
             Method::OPTIONS,
         ])
-        .max_age(Duration::from_secs(3600));
+        .max_age(Duration::from_hours(1));
 
     let mut app = Router::new()
         .merge(routes::swagger::create_router())

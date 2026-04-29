@@ -66,8 +66,8 @@ impl ReqwestHttpClient {
 
     async fn execute_request(&self, request: HttpRequest) -> Result<Response, Error> {
         let backoff_builder =
-            ExponentialBackoff::builder().retry_bounds(Duration::from_millis(500), Duration::from_secs(600));
-        let total_timeout = Duration::from_secs(60 * 15);
+            ExponentialBackoff::builder().retry_bounds(Duration::from_millis(500), Duration::from_mins(10));
+        let total_timeout = Duration::from_mins(15);
         let backoff = backoff_builder
             .build_with_total_retry_duration_and_max_retries(total_timeout)
             .for_task_started_at(Utc::now());
@@ -102,7 +102,7 @@ impl ReqwestHttpClient {
         let chunks = response.bytes().await?;
         let mut http_response = http::response::Response::builder().status(status_code);
         if let Some(header_map) = http_response.headers_mut() {
-            header_map.extend(headers.into_iter());
+            header_map.extend(headers);
         }
         http_response.body(chunks.to_vec()).map_err(Into::into)
     }

@@ -204,6 +204,9 @@ impl PgVector<'_> {
         );
 
         let rows = self.conn.query_all(statement).await?;
+        // The precision loss is fine here, as we are only using it for metrics.
+        // TODO use as_millis_f64() once it is stable
+        #[allow(clippy::cast_precision_loss)]
         metrics::histogram!("retrieval_time_ms").record(start.elapsed().as_millis() as f64);
         Self::handle_rows(&rows)
     }

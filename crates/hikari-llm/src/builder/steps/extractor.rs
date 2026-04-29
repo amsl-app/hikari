@@ -205,16 +205,16 @@ impl InjectionTrait for ExtractionSchema {
 impl<'a> AsOpenApiField<'a> for ExtractionSchema {
     fn openapi_field(&'a self) -> OpenApiField<'a> {
         let examples = if self.examples.is_empty() {
-            "".to_string()
+            String::new()
         } else {
             let example_strings = self
                 .examples
                 .iter()
-                .map(|e| e.to_string())
+                .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>()
                 .join("<sep>");
 
-            format!("\n<examples>\n{}\n</examples>\n", example_strings)
+            format!("\n<examples>\n{example_strings}\n</examples>\n")
         };
 
         let description = format!("{}{}", self.description, examples);
