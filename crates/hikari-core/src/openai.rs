@@ -31,6 +31,14 @@ pub mod error;
 pub mod streaming;
 pub mod tools;
 
+fn is_whitespace_only(data: &str) -> bool {
+    data.trim().is_empty()
+}
+
+fn reject_whitespace_only(data: String) -> Option<String> {
+    if is_whitespace_only(&data) { None } else { Some(data) }
+}
+
 #[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ReasoningEffort {
@@ -110,7 +118,7 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
 
             let text = THINKING_RE.replace_all(&content, "").to_string();
 
-            let text = if text.trim().is_empty() { None } else { Some(text) };
+            let text = reject_whitespace_only(text);
 
             let content_len = content.len();
             let thinking_len = thinking.as_ref().map(String::len);
@@ -395,11 +403,9 @@ pub(crate) fn process_stream(
                                 buffer.drain(..pos + 7);
                                 in_think_block = true;
 
-                                let text = if text.trim().is_empty() { None } else { Some(text) };
-
-                                if text.is_some() {
+                                if let Some(text) = reject_whitespace_only(text) {
                                     yield Message {
-                                        content: Content::Text { text, thinking: None },
+                                        content: Content::Text { text: Some(text), thinking: None },
                                         tokens: None,
                                     }
                                 }
@@ -412,8 +418,7 @@ pub(crate) fn process_stream(
                                     if "<think>".starts_with(remaining) {
                                         let to_yield = buffer[..last_lt].to_string();
                                         buffer.drain(..last_lt);
-                                        let to_yield = if to_yield.trim().is_empty() { None } else { Some(to_yield) };
-                                        if let Some(text) = to_yield {
+                                        if let Some(text) = reject_whitespace_only(to_yield) {
                                              yield Message {
                                                 content: Content::Text { text: Some(text), thinking: None },
                                                 tokens,
@@ -425,8 +430,7 @@ pub(crate) fn process_stream(
 
                                 let to_yield = buffer.clone();
                                 buffer.clear();
-                                let to_yield = if to_yield.trim().is_empty() { None } else { Some(to_yield) };
-                                if let Some(text) = to_yield {
+                                if let Some(text) = reject_whitespace_only(to_yield) {
                                     yield Message {
                                         content: Content::Text { text: Some(text), thinking: None },
                                         tokens,
@@ -439,7 +443,7 @@ pub(crate) fn process_stream(
                             buffer.drain(..pos + 8);
                             in_think_block = false;
 
-                            let thinking = if thinking.trim().is_empty() { None } else { Some(thinking) };
+                            let thinking = reject_whitespace_only(thinking);
 
                             yield Message {
                                 content: Content::Text { text: None, thinking },
@@ -453,8 +457,7 @@ pub(crate) fn process_stream(
                                 if "</think>".starts_with(remaining) {
                                     let to_yield = buffer[..last_lt].to_string();
                                     buffer.drain(..last_lt);
-                                    let to_yield = if to_yield.trim().is_empty() { None } else { Some(to_yield) };
-                                    if let Some(thinking) = to_yield {
+                                    if let Some(thinking) = reject_whitespace_only(to_yield) {
                                          yield Message {
                                             content: Content::Text { text: None, thinking: Some(thinking) },
                                             tokens,
@@ -466,8 +469,7 @@ pub(crate) fn process_stream(
 
                             let to_yield = buffer.clone();
                             buffer.clear();
-                            let to_yield = if to_yield.trim().is_empty() { None } else { Some(to_yield) };
-                            if let Some(thinking) = to_yield {
+                            if let Some(thinking) = reject_whitespace_only(to_yield) {
                                 yield Message {
                                     content: Content::Text { text: None, thinking: Some(thinking) },
                                     tokens,
