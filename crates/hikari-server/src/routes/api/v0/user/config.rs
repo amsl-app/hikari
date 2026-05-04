@@ -175,6 +175,7 @@ pub(crate) async fn delete_user_config(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[tracing::instrument(skip(conn, cfg, value), fields(user_id = %user_id, key), err)]
 pub(crate) async fn update_user_config<C: ConnectionTrait>(
     conn: &C,
     user_id: Uuid,
@@ -187,7 +188,6 @@ pub(crate) async fn update_user_config<C: ConnectionTrait>(
     if !allowed {
         return Err(UserError::InvalidKey);
     }
-
     config::Mutation::set_config_value(conn, user_id, key, serde_json::to_string(value)?).await?;
     Ok(())
 }

@@ -16,7 +16,7 @@ pub(crate) enum LoginError {
     #[error("Token ")]
     Invalid,
 
-    #[error("Database Error")]
+    #[error(transparent)]
     DatabaseError(#[from] DbErr),
 
     #[error("Error building response")]

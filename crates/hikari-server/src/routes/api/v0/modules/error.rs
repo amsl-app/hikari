@@ -49,10 +49,10 @@ pub(crate) enum ModuleError {
 
 #[derive(Error, Debug)]
 pub(crate) enum UserError {
-    #[error("Database error.")]
+    #[error(transparent)]
     DBError(#[from] DbError),
 
-    #[error("Database error.")]
+    #[error(transparent)]
     SeaOrmError(#[from] DbErr),
 
     #[error("Error creating response json")]

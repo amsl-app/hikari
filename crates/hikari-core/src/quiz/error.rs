@@ -8,7 +8,7 @@ pub enum QuizError {
     #[error("OpenAI error: {0}")]
     OpenAi(#[from] OpenAiError),
 
-    #[error("Database error: {0}")]
+    #[error(transparent)]
     Database(#[from] DbErr),
 
     #[error("Vector search error: {0}")]

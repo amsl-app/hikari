@@ -55,7 +55,7 @@ CREATE TABLE custom_groups (
 CREATE TABLE user_configs (
     user_id BLOB not null,
     key varchar(255) not null,
-    value varchar(1024) not null,
+    value text not null,
     PRIMARY KEY (user_id, key),
     FOREIGN KEY (user_id) REFERENCES "users" (id) ON DELETE CASCADE
 );

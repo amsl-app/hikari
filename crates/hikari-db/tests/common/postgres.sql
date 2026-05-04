@@ -15,7 +15,7 @@ create table user_configs
 (
     user_id UUID          not null references users (id) on delete cascade,
     key     varchar(255)  not null,
-    value   varchar(1024) not null,
+    value   text not null,
     PRIMARY KEY (user_id, key)
 );
 

@@ -1,0 +1,1 @@
+ALTER TABLE user_configs ALTER column value TYPE varchar(1024);

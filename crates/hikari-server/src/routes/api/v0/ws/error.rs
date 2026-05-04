@@ -14,7 +14,7 @@ pub enum WsError {
     // ModuleError(data::modules::Error),
     #[error("Json Error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("Database Error")]
+    #[error(transparent)]
     Database(#[from] sea_orm::error::DbErr),
     #[error("Csml Error")]
     CsmlError(#[from] csml_engine::data::EngineError),

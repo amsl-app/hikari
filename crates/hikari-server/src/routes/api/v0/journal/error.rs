@@ -6,10 +6,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub(crate) enum JournalError {
-    #[error("Database error.")]
+    #[error(transparent)]
     DBError(#[from] DbError),
 
-    #[error("Database error.")]
+    #[error(transparent)]
     SeaOrmError(#[from] DbErr),
 
     #[error("Error creating response json")]
