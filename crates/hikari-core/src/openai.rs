@@ -226,7 +226,7 @@ impl TryFrom<ChatCompletionMessageToolCallChunk> for ToolCallResponse {
 pub struct CallConfig {
     #[builder(default = Duration::from_secs(30))]
     total_timeout: Duration,
-    #[builder(default = Duration::from_secs(10))]
+    #[builder(default = Duration::from_secs(20))]
     iteration_timeout: Duration,
     #[builder(default = Duration::from_millis(500))]
     min_retry_interval: Duration,
@@ -294,13 +294,18 @@ pub async fn openai_call_with_timeout(
 
     let request = request.build()?;
 
-    let http_client = reqwest::Client::builder()
-        .timeout(config.iteration_timeout)
-        .build()
-        .map_err(|error| {
-            tracing::error!(error = &error as &dyn Error, "failed to build http client for openai");
-            OpenAiError::HttpClientBuild(error)
-        })?;
+    let mut http_client_builder = reqwest::Client::builder();
+    if streaming {
+        // For streaming, only set a connect timeout — a full response timeout would kill
+        // long-running streams before they complete.
+        http_client_builder = http_client_builder.connect_timeout(config.iteration_timeout);
+    } else {
+        http_client_builder = http_client_builder.timeout(config.iteration_timeout);
+    }
+    let http_client = http_client_builder.build().map_err(|error| {
+        tracing::error!(error = &error as &dyn Error, "failed to build http client for openai");
+        OpenAiError::HttpClientBuild(error)
+    })?;
 
     let mut backoff_builder = ExponentialBackoffBuilder::default();
     backoff_builder
