@@ -31,12 +31,8 @@ pub mod error;
 pub mod streaming;
 pub mod tools;
 
-fn is_whitespace_only(data: &str) -> bool {
-    data.trim().is_empty()
-}
-
-fn reject_whitespace_only(data: String) -> Option<String> {
-    if is_whitespace_only(&data) { None } else { Some(data) }
+fn reject_empty(data: String) -> Option<String> {
+    if data.is_empty() { None } else { Some(data) }
 }
 
 #[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
@@ -114,11 +110,11 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
         } else if let Some(content) = first.message.content {
             let thinking = THINKING_RE
                 .captures(&content)
-                .and_then(|caps| caps.get(1).map(|t| t.as_str().trim().to_string()));
+                .and_then(|caps| caps.get(1).map(|t| t.as_str().to_string()));
 
             let text = THINKING_RE.replace_all(&content, "").to_string();
 
-            let text = reject_whitespace_only(text);
+            let text = reject_empty(text);
 
             let content_len = content.len();
             let thinking_len = thinking.as_ref().map(String::len);
@@ -165,7 +161,7 @@ impl TryFrom<ChatCompletionMessageToolCall> for ToolCallResponse {
         let FunctionCall { name, arguments } = value.function;
         let thinking = THINKING_RE
             .captures(&arguments)
-            .and_then(|caps| caps.get(1).map(|t| t.as_str().trim().to_string()));
+            .and_then(|caps| caps.get(1).map(|t| t.as_str().to_string()));
         let arguments = THINKING_RE.replace_all(&arguments, "").to_string();
         let arguments_len = arguments.len();
         let arguments = Value::from_str(&arguments)?;
@@ -209,7 +205,7 @@ impl TryFrom<ChatCompletionMessageToolCallChunk> for ToolCallResponse {
         {
             let thinking = THINKING_RE
                 .captures(&arguments)
-                .and_then(|caps| caps.get(1).map(|t| t.as_str().trim().to_string()));
+                .and_then(|caps| caps.get(1).map(|t| t.as_str().to_string()));
             let arguments = THINKING_RE.replace_all(&arguments, "").to_string();
             tracing::debug!(arguments = &arguments, "cleaned function call arguments");
 
@@ -406,7 +402,7 @@ pub(crate) fn process_stream(
                                 buffer.drain(..pos + 7);
                                 in_think_block = true;
 
-                                if let Some(text) = reject_whitespace_only(text) {
+                                if let Some(text) = reject_empty(text) {
                                     yield Message {
                                         content: Content::Text { text: Some(text), thinking: None },
                                         tokens: None,
@@ -421,7 +417,7 @@ pub(crate) fn process_stream(
                                     if "<think>".starts_with(remaining) {
                                         let to_yield = buffer[..last_lt].to_string();
                                         buffer.drain(..last_lt);
-                                        if let Some(text) = reject_whitespace_only(to_yield) {
+                                        if let Some(text) = reject_empty(to_yield) {
                                              yield Message {
                                                 content: Content::Text { text: Some(text), thinking: None },
                                                 tokens,
@@ -433,7 +429,7 @@ pub(crate) fn process_stream(
 
                                 let to_yield = buffer.clone();
                                 buffer.clear();
-                                if let Some(text) = reject_whitespace_only(to_yield) {
+                                if let Some(text) = reject_empty(to_yield) {
                                     yield Message {
                                         content: Content::Text { text: Some(text), thinking: None },
                                         tokens,
@@ -446,7 +442,7 @@ pub(crate) fn process_stream(
                             buffer.drain(..pos + 8);
                             in_think_block = false;
 
-                            let thinking = reject_whitespace_only(thinking);
+                            let thinking = reject_empty(thinking);
 
                             yield Message {
                                 content: Content::Text { text: None, thinking },
@@ -460,7 +456,7 @@ pub(crate) fn process_stream(
                                 if "</think>".starts_with(remaining) {
                                     let to_yield = buffer[..last_lt].to_string();
                                     buffer.drain(..last_lt);
-                                    if let Some(thinking) = reject_whitespace_only(to_yield) {
+                                    if let Some(thinking) = reject_empty(to_yield) {
                                          yield Message {
                                             content: Content::Text { text: None, thinking: Some(thinking) },
                                             tokens,
@@ -472,7 +468,7 @@ pub(crate) fn process_stream(
 
                             let to_yield = buffer.clone();
                             buffer.clear();
-                            if let Some(thinking) = reject_whitespace_only(to_yield) {
+                            if let Some(thinking) = reject_empty(to_yield) {
                                 yield Message {
                                     content: Content::Text { text: None, thinking: Some(thinking) },
                                     tokens,
