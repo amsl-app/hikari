@@ -297,8 +297,14 @@ pub async fn openai_call_with_timeout(
     let mut http_client_builder = reqwest::Client::builder();
     if streaming {
         // For streaming, only set a connect timeout — a full response timeout would kill
-        // long-running streams before they complete.
-        http_client_builder = http_client_builder.connect_timeout(config.iteration_timeout);
+        // long-running streams before they complete. Also disable auto-decompression since
+        // SSE streams cannot be gzip-decoded incrementally.
+        http_client_builder = http_client_builder
+            .connect_timeout(config.iteration_timeout)
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .no_zstd();
     } else {
         http_client_builder = http_client_builder.timeout(config.iteration_timeout);
     }

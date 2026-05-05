@@ -93,7 +93,7 @@ impl LlmCore {
             CallConfig::builder()
                 .max_retry_interval(Duration::from_secs(1))
                 .total_timeout(Duration::from_secs(30))
-                .iteration_timeout(Duration::from_secs(5))
+                .iteration_timeout(Duration::from_secs(15))
                 .build(),
             openai_config,
             false,
