@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use async_openai::config::OpenAIConfig;
 use hikari_config::module::llm_agent::LlmService;
-use hikari_utils::args::llm::LlmServices as LlmServiceArgs;
+use hikari_utils::args::llm::{LlmFeatureType, LlmServiceType, LlmServices as LlmServiceArgs};
 #[derive(Debug, Clone)]
 pub struct LlmServiceConfig {
     pub key: Option<String>,
@@ -27,46 +27,69 @@ pub struct LlmConfig {
 
 impl From<LlmServiceArgs> for LlmConfig {
     fn from(config: LlmServiceArgs) -> LlmConfig {
-        let embedding_service = config
-            .embedding_service
-            .as_deref()
-            .map(|s| LlmService::from_str(s).expect("Invalid embedding_service string"));
+        let mut openai = LlmServiceConfig {
+            key: None,
+            default_model: None,
+        };
+        let mut gwdg = LlmServiceConfig {
+            key: None,
+            default_model: None,
+        };
+        let mut kit = LlmServiceConfig {
+            key: None,
+            default_model: None,
+        };
 
-        let journaling_service = config
-            .journaling_service
-            .as_deref()
-            .map(|s| LlmService::from_str(s).expect("Invalid journaling_service string"));
+        for service_config in config.llm_config {
+            let target = match service_config.service {
+                LlmServiceType::Openai => &mut openai,
+                LlmServiceType::Gwdg => &mut gwdg,
+                LlmServiceType::Kit => &mut kit,
+            };
 
-        let quiz_service = config
-            .quiz_service
-            .as_deref()
-            .map(|s| LlmService::from_str(s).expect("Invalid quiz_service string"));
+            if let Some(key) = service_config.key {
+                target.key = Some(key);
+            }
+            if let Some(default_model) = service_config.default_model {
+                target.default_model = Some(default_model);
+            }
+        }
+
+        let mut embedding_config = LlmFeatureConfig {
+            service: None,
+            model: None,
+        };
+        let mut journaling_config = LlmFeatureConfig {
+            service: None,
+            model: None,
+        };
+        let mut quiz_config = LlmFeatureConfig {
+            service: None,
+            model: None,
+        };
+
+        for feature_config in config.llm_feature_config {
+            let target = match feature_config.feature {
+                LlmFeatureType::Embedding => &mut embedding_config,
+                LlmFeatureType::Journaling => &mut journaling_config,
+                LlmFeatureType::Quiz => &mut quiz_config,
+            };
+
+            if let Some(service) = feature_config.service {
+                target.service = Some(LlmService::from_str(&service).expect("Invalid llm-feature-config service"));
+            }
+            if let Some(model) = feature_config.model {
+                target.model = Some(model);
+            }
+        }
 
         Self {
-            openai: LlmServiceConfig {
-                key: config.openai_key,
-                default_model: config.openai_default_model,
-            },
-            gwdg: LlmServiceConfig {
-                key: config.gwdg_key,
-                default_model: config.gwdg_default_model,
-            },
-            kit: LlmServiceConfig {
-                key: config.kit_key,
-                default_model: config.kit_default_model,
-            },
-            embedding_config: LlmFeatureConfig {
-                service: embedding_service,
-                model: config.embedding_model,
-            },
-            journaling_config: LlmFeatureConfig {
-                service: journaling_service,
-                model: config.journaling_model,
-            },
-            quiz_config: LlmFeatureConfig {
-                service: quiz_service,
-                model: config.quiz_model,
-            },
+            openai,
+            gwdg,
+            kit,
+            embedding_config,
+            journaling_config,
+            quiz_config,
         }
     }
 }
