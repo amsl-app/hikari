@@ -21,5 +21,5 @@ futures-retry-policies = { version = "0.3.1" }
 
 tracing = "0.1.41"
 serde = "1.0.226"
-tokio = "1.47.1"
+tokio = "1.52.2"
 openidconnect = "4.0.1"

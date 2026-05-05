@@ -16,6 +16,6 @@ csml_interpreter = { git = "https://github.com/amsl-app/csml-engine", tag = "v2.
 futures = { version = "0.3.32", features = ["async-await"] }
 serde_json = "1.0.145"
 thiserror = "2.0.16"
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.52.2", features = ["full"] }
 tracing = "0.1.41"
 uuid = {version = "1.21.0", features = ["v4", "fast-rng", "macro-diagnostics"]}

@@ -27,7 +27,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 hikari-entity = { path = "../hikari-entity" }
 
 [dev-dependencies]
-tokio = { version = "1.47.1", features = ["macros", "rt"] }
+tokio = { version = "1.52.2", features = ["macros", "rt"] }
 test-log = { version = "0.2.20", default-features = false, features = ["trace"] }
 
 [features]
