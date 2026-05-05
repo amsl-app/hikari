@@ -89,8 +89,9 @@ pub async fn create_question(
     quiz_id: &Uuid,
     rag_documents: &[String],
 ) -> Result<Question, QuizError> {
-    let score: f64 =
-        (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, session_id, topic).await?).unwrap_or(0.0);
+    let score: f64 = hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, session_id, topic)
+        .await?
+        .unwrap_or(0.0);
     let level = random_bloom_level(score);
     tracing::debug!(%score, ?level, "determined bloom level for question generation");
 
@@ -103,10 +104,7 @@ pub async fn create_question(
     .await?;
 
     // Get newest 10 questions
-    let mut old_questions_model: Vec<Question> = old_questions
-        .into_iter()
-        .map(hikari_model_tools::convert::IntoModel::into_model)
-        .collect();
+    let mut old_questions_model: Vec<Question> = old_questions.into_iter().map(IntoModel::into_model).collect();
 
     // Only keep questions without bad feedback and with grade > 3
     old_questions_model
@@ -258,7 +256,7 @@ pub async fn create_question(
 
     let (question, tokens) = openai_single_tool_call::<QuizQuestion>(
         CallConfig::builder()
-            .total_timeout(Duration::from_secs(120))
+            .total_timeout(Duration::from_mins(2))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,

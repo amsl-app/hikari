@@ -90,7 +90,7 @@ impl QuestionExt for Question {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, ToSchema, strum::Display, strum::IntoStaticStr, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, ToSchema, strum::Display, IntoStaticStr, PartialEq, Eq)]
 #[schema(example = json!({"value": true}))]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[strum(serialize_all = "snake_case")]

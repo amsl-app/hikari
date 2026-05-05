@@ -151,7 +151,7 @@ impl Mutation {
                         Ok(prompt)
                     })
                     .collect::<Vec<_>>();
-                let prompts = try_join_all(prompt_models.into_iter());
+                let prompts = try_join_all(prompt_models);
 
                 let focuses = journal_entry_journal_focus::Mutation::set_user_journal_entry_focus(
                     txn,

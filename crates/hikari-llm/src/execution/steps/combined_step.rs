@@ -88,7 +88,7 @@ impl LlmStepTrait for CombinedStep {
     fn status(&self) -> LlmStepStatus {
         // We want to finde the most important status of all the steps
         // Error > NotStarted > Running > WaitingForInput > Completed
-        let status: Vec<LlmStepStatus> = self.steps.iter().map(super::LlmStepTrait::status).collect();
+        let status: Vec<LlmStepStatus> = self.steps.iter().map(LlmStepTrait::status).collect();
 
         if status.contains(&LlmStepStatus::Error) {
             LlmStepStatus::Error

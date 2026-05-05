@@ -44,13 +44,13 @@ pub async fn create_user<C: ConnectionTrait + TransactionTrait>(
     conn: &C,
     sub: &str,
 ) -> Result<(User, Vec<String>), DbErr> {
-    let _sub = sub.to_string();
+    let sub = sub.to_string();
 
     let res = conn
         .transaction(|txn| {
             Box::pin(async move {
                 let user = hikari_db::user::Mutation::create_user(txn).await?;
-                let mapping = hikari_db::oidc_mapping::Mutation::create_oidc_mapping(txn, user.id, _sub).await?;
+                let mapping = hikari_db::oidc_mapping::Mutation::create_oidc_mapping(txn, user.id, sub).await?;
                 if user.id.eq(&mapping.user_id) {
                     Result::<_, UserCreationError>::Ok(user.id)
                 } else {

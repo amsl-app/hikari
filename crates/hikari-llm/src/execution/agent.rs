@@ -152,6 +152,9 @@ impl LlmAgent {
                         }
                     }
                 }
+                // The precision loss is fine here, as we are only using it for metrics.
+                // TODO use as_millis_f64() once it is stable
+                #[allow(clippy::cast_precision_loss)]
                 metrics::histogram!("agent_time_to_last_token_ms").record(start_time.elapsed().as_millis() as f64);
         })
     }
@@ -189,6 +192,9 @@ impl LlmAgent {
                             Ok(value) => {
                                 // Check if agent has start times present and take it to send time to first token metric
                                 if let Some(start_time) = self.start_time.take() {
+                                    // The precision loss is fine here, as we are only using it for metrics.
+                                    // TODO use as_millis_f64() once it is stable
+                                    #[allow(clippy::cast_precision_loss)]
                                     let elapsed = start_time.elapsed().as_millis() as f64;
                                     metrics::histogram!("agent_time_to_first_token_ms").record(elapsed);
                                 }
@@ -346,7 +352,7 @@ impl LlmAgent {
             self.conversation_id,
             message_order,
             message,
-            status.map(hikari_model_tools::convert::IntoDbModel::into_db_model),
+            status.map(IntoDbModel::into_db_model),
         )
         .await?;
         Ok(res.into_model())

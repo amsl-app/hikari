@@ -31,6 +31,14 @@ pub mod error;
 pub mod streaming;
 pub mod tools;
 
+fn is_whitespace_only(data: &str) -> bool {
+    data.trim().is_empty()
+}
+
+fn reject_whitespace_only(data: String) -> Option<String> {
+    if is_whitespace_only(&data) { None } else { Some(data) }
+}
+
 #[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ReasoningEffort {
@@ -52,7 +60,7 @@ impl Display for ReasoningEffort {
             ReasoningEffort::High => "high",
             ReasoningEffort::Xhigh => "xhigh",
         };
-        write!(f, "{}", label)
+        write!(f, "{label}")
     }
 }
 
@@ -96,7 +104,7 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
         if let Some(tool_calls) = first.message.tool_calls {
             let tool_calls: Vec<ToolCallResponse> = tool_calls
                 .into_iter()
-                .map(std::convert::TryInto::try_into)
+                .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?;
 
             Ok(Message {
@@ -110,14 +118,11 @@ impl TryFrom<CreateChatCompletionResponse> for Message {
 
             let text = THINKING_RE.replace_all(&content, "").to_string();
 
-            let text = match text.trim().is_empty() {
-                true => None,
-                false => Some(text),
-            };
+            let text = reject_whitespace_only(text);
 
             let content_len = content.len();
-            let thinking_len = thinking.as_ref().map(std::string::String::len);
-            let text_len = text.as_ref().map(std::string::String::len);
+            let thinking_len = thinking.as_ref().map(String::len);
+            let text_len = text.as_ref().map(String::len);
 
             tracing::debug!(
                 content_len,
@@ -176,8 +181,8 @@ impl TryFrom<ChatCompletionMessageToolCall> for ToolCallResponse {
 
         Ok(ToolCallResponse {
             name,
-            arguments,
             thinking,
+            arguments,
         })
     }
 }
@@ -212,8 +217,8 @@ impl TryFrom<ChatCompletionMessageToolCallChunk> for ToolCallResponse {
 
             Ok(ToolCallResponse {
                 name,
-                arguments,
                 thinking,
+                arguments,
             })
         } else {
             Err(OpenAiError::EmptyResponse)
@@ -277,7 +282,7 @@ pub async fn openai_call_with_timeout(
 
     let tools = tools
         .into_iter()
-        .map(|tool| tool.try_into())
+        .map(TryInto::try_into)
         .collect::<Result<Vec<ChatCompletionTools>, OpenAiError>>()?;
 
     if !tools.is_empty() {
@@ -327,13 +332,16 @@ pub async fn openai_call_with_timeout(
         let res: Result<CreateChatCompletionResponse, async_openai::error::OpenAIError> =
             client.chat().create(request).await;
 
-        let elapsed = start_time.elapsed();
+        // The precision loss is fine here, as we are only using it for metrics.
+        // TODO use as_millis_f64() once it is stable
+        #[allow(clippy::cast_precision_loss)]
+        let elapsed = start_time.elapsed().as_millis() as f64;
         metrics::histogram!(
             "llm_time_to_last_token_ms",
             "service" => service,
             "model" => model_label,
         )
-        .record(elapsed.as_millis() as f64);
+        .record(elapsed);
 
         tracing::debug!(?res, "received OpenAI response");
         let chat_completion = res.map_err(|error| {
@@ -355,7 +363,7 @@ pub(crate) fn process_stream(
     start_time: Instant,
     service: String,
     model: String,
-) -> Pin<Box<dyn Stream<Item = Result<Message, crate::openai::error::StreamingError>> + Send>> {
+) -> Pin<Box<dyn Stream<Item = Result<Message, error::StreamingError>> + Send>> {
     let mut in_think_block = false;
     let mut buffer = String::new();
 
@@ -371,6 +379,9 @@ pub(crate) fn process_stream(
                 if !first_token_received
                     && (first.delta.content.is_some() || first.delta.tool_calls.is_some()) {
                         first_token_received = true;
+                        // The precision loss is fine here, as we are only using it for metrics.
+                        // TODO use as_millis_f64() once it is stable
+                        #[allow(clippy::cast_precision_loss)]
                         metrics::histogram!(
                             "llm_time_to_first_token_ms",
                             "service" => service.clone(),
@@ -379,7 +390,7 @@ pub(crate) fn process_stream(
                     }
                 if let Some(tool_calls) = first.delta.tool_calls {
                     let tool_calls: Vec<ToolCallResponse> =
-                        tool_calls.into_iter().map(std::convert::TryInto::try_into).collect::<Result<_, _>>()?;
+                        tool_calls.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?;
 
                     yield Message {
                         content: Content::Tool(tool_calls),
@@ -395,14 +406,9 @@ pub(crate) fn process_stream(
                                 buffer.drain(..pos + 7);
                                 in_think_block = true;
 
-                                let text = match text.trim().is_empty() {
-                                    true => None,
-                                    false => Some(text),
-                                };
-
-                                if text.is_some() {
+                                if let Some(text) = reject_whitespace_only(text) {
                                     yield Message {
-                                        content: Content::Text { text, thinking: None },
+                                        content: Content::Text { text: Some(text), thinking: None },
                                         tokens: None,
                                     }
                                 }
@@ -415,11 +421,7 @@ pub(crate) fn process_stream(
                                     if "<think>".starts_with(remaining) {
                                         let to_yield = buffer[..last_lt].to_string();
                                         buffer.drain(..last_lt);
-                                        let to_yield = match to_yield.trim().is_empty() {
-                                            true => None,
-                                            false => Some(to_yield),
-                                        };
-                                        if let Some(text) = to_yield {
+                                        if let Some(text) = reject_whitespace_only(to_yield) {
                                              yield Message {
                                                 content: Content::Text { text: Some(text), thinking: None },
                                                 tokens,
@@ -431,11 +433,7 @@ pub(crate) fn process_stream(
 
                                 let to_yield = buffer.clone();
                                 buffer.clear();
-                                let to_yield = match to_yield.trim().is_empty() {
-                                    true => None,
-                                    false => Some(to_yield),
-                                };
-                                if let Some(text) = to_yield {
+                                if let Some(text) = reject_whitespace_only(to_yield) {
                                     yield Message {
                                         content: Content::Text { text: Some(text), thinking: None },
                                         tokens,
@@ -448,10 +446,7 @@ pub(crate) fn process_stream(
                             buffer.drain(..pos + 8);
                             in_think_block = false;
 
-                            let thinking = match thinking.trim().is_empty() {
-                                true => None,
-                                false => Some(thinking),
-                            };
+                            let thinking = reject_whitespace_only(thinking);
 
                             yield Message {
                                 content: Content::Text { text: None, thinking },
@@ -465,11 +460,7 @@ pub(crate) fn process_stream(
                                 if "</think>".starts_with(remaining) {
                                     let to_yield = buffer[..last_lt].to_string();
                                     buffer.drain(..last_lt);
-                                    let to_yield = match to_yield.trim().is_empty() {
-                                        true => None,
-                                        false => Some(to_yield),
-                                    };
-                                    if let Some(thinking) = to_yield {
+                                    if let Some(thinking) = reject_whitespace_only(to_yield) {
                                          yield Message {
                                             content: Content::Text { text: None, thinking: Some(thinking) },
                                             tokens,
@@ -481,11 +472,7 @@ pub(crate) fn process_stream(
 
                             let to_yield = buffer.clone();
                             buffer.clear();
-                            let to_yield = match to_yield.trim().is_empty() {
-                                true => None,
-                                false => Some(to_yield),
-                            };
-                            if let Some(thinking) = to_yield {
+                            if let Some(thinking) = reject_whitespace_only(to_yield) {
                                 yield Message {
                                     content: Content::Text { text: None, thinking: Some(thinking) },
                                     tokens,
@@ -497,6 +484,9 @@ pub(crate) fn process_stream(
                 }
             }
         }
+       // The precision loss is fine here, as we are only using it for metrics.
+        // TODO use as_millis_f64() once it is stable
+        #[allow(clippy::cast_precision_loss)]
         metrics::histogram!(
             "llm_time_to_last_token_ms",
             "service" => service,

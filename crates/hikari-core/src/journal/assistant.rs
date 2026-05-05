@@ -93,7 +93,7 @@ pub async fn generate_prompt(
     let (mut res, tokens) = openai_single_tool_call::<PromptResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
-            .total_timeout(Duration::from_secs(60))
+            .total_timeout(Duration::from_mins(1))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
@@ -194,7 +194,7 @@ Es folgen die Fragen.",
     let (mut res, tokens) = openai_single_tool_call::<PromptResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
-            .total_timeout(Duration::from_secs(60))
+            .total_timeout(Duration::from_mins(1))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
@@ -279,7 +279,7 @@ pub async fn merge_prompts(
     let (mut res, tokens) = openai_single_tool_call::<MergeResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
-            .total_timeout(Duration::from_secs(60))
+            .total_timeout(Duration::from_mins(1))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
@@ -375,7 +375,7 @@ Rufe die Funktion `TextZusammenfuehren` auf um die Formulierungen zurückzugeben
     let (mut res, tokens) = openai_single_tool_call::<MergeResponse>(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
-            .total_timeout(Duration::from_secs(60))
+            .total_timeout(Duration::from_mins(1))
             .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,

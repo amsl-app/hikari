@@ -42,9 +42,9 @@ impl SlotsTrait for ExtractorBuilder {
         let mut slots = self
             .values
             .iter()
-            .flat_map(super::SlotsTrait::injection_slots)
+            .flat_map(SlotsTrait::injection_slots)
             .collect::<Vec<_>>();
-        slots.extend(self.prompts.iter().flat_map(super::SlotsTrait::injection_slots));
+        slots.extend(self.prompts.iter().flat_map(SlotsTrait::injection_slots));
         slots
     }
 }
@@ -177,10 +177,10 @@ pub struct ExtractionSchema {
 impl SlotsTrait for ExtractionSchema {
     fn injection_slots(&self) -> Vec<SlotPath> {
         let mut slots = self.description.injection_slots();
-        slots.extend(self.examples.iter().flat_map(super::SlotsTrait::injection_slots));
+        slots.extend(self.examples.iter().flat_map(SlotsTrait::injection_slots));
         slots.extend(self.r#items.as_ref().map_or(vec![], |item| item.injection_slots()));
         slots.extend(self.r#properties.as_ref().map_or(vec![], |props| {
-            props.values().flat_map(super::SlotsTrait::injection_slots).collect()
+            props.values().flat_map(SlotsTrait::injection_slots).collect()
         }));
         slots
     }
@@ -205,16 +205,16 @@ impl InjectionTrait for ExtractionSchema {
 impl<'a> AsOpenApiField<'a> for ExtractionSchema {
     fn openapi_field(&'a self) -> OpenApiField<'a> {
         let examples = if self.examples.is_empty() {
-            "".to_string()
+            String::new()
         } else {
             let example_strings = self
                 .examples
                 .iter()
-                .map(|e| e.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join("<sep>");
 
-            format!("\n<examples>\n{}\n</examples>\n", example_strings)
+            format!("\n<examples>\n{example_strings}\n</examples>\n")
         };
 
         let description = format!("{}{}", self.description, examples);

@@ -100,6 +100,8 @@ fn create_journal_entities(conversation_id: Uuid, messages: Vec<Message>) -> Jou
                             mood = Some(mood_value_f32);
                         } else {
                             tracing::error!(%conversation_id, %message_id, mood_value, "mood value out of range");
+                            // This 'continue' exists for clarity as this match statement is pretty long
+                            #[allow(clippy::needless_continue)]
                             continue;
                         }
                     }

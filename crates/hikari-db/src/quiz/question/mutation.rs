@@ -78,13 +78,13 @@ impl Mutation {
             topic: Set(topic.to_string()),
             content: Set(content.to_string()),
             r#type: Set(*question_type),
-            options: Set(options.map(std::string::ToString::to_string)),
+            options: Set(options.map(ToString::to_string)),
             created_at: Set(chrono::Utc::now().naive_utc()),
             answered_at: NotSet,
             answer: NotSet,
             evaluation: NotSet,
             grade: NotSet,
-            ai_solution: Set(ai_solution.map(std::string::ToString::to_string)),
+            ai_solution: Set(ai_solution.map(ToString::to_string)),
             status: Set(question::Status::Open),
             feedback: NotSet,
             feedback_explanation: NotSet,
@@ -134,7 +134,7 @@ impl Mutation {
 
         let mut question: question::ActiveModel = question.into();
         question.feedback = Set(Some(feedback.clone()));
-        question.feedback_explanation = Set(feedback_explanation.map(std::string::ToString::to_string));
+        question.feedback_explanation = Set(feedback_explanation.map(ToString::to_string));
         question.update(db).await
     }
 }

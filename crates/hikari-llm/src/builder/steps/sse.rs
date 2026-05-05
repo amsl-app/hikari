@@ -33,11 +33,8 @@ pub struct SseBuilder {
 }
 
 impl SlotsTrait for SseBuilder {
-    fn injection_slots(&self) -> Vec<crate::builder::slot::paths::SlotPath> {
-        let mut slots = self
-            .body
-            .as_ref()
-            .map_or_else(Vec::new, super::SlotsTrait::injection_slots);
+    fn injection_slots(&self) -> Vec<SlotPath> {
+        let mut slots = self.body.as_ref().map_or_else(Vec::new, SlotsTrait::injection_slots);
         slots.extend(self.headers.iter().flat_map(SlotsTrait::injection_slots));
         slots
     }

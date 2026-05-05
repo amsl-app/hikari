@@ -32,7 +32,7 @@ fn collect_sentences_with_indices(pages: &[String]) -> (Vec<String>, Vec<usize>)
         .enumerate()
         .flat_map(|(i, page)| {
             page.unicode_sentences()
-                .map(std::string::ToString::to_string)
+                .map(ToString::to_string)
                 .filter(|s| !s.trim().is_empty())
                 .map(|s| (s, i))
                 .collect::<Vec<(String, usize)>>()

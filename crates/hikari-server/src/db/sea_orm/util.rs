@@ -234,7 +234,7 @@ pub(crate) async fn get_last_or_create_llm_conversation<C: ConnectionTrait + Tra
     let (model, state) = if let Some(model) = model {
         let state =
             hikari_db::llm::conversation_state::Query::get_conversation_state(conn, model.conversation_id).await?;
-        let state: Option<LlmConversationState> = state.map(hikari_model_tools::convert::IntoModel::into_model);
+        let state: Option<LlmConversationState> = state.map(IntoModel::into_model);
         let state = match state {
             Some(mut state) => {
                 let not_finished_message = hikari_db::llm::message::Query::get_not_finished_message(

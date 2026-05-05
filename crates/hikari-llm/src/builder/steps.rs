@@ -483,7 +483,7 @@ impl InjectionTrait for Template {
                 v.value.0.encode()
             } else {
                 tracing::warn!(%key, "Value for placeholder not found, replacing with **N/A**");
-                "".to_string()
+                String::new()
             };
 
             content = content.replace(&key, &value);
