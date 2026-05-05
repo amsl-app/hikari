@@ -67,7 +67,7 @@ tokio = { version = "1.47.1", features = ["full"] }
 tokio-stream = "0.1.17"
 tokio-util = { version = "0.7.16", features = ["rt"] }
 url = "2.5.7"
-utoipa = { version = "5.4.0", features = ["indexmap", "uuid", "chrono", "axum_extras"] }
+utoipa = { version = "5.5.0", features = ["indexmap", "uuid", "chrono", "axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
 utoipa-redoc = { version = "6.0.0", features = ["axum"] }
 utoipa-rapidoc = { version = "6.0.0", features = ["axum"] }
