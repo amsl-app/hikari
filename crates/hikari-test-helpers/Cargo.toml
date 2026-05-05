@@ -12,7 +12,7 @@ postgresql_archive = { version = "0.20.2" }
 postgresql_embedded = { version = "0.20.2", features = ["tokio"] }
 postgresql_extensions = { version = "0.20.2" }
 tempfile = "3.23.0"
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.52.2", features = ["full"] }
 tracing = "0.1.41"
 thiserror = "2.0.16"
 sea-schema = { version = "0.16.2", default-features = false, features = ["sqlx-postgres", "sqlx-sqlite", "sqlx-mysql", "query", "discovery"] }

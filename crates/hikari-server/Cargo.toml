@@ -63,7 +63,7 @@ tower-http = { version = "0.6.6", features = ["cors"] }
 tracing = "0.1.41"
 tungstenite = "0.29.0"
 r2d2 = "0.8.10"
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.52.2", features = ["full"] }
 tokio-stream = "0.1.17"
 tokio-util = { version = "0.7.16", features = ["rt"] }
 url = "2.5.7"

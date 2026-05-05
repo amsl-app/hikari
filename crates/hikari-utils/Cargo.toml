@@ -37,7 +37,7 @@ clap = { version = "4.5.57", features = ["derive"] }
 sysinfo = "0.38.2"
 sentry = { version = "0.48.0", features = ["tracing"] }
 sentry-tracing = "0.48.0"
-tokio = "1.47.1"
+tokio = "1.52.2"
 tower-layer = "0.3.3"
 tower-service = "0.3.3"
 listenfd = "1.0.2"

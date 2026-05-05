@@ -19,7 +19,7 @@ hikari-model = { path = "../hikari-model" }
 serde = "1.0.226"
 serde_json = "1.0.145"
 thiserror = "2.0.16"
-tokio = "1.47.1"
+tokio = "1.52.2"
 url = "2.5.7"
 openidconnect = { version = "4.0.1", default-features = true }
 retry-policies = "0.2.1"
