@@ -280,10 +280,13 @@ pub async fn openai_call_with_timeout(
         .map(|tool| tool.try_into())
         .collect::<Result<Vec<ChatCompletionTools>, OpenAiError>>()?;
 
-    request.tools(tools);
+    if !tools.is_empty() {
+        tracing::debug!(tool_count = tools.len(), "adding tools to OpenAI request");
+        request.tools(tools);
 
-    if let Some(tool_choice) = tool_choice {
-        request.tool_choice(tool_choice);
+        if let Some(tool_choice) = tool_choice {
+            request.tool_choice(tool_choice);
+        }
     }
 
     tracing::debug!(?request, "OpenAI request");
