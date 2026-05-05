@@ -550,7 +550,7 @@ pub(crate) async fn history(
         value: HistoryEntryType::Assessment(assessment.into_model()),
     });
     let mut res = modules.chain(sessions).chain(assessments).collect::<Vec<_>>();
-    res.sort_by(|a, b| b.completed.cmp(&a.completed));
+    res.sort_by_key(|v| std::cmp::Reverse(v.completed));
     Ok(Json(res))
 }
 

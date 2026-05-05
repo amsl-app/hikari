@@ -23,7 +23,7 @@ pub struct ApiHeader {
 }
 
 impl SlotsTrait for ApiHeader {
-    fn injection_slots(&self) -> Vec<crate::builder::slot::paths::SlotPath> {
+    fn injection_slots(&self) -> Vec<SlotPath> {
         self.value.injection_slots()
     }
 }
@@ -62,11 +62,8 @@ pub struct ApiBuilder {
 }
 
 impl SlotsTrait for ApiBuilder {
-    fn injection_slots(&self) -> Vec<crate::builder::slot::paths::SlotPath> {
-        let mut slots = self
-            .body
-            .as_ref()
-            .map_or_else(Vec::new, super::SlotsTrait::injection_slots);
+    fn injection_slots(&self) -> Vec<SlotPath> {
+        let mut slots = self.body.as_ref().map_or_else(Vec::new, SlotsTrait::injection_slots);
         slots.extend(self.headers.iter().flat_map(SlotsTrait::injection_slots));
         slots
     }

@@ -32,7 +32,7 @@ pub struct ConversationGoal {
 impl SlotsTrait for ConversationGoal {
     fn injection_slots(&self) -> Vec<SlotPath> {
         let mut slots = self.goal.injection_slots();
-        slots.extend(self.examples.iter().flat_map(super::SlotsTrait::injection_slots));
+        slots.extend(self.examples.iter().flat_map(SlotsTrait::injection_slots));
         slots
     }
 }
@@ -79,9 +79,9 @@ impl SlotsTrait for ValidatorBuilder {
         let mut slots = self
             .goals
             .iter()
-            .flat_map(super::SlotsTrait::injection_slots)
+            .flat_map(SlotsTrait::injection_slots)
             .collect::<Vec<_>>();
-        slots.extend(self.prompts.iter().flat_map(super::SlotsTrait::injection_slots));
+        slots.extend(self.prompts.iter().flat_map(SlotsTrait::injection_slots));
         slots
     }
 }

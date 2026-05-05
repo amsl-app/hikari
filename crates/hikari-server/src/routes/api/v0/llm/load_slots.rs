@@ -113,7 +113,7 @@ fn session_key(module_id: &str, session_id: &str) -> String {
 }
 
 fn get_or_encode<'a, T>(
-    map: &'a mut hashbrown::HashMap<String, Value>,
+    map: &'a mut HashMap<String, Value>,
     key: &str,
     value: T,
 ) -> Result<&'a Value, yaml_serde::Error>

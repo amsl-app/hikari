@@ -81,7 +81,7 @@ impl LlmStepTrait for VectorDBExtractor {
             let mut context = HashSet::new();
 
             let queries = match slot.value.as_ref() {
-                Value::Sequence(seq) => seq.iter().map(hikari_utils::values::ValueDecoder::encode).collect(),
+                Value::Sequence(seq) => seq.iter().map(ValueDecoder::encode).collect(),
                 other => vec![other.encode()],
             };
 

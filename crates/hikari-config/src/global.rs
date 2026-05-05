@@ -20,7 +20,7 @@ pub mod v01;
 #[serde(tag = "version")]
 pub enum VersionConfig {
     #[serde(rename = "0.1")]
-    V01 { hikari: v01::config::GlobalConfigV01 },
+    V01 { hikari: GlobalConfigV01 },
 }
 
 #[derive(Deserialize, Clone, Debug, JsonSchema)]

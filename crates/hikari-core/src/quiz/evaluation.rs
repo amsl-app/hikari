@@ -276,7 +276,7 @@ pub async fn evaluate_answer(
 
     let (evaluation, tokens) = openai_single_tool_call::<Evaluation>(
         CallConfig::builder()
-            .total_timeout(Duration::from_secs(120))
+            .total_timeout(Duration::from_mins(2))
             .iteration_timeout(Duration::from_secs(30))
             .build(),
         openai_config,
@@ -295,8 +295,8 @@ pub async fn evaluate_answer(
     tracing::debug!(grade = evaluation.grade, %score_adjustment, "evaluation result received");
 
     let current_score: f64 =
-        (hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
-            .await?)
+        hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
+            .await?
             .unwrap_or(0.0);
 
     let mut new_score: f64 = current_score + score_adjustment;

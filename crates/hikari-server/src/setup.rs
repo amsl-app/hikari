@@ -60,7 +60,7 @@ pub async fn upload_documents(
         };
         let res = upload_document(&retriever, pgvector_document, file_metadata).await;
         match res {
-            Ok(_) => tracing::info!(file_id, "document uploaded successfully"),
+            Ok(()) => tracing::info!(file_id, "document uploaded successfully"),
             Err(e) => {
                 tracing::error!(file_id, error = ?e, "failed to upload document");
                 failures.push((file_id, e));

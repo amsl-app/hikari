@@ -194,7 +194,7 @@ impl LlmCore {
         formatted_prompt.extend(memory);
         let messages = formatted_prompt
             .into_iter()
-            .map(std::convert::TryInto::try_into)
+            .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok((messages, tool))

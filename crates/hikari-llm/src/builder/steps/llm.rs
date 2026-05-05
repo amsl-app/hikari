@@ -44,9 +44,9 @@ impl SlotsTrait for LlmBuilder {
         let mut slots = self
             .prompts
             .iter()
-            .flat_map(super::SlotsTrait::injection_slots)
+            .flat_map(SlotsTrait::injection_slots)
             .collect::<Vec<_>>();
-        slots.extend(self.prompts.iter().flat_map(super::SlotsTrait::injection_slots));
+        slots.extend(self.prompts.iter().flat_map(SlotsTrait::injection_slots));
         slots
     }
 }

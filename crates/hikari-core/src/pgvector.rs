@@ -104,8 +104,8 @@ impl PgVector<'_> {
         chunks: &[LlmEmbeddingChunk],
     ) -> Result<(), PgVectorError> {
         let txn = self.conn.begin().await?;
-        let hash = hash.map(std::string::ToString::to_string);
-        let hash_algorithm = hash_algorithm.map(std::string::ToString::to_string);
+        let hash = hash.map(ToString::to_string);
+        let hash_algorithm = hash_algorithm.map(ToString::to_string);
         let file_name = file_name.to_string();
         let file_link = file_link.to_string();
 
@@ -162,7 +162,7 @@ impl PgVector<'_> {
         let query_vector = self.embedder.embed(&[query.to_owned()]).await?.swap_remove(0);
         let query_vector_string = query_vector
             .iter()
-            .map(std::string::ToString::to_string)
+            .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join(",");
         let mut documents = documents.to_owned();
@@ -204,6 +204,9 @@ impl PgVector<'_> {
         );
 
         let rows = self.conn.query_all(statement).await?;
+        // The precision loss is fine here, as we are only using it for metrics.
+        // TODO use as_millis_f64() once it is stable
+        #[allow(clippy::cast_precision_loss)]
         metrics::histogram!("retrieval_time_ms").record(start.elapsed().as_millis() as f64);
         Self::handle_rows(&rows)
     }

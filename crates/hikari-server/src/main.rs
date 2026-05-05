@@ -168,21 +168,19 @@ async fn run(opt: Run) -> Result<()> {
     let llm_rag_documents_path = opt.llm_config.llm_collections;
 
     // ---- Load Bots
-    let bots = match &opt.csml {
-        Some(csml_path) => setup::load_bots(csml_path, &opt.worker_url, &loader_handler).await?,
-        None => {
-            tracing::warn!("no csml path provided, using empty bots");
-            Bots::default()
-        }
+    let bots = if let Some(csml_path) = &opt.csml {
+        setup::load_bots(csml_path, &opt.worker_url, &loader_handler).await?
+    } else {
+        tracing::warn!("no csml path provided, using empty bots");
+        Bots::default()
     };
 
     // ---- Load LLM
-    let llm_structure_config = match &opt.llm_config.llm_structures {
-        Some(llm_structures_path) => setup::load_llm_structures(llm_structures_path, &loader_handler).await?,
-        None => {
-            tracing::warn!("no llm structures path provided, using empty structures");
-            LlmStructureConfig::default()
-        }
+    let llm_structure_config = if let Some(llm_structures_path) = &opt.llm_config.llm_structures {
+        setup::load_llm_structures(llm_structures_path, &loader_handler).await?
+    } else {
+        tracing::warn!("no llm structures path provided, using empty structures");
+        LlmStructureConfig::default()
     };
     let document_collection = setup::load_documents(&llm_rag_documents_path, &loader_handler).await?;
     let constants = setup::load_constants(opt.llm_config.constants.as_ref(), &loader_handler).await?;

@@ -62,7 +62,7 @@ impl OidcClient {
             .map_err(|err| Error::Oidc(err.to_string()))?;
         token_response
             .id_token()
-            .map(std::string::ToString::to_string)
+            .map(ToString::to_string)
             .ok_or(Error::Oidc("Missing id Token in token response".to_owned()))
     }
 
@@ -94,8 +94,8 @@ impl OidcClient {
             }
         };
         let backoff_builder =
-            ExponentialBackoff::builder().retry_bounds(Duration::from_millis(500), Duration::from_secs(600));
-        let total_timeout = Duration::from_secs(60 * 15);
+            ExponentialBackoff::builder().retry_bounds(Duration::from_millis(500), Duration::from_mins(10));
+        let total_timeout = Duration::from_mins(15);
         let backoff = backoff_builder
             .build_with_total_retry_duration_and_max_retries(total_timeout)
             .for_task_started_at(Utc::now());

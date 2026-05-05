@@ -33,6 +33,7 @@ impl From<ToolChoice> for ChatCompletionToolChoiceOption {
 pub struct ToolSchema(pub Schema);
 
 impl ToolSchema {
+    #[must_use]
     pub fn name(&self) -> Option<&str> {
         self.0.get("title").and_then(|v| v.as_str())
     }
@@ -56,12 +57,12 @@ impl TryFrom<ToolSchema> for ChatCompletionTools {
 
         let title = properties
             .remove("title")
-            .and_then(|t| t.as_str().map(|s| s.to_string()))
+            .and_then(|t| t.as_str().map(ToString::to_string))
             .ok_or(OpenAiError::ToolError("Missing title in schema".to_string()))?;
 
         let description = properties
             .remove("description")
-            .and_then(|d| d.as_str().map(|s| s.to_string()))
+            .and_then(|d| d.as_str().map(ToString::to_string))
             .ok_or(OpenAiError::ToolError("Missing description in schema".to_string()))?;
 
         let function = FunctionObject {
