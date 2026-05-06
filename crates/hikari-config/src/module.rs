@@ -40,6 +40,7 @@ pub enum ModuleCategory {
     Learning,
     Course,
     Journal,
+    Sleep,
 }
 
 #[derive(Debug, Clone, Serialize)]
