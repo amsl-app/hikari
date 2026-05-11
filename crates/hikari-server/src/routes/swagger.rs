@@ -53,8 +53,8 @@ struct SecurityAddon;
         api::v0::modules::assessment::start_module_assessment,
         api::v0::modules::assessment::submit_module_assessment,
         api::v0::modules::quiz::start_quiz,
-        api::v0::modules::quiz::get_scores,
-        api::v0::modules::quiz::get_quizzes,
+        api::v0::modules::quiz::get_module_scores,
+        api::v0::modules::quiz::get_module_quizzes,
         api::v0::user::get_user_info,
         api::v0::user::update_user_info,
         api::v0::user::access::add_access,
@@ -136,4 +136,56 @@ pub(crate) fn openapi_json(pretty: bool) -> Result<String> {
         serde_json::to_string(&openapi)?
     };
     Ok(json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::openapi_json;
+    use std::collections::HashSet;
+
+    #[test]
+    fn openapi_json_is_valid_json() {
+        let json = openapi_json(false).expect("openapi generation should succeed");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("openapi output should be valid json");
+
+        assert!(value.get("openapi").and_then(serde_json::Value::as_str).is_some());
+        assert!(value.get("paths").and_then(serde_json::Value::as_object).is_some());
+    }
+
+    #[test]
+    fn openapi_operation_ids_are_unique() {
+        let json = openapi_json(false).expect("openapi generation should succeed");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("openapi output should be valid json");
+
+        let paths = value
+            .get("paths")
+            .and_then(serde_json::Value::as_object)
+            .expect("openapi paths should be an object");
+
+        let mut seen = HashSet::<String>::new();
+        for path_item in paths.values() {
+            let path_obj = path_item
+                .as_object()
+                .expect("openapi path item should be an object");
+            let path_value = serde_json::Value::Object(path_obj.clone());
+
+            for method in ["get", "post", "put", "patch", "delete"] {
+                let operation_value = &path_value[method];
+                if operation_value.is_null() {
+                    continue;
+                }
+
+                let operation_id = operation_value["operationId"]
+                    .as_str()
+                    .expect("openapi operation should have an operationId");
+
+                assert!(
+                    seen.insert(operation_id.to_string()),
+                    "duplicate operationId found: {operation_id}"
+                );
+            }
+        }
+    }
 }
