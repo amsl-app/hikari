@@ -2,6 +2,7 @@ use super::api;
 use super::global;
 use super::login;
 
+use anyhow::Result;
 use axum::Router;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder};
 use utoipa::{Modify, OpenApi, openapi::security::SecurityScheme};
@@ -125,4 +126,14 @@ where
         // There is no need to create `RapiDoc::with_openapi` because the OpenApi is served
         // via SwaggerUi instead we only make rapidoc to point to the existing doc.
         .merge(RapiDoc::new("/api-docs/openapi.json").path("/rapidoc"))
+}
+
+pub(crate) fn openapi_json(pretty: bool) -> Result<String> {
+    let openapi = ApiDoc::openapi();
+    let json = if pretty {
+        serde_json::to_string_pretty(&openapi)?
+    } else {
+        serde_json::to_string(&openapi)?
+    };
+    Ok(json)
 }
