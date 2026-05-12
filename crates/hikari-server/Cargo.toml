@@ -39,7 +39,7 @@ hikari-model-tools = { path = "../hikari-model-tools" }
 hikari-utils = { path = "../hikari-utils" }
 indexmap = { version = "2.11.4", features = ["serde", "rayon"] }
 hikari-llm = { path = "../hikari-llm" }
-jsonwebtoken = "10.2.0"
+jsonwebtoken = "10.4.0"
 log = "0.4.28"
 axum-prometheus = { version = "0.10.0" }
 num-traits = "0.2.19"
