@@ -182,15 +182,15 @@ impl LlmAgent {
                     }
                 }
                 LlmStepContent::Message{message, store} => {
-                    let mut complete_message = String::new(); // Initialize a complete message buffer
-                    let mut offset: usize = 0;
-                    // Init a new message in the database
-                    let mut id = None;
-                    // Create streaming content with the current message chunk
+                    let mut complete_message = String::new();
+                    // current_bubble accumulates text for the in-progress chat bubble and resets at each \n---\n
+                    let mut current_bubble = String::new();
+                    let mut bubble_offset: usize = 0;
+                    let mut id: Option<i32> = None;
+
                     while let Some(result) = message.next().await {
                         match result {
                             Ok(value) => {
-                                // Check if agent has start times present and take it to send time to first token metric
                                 if let Some(start_time) = self.start_time.take() {
                                     // The precision loss is fine here, as we are only using it for metrics.
                                     // TODO use as_millis_f64() once it is stable
@@ -200,22 +200,60 @@ impl LlmAgent {
                                 }
                                 tracing::trace!(?value, "message chunk");
                                 let content = if let Content::Text { text, .. } = &value.content {
-                                        Ok(text.as_deref().unwrap_or(""))
+                                    Ok(text.as_deref().unwrap_or(""))
                                 } else {
                                     Err(LlmExecutionError::UnexpectedResponseFormat)
                                 }?;
                                 complete_message.push_str(content);
+                                current_bubble.push_str(content);
                                 let usage = value.tokens.unwrap_or(0);
                                 tracing::trace!(?usage, "tokens used");
                                 add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
 
-                                if complete_message.len() > offset.saturating_add(BUFFER_SIZE) {
-                                    let payload = TypeSafePayload::Text(TextContent {
-                                        text: complete_message.clone(),
-                                    });
-                                    let id = match id {
+                                // Finalize the current bubble and start a new one whenever \n---\n appears
+                                while let Some(sep_pos) = current_bubble.find("\n---\n") {
+                                    let bubble_text = current_bubble[..sep_pos].to_string();
+                                    let remainder = current_bubble[sep_pos + "\n---\n".len()..].to_string();
+                                    let chunk = current_bubble[bubble_offset..sep_pos].to_string();
+                                    match id {
                                         None => {
-                                            // Only create a message, when we have something to send
+                                            if !bubble_text.is_empty() {
+                                                let new_id = self
+                                                    .add_message_to_memory(
+                                                        step_id.to_owned(),
+                                                        TypeSafePayload::Text(TextContent { text: bubble_text }),
+                                                        Direction::Send,
+                                                        MessageStatus::Completed,
+                                                    )
+                                                    .await?
+                                                    .message_order;
+                                                if !chunk.is_empty() {
+                                                    yield Some(Response::Chat(ChatChunk::new(chunk, new_id, step_id.to_owned())));
+                                                }
+                                            }
+                                        }
+                                        Some(bubble_id) => {
+                                            self.update_message(
+                                                bubble_id,
+                                                TypeSafePayload::Text(TextContent { text: bubble_text }),
+                                                Some(MessageStatus::Completed),
+                                            )
+                                            .await?;
+                                            if !chunk.is_empty() {
+                                                yield Some(Response::Chat(ChatChunk::new(chunk, bubble_id, step_id.to_owned())));
+                                            }
+                                        }
+                                    }
+                                    current_bubble = remainder;
+                                    bubble_offset = 0;
+                                    id = None;
+                                }
+
+                                // Stream buffered delta for the current in-progress bubble
+                                if current_bubble.len() > bubble_offset.saturating_add(BUFFER_SIZE) {
+                                    let payload = TypeSafePayload::Text(TextContent { text: current_bubble.clone() });
+                                    let bubble_id = match id {
+                                        None => {
                                             let new_id = self
                                                 .add_message_to_memory(
                                                     step_id.to_owned(),
@@ -228,18 +266,17 @@ impl LlmAgent {
                                             id = Some(new_id);
                                             new_id
                                         }
-                                        Some(id) => {
-                                            self.update_message(id, payload, Some(MessageStatus::Generating))
-                                                .await?;
-                                            id
+                                        Some(existing_id) => {
+                                            self.update_message(existing_id, payload, Some(MessageStatus::Generating)).await?;
+                                            existing_id
                                         }
                                     };
                                     yield Some(Response::Chat(ChatChunk::new(
-                                        complete_message[offset..].to_string(),
-                                        id,
+                                        current_bubble[bubble_offset..].to_string(),
+                                        bubble_id,
                                         step_id.to_owned(),
                                     )));
-                                    offset = complete_message.len();
+                                    bubble_offset = current_bubble.len();
                                 }
                             }
                             Err(error) => {
@@ -251,34 +288,31 @@ impl LlmAgent {
                         }
                     }
 
+                    // Finalize the last (or only) bubble
                     match id {
-                        Some(id) => {
-                            let chunk = complete_message[offset..].to_string();
-                            let payload = TypeSafePayload::Text(TextContent { text: complete_message.clone()});
-                            self.update_message(id, payload, Some(MessageStatus::Completed)).await?;
+                        Some(bubble_id) => {
+                            let chunk = current_bubble[bubble_offset..].to_string();
+                            self.update_message(bubble_id, TypeSafePayload::Text(TextContent { text: current_bubble }), Some(MessageStatus::Completed)).await?;
                             if !chunk.is_empty() {
-                                yield Some(Response::Chat(ChatChunk::new(chunk, id, step_id.to_owned())));
+                                yield Some(Response::Chat(ChatChunk::new(chunk, bubble_id, step_id.to_owned())));
                             }
                         }
                         None => {
-                            if !complete_message.is_empty() {
-                                // We have some chars but didn't create a message yet.
-                                //  So create a message and send it.
-                                let id = self
+                            if !current_bubble.is_empty() {
+                                let new_id = self
                                     .add_message_to_memory(
                                         step_id.to_owned(),
-                                        TypeSafePayload::Text(TextContent {
-                                            text: complete_message.clone(),
-                                        }),
+                                        TypeSafePayload::Text(TextContent { text: current_bubble.clone() }),
                                         Direction::Send,
                                         MessageStatus::Completed,
                                     )
                                     .await?
                                     .message_order;
-                                yield Some(Response::Chat(ChatChunk::new(complete_message.clone(), id, step_id.to_owned())));
+                                yield Some(Response::Chat(ChatChunk::new(current_bubble[bubble_offset..].to_string(), new_id, step_id.to_owned())));
                             }
                         }
                     }
+
                     if let Some(SaveTarget::Slot(slot_path)) = store {
                         let destination = slot_path.destination().clone();
                         let slot = Slot {
