@@ -183,7 +183,7 @@ impl LlmAgent {
                 }
                 LlmStepContent::Message{message, store} => {
                     let mut complete_message = String::new();
-                    // current_bubble accumulates text for the in-progress chat bubble and resets at each \n---\n
+                    // current_bubble accumulates text for the in-progress chat bubble and resets at each ---
                     let mut current_bubble = String::new();
                     let mut bubble_offset: usize = 0;
                     let mut id: Option<i32> = None;
@@ -210,10 +210,10 @@ impl LlmAgent {
                                 tracing::trace!(?usage, "tokens used");
                                 add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
 
-                                // Finalize the current bubble and start a new one whenever \n---\n appears
-                                while let Some(sep_pos) = current_bubble.find("\n---\n") {
+                                // Finalize the current bubble and start a new one whenever --- appears
+                                while let Some(sep_pos) = current_bubble.find("---") {
                                     let bubble_text = current_bubble[..sep_pos].to_string();
-                                    let remainder = current_bubble[sep_pos + "\n---\n".len()..].to_string();
+                                    let remainder = current_bubble[sep_pos + "---".len()..].to_string();
                                     let chunk = current_bubble[bubble_offset..sep_pos].to_string();
                                     match id {
                                         None => {
