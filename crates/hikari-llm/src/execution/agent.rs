@@ -1,6 +1,7 @@
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::paths::Destination;
 use crate::execution::agent::response::{ChatChunk, Response};
+use crate::execution::bubble::BubbleAccumulator;
 use crate::execution::error::LlmExecutionError;
 use crate::execution::iterator::LlmStepIterator;
 use crate::execution::steps::LlmStepTrait;
@@ -182,10 +183,7 @@ impl LlmAgent {
                     }
                 }
                 LlmStepContent::Message{message, store} => {
-                    let mut complete_message = String::new();
-                    // current_bubble accumulates text for the in-progress chat bubble and resets at each ---
-                    let mut current_bubble = String::new();
-                    let mut bubble_offset: usize = 0;
+                    let mut acc = BubbleAccumulator::new();
                     let mut id: Option<i32> = None;
 
                     while let Some(result) = message.next().await {
@@ -204,54 +202,49 @@ impl LlmAgent {
                                 } else {
                                     Err(LlmExecutionError::UnexpectedResponseFormat)
                                 }?;
-                                complete_message.push_str(content);
-                                current_bubble.push_str(content);
                                 let usage = value.tokens.unwrap_or(0);
                                 tracing::trace!(?usage, "tokens used");
                                 add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
 
                                 // Finalize the current bubble and start a new one whenever --- appears
-                                while let Some(sep_pos) = current_bubble.find("---") {
-                                    let bubble_text = current_bubble[..sep_pos].to_string();
-                                    let remainder = current_bubble[sep_pos + "---".len()..].to_string();
-                                    let chunk = current_bubble[bubble_offset..sep_pos].to_string();
+                                let completed = acc.push(content);
+                                for bubble in completed {
                                     match id {
                                         None => {
-                                            if !bubble_text.is_empty() {
+                                            if !bubble.text.is_empty() {
                                                 let new_id = self
                                                     .add_message_to_memory(
                                                         step_id.to_owned(),
-                                                        TypeSafePayload::Text(TextContent { text: bubble_text }),
+                                                        TypeSafePayload::Text(TextContent { text: bubble.text }),
                                                         Direction::Send,
                                                         MessageStatus::Completed,
                                                     )
                                                     .await?
                                                     .message_order;
-                                                if !chunk.is_empty() {
-                                                    yield Some(Response::Chat(ChatChunk::new(chunk, new_id, step_id.to_owned())));
+                                                if !bubble.delta.is_empty() {
+                                                    yield Some(Response::Chat(ChatChunk::new(bubble.delta, new_id, step_id.to_owned())));
                                                 }
                                             }
                                         }
                                         Some(bubble_id) => {
                                             self.update_message(
                                                 bubble_id,
-                                                TypeSafePayload::Text(TextContent { text: bubble_text }),
+                                                TypeSafePayload::Text(TextContent { text: bubble.text }),
                                                 Some(MessageStatus::Completed),
                                             )
                                             .await?;
-                                            if !chunk.is_empty() {
-                                                yield Some(Response::Chat(ChatChunk::new(chunk, bubble_id, step_id.to_owned())));
+                                            if !bubble.delta.is_empty() {
+                                                yield Some(Response::Chat(ChatChunk::new(bubble.delta, bubble_id, step_id.to_owned())));
                                             }
                                         }
                                     }
-                                    current_bubble = remainder;
-                                    bubble_offset = 0;
                                     id = None;
                                 }
 
                                 // Stream buffered delta for the current in-progress bubble
-                                if current_bubble.len() > bubble_offset.saturating_add(BUFFER_SIZE) {
-                                    let payload = TypeSafePayload::Text(TextContent { text: current_bubble.clone() });
+                                if let Some(delta) = acc.pending_delta(BUFFER_SIZE) {
+                                    let delta = delta.to_string();
+                                    let payload = TypeSafePayload::Text(TextContent { text: acc.current_bubble().to_string() });
                                     let bubble_id = match id {
                                         None => {
                                             let new_id = self
@@ -271,12 +264,8 @@ impl LlmAgent {
                                             existing_id
                                         }
                                     };
-                                    yield Some(Response::Chat(ChatChunk::new(
-                                        current_bubble[bubble_offset..].to_string(),
-                                        bubble_id,
-                                        step_id.to_owned(),
-                                    )));
-                                    bubble_offset = current_bubble.len();
+                                    yield Some(Response::Chat(ChatChunk::new(delta, bubble_id, step_id.to_owned())));
+                                    acc.advance_offset();
                                 }
                             }
                             Err(error) => {
@@ -289,26 +278,26 @@ impl LlmAgent {
                     }
 
                     // Finalize the last (or only) bubble
-                    match id {
-                        Some(bubble_id) => {
-                            let chunk = current_bubble[bubble_offset..].to_string();
-                            self.update_message(bubble_id, TypeSafePayload::Text(TextContent { text: current_bubble }), Some(MessageStatus::Completed)).await?;
-                            if !chunk.is_empty() {
-                                yield Some(Response::Chat(ChatChunk::new(chunk, bubble_id, step_id.to_owned())));
+                    let (complete_message, last_bubble) = acc.finalize();
+                    if let Some((bubble_text, delta)) = last_bubble {
+                        match id {
+                            Some(bubble_id) => {
+                                self.update_message(bubble_id, TypeSafePayload::Text(TextContent { text: bubble_text }), Some(MessageStatus::Completed)).await?;
+                                if !delta.is_empty() {
+                                    yield Some(Response::Chat(ChatChunk::new(delta, bubble_id, step_id.to_owned())));
+                                }
                             }
-                        }
-                        None => {
-                            if !current_bubble.is_empty() {
+                            None => {
                                 let new_id = self
                                     .add_message_to_memory(
                                         step_id.to_owned(),
-                                        TypeSafePayload::Text(TextContent { text: current_bubble.clone() }),
+                                        TypeSafePayload::Text(TextContent { text: bubble_text }),
                                         Direction::Send,
                                         MessageStatus::Completed,
                                     )
                                     .await?
                                     .message_order;
-                                yield Some(Response::Chat(ChatChunk::new(current_bubble[bubble_offset..].to_string(), new_id, step_id.to_owned())));
+                                yield Some(Response::Chat(ChatChunk::new(delta, new_id, step_id.to_owned())));
                             }
                         }
                     }
