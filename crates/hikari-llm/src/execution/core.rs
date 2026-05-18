@@ -1,13 +1,12 @@
 use std::time::Duration;
 
-use super::{
-    error::LlmExecutionError,
-    utils::{get_memory, get_slots},
-};
-use crate::builder::{
-    slot::paths::SlotPath,
-    steps::{InjectionTrait, LlmModel, llm::PromptType},
-    tools::Tool,
+use super::error::LlmExecutionError;
+use crate::{
+    builder::{
+        steps::{InjectionTrait, LlmModel, llm::PromptType},
+        tools::Tool,
+    },
+    utils::get_memory,
 };
 use async_openai::types::chat::ChatCompletionRequestMessage;
 use hikari_config::module::llm_agent::LlmService;
@@ -26,7 +25,6 @@ pub struct LlmCore {
     prompt: Vec<PromptType>,
     model: LlmModel,
     memory: Option<Vec<String>>,
-    slots: Vec<SlotPath>,
     memory_limit: Option<usize>,
     tool: Option<Tool>,
 }
@@ -37,7 +35,6 @@ impl LlmCore {
     pub fn new(
         prompt: Vec<PromptType>,
         model: LlmModel,
-        slots: Vec<SlotPath>,
         memory_filter: Option<Vec<String>>,
         memory_limit: Option<usize>,
         tool: Option<Tool>,
@@ -46,7 +43,6 @@ impl LlmCore {
             prompt,
             model,
             memory: memory_filter,
-            slots,
             memory_limit,
             tool,
         }
@@ -169,22 +165,23 @@ impl LlmCore {
         previous_response: Option<String>,
     ) -> Result<(Vec<ChatCompletionRequestMessage>, Option<ToolSchema>), LlmExecutionError> {
         let memory = self.generate_memory(&conn, conversation_id).await?;
-        let values = get_slots(
-            &conn,
-            conversation_id,
-            user_id,
-            module_id,
-            session_id,
-            self.slots.clone(),
-        )
-        .await?;
 
-        let tool = self.tool.clone().map(|t| t.inject(&values).tool_schema());
+        let tool: Option<ToolSchema> = if let Some(body) = &self.tool {
+            let tool = body
+                .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                .await?;
+            Some(tool.tool_schema())
+        } else {
+            None
+        };
 
         let mut formatted_prompt = Vec::with_capacity(self.prompt.len() + memory.len() + 1);
 
         for prompt in &self.prompt {
-            formatted_prompt.push(prompt.inject(&values));
+            let prompt = prompt
+                .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                .await?;
+            formatted_prompt.push(prompt);
         }
 
         if let Some(previous_response) = previous_response {

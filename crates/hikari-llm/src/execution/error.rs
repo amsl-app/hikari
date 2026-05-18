@@ -45,6 +45,12 @@ pub enum LlmExecutionError {
     UnexpectedResponseFormat,
     #[error(transparent)]
     Undefined(#[from] Box<dyn std::error::Error + Send + Sync>),
+    #[error(transparent)]
+    SlotError(#[from] crate::utils::SlotError),
+    #[error(transparent)]
+    MemoryError(#[from] crate::utils::MemoryError),
+    #[error(transparent)]
+    UsageError(#[from] crate::utils::UsageError),
 }
 
 #[derive(Debug, Error)]

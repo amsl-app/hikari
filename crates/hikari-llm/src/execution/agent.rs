@@ -4,7 +4,7 @@ use crate::execution::agent::response::{ChatChunk, Response};
 use crate::execution::error::LlmExecutionError;
 use crate::execution::iterator::LlmStepIterator;
 use crate::execution::steps::LlmStepTrait;
-use crate::execution::utils::{add_usage, get_memory};
+use crate::utils::{add_usage, get_memory};
 use async_stream::try_stream;
 use futures_core::stream::Stream;
 use futures_util::StreamExt;

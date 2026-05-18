@@ -10,7 +10,7 @@ use crate::{
         error::LlmBuildingError,
         slot::{SaveTarget, SlotValuePair, paths::SlotPath},
         step_id_from_flow,
-        steps::{Documents, Flow, InjectionTrait, SlotsTrait, Template},
+        steps::{Documents, Flow, InjectionTrait, Template},
     },
     execution::steps::{LlmStep, api_call::ApiCall},
 };
@@ -22,13 +22,10 @@ pub struct ApiHeader {
     pub value: Template,
 }
 
-impl SlotsTrait for ApiHeader {
+impl InjectionTrait for ApiHeader {
     fn injection_slots(&self) -> Vec<SlotPath> {
         self.value.injection_slots()
     }
-}
-
-impl InjectionTrait for ApiHeader {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         ApiHeader {
             key: self.key.clone(),
@@ -61,14 +58,6 @@ pub struct ApiBuilder {
     pub target: SaveTarget,
 }
 
-impl SlotsTrait for ApiBuilder {
-    fn injection_slots(&self) -> Vec<SlotPath> {
-        let mut slots = self.body.as_ref().map_or_else(Vec::new, SlotsTrait::injection_slots);
-        slots.extend(self.headers.iter().flat_map(SlotsTrait::injection_slots));
-        slots
-    }
-}
-
 impl IntoLlmStep for ApiBuilder {
     fn into_llm_step(
         self,
@@ -78,8 +67,6 @@ impl IntoLlmStep for ApiBuilder {
         _constants: HashMap<String, Value>,
         _documents: Documents,
     ) -> Result<LlmStep, LlmBuildingError> {
-        let slots: Vec<SlotPath> = self.injection_slots();
-
         let ApiBuilder {
             url,
             method,
@@ -100,7 +87,6 @@ impl IntoLlmStep for ApiBuilder {
 
         Ok(LlmStep::ApiCall(ApiCall::new(
             id,
-            slots,
             url,
             method,
             headers,

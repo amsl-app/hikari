@@ -1,11 +1,9 @@
 use super::{LlmStepResponse, LlmStepTrait};
 use crate::builder::slot::SaveTarget;
-use crate::builder::slot::paths::SlotPath;
 use crate::builder::steps::api::{ApiHeader, ApiMethod};
 use crate::builder::steps::{InjectionTrait, Template};
 use crate::execution::error::APIExecutionError;
 use crate::execution::steps::LlmStepContent;
-use crate::execution::utils::get_slots;
 use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 use async_stream::try_stream;
 use eventsource_stream::Eventsource;
@@ -24,7 +22,6 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct SseCall {
     id: String,
-    slots: Vec<SlotPath>,
     url: String,
     method: ApiMethod,
     headers: Vec<ApiHeader>,
@@ -40,7 +37,6 @@ impl SseCall {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
-        slots: Vec<SlotPath>,
         url: String,
         method: ApiMethod,
         headers: Vec<ApiHeader>,
@@ -51,7 +47,6 @@ impl SseCall {
     ) -> Self {
         Self {
             id,
-            slots,
             url,
             method,
             headers,
@@ -78,19 +73,22 @@ impl LlmStepTrait for SseCall {
         async move {
             const EVENT_STREAM_TXT: &str = "text/event-stream";
             const EVENT_STREAM: HeaderValue = HeaderValue::from_static(EVENT_STREAM_TXT);
-            let values = get_slots(
-                &conn,
-                conversation_id,
-                user_id,
-                module_id,
-                session_id,
-                self.slots.clone(),
-            )
+
+            let headers: Vec<ApiHeader> = futures_util::future::try_join_all(self.headers.iter().map(|header| async {
+                header
+                    .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                    .await
+            }))
             .await?;
 
-            let headers: Vec<ApiHeader> = self.headers.iter().map(|header| header.inject(&values)).collect();
-
-            let body = self.body.as_ref().map(|body| body.inject(&values));
+            let body: Option<Template> = if let Some(body) = &self.body {
+                let value = body
+                    .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                    .await?;
+                Some(value)
+            } else {
+                None
+            };
 
             let client = reqwest::Client::new();
 

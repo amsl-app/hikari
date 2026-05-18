@@ -4,7 +4,7 @@ use crate::builder::error::LlmBuildingError;
 use crate::builder::slot::paths::SlotPath;
 use crate::builder::slot::{SaveTarget, SlotValuePair};
 use crate::builder::steps::{
-    Condition, Documents, Flow, InjectionTrait, IntoLlmStep, ParentStep, SlotsTrait, Template, load_prompt_and_temp,
+    Condition, Documents, Flow, InjectionTrait, IntoLlmStep, ParentStep, Template, load_prompt_and_temp,
 };
 use crate::builder::tools::Tool;
 use crate::builder::{build_memory_filter, step_id_from_flow};
@@ -37,18 +37,6 @@ pub struct ExtractorBuilder {
     pub skip_prefix: bool,
 }
 
-impl SlotsTrait for ExtractorBuilder {
-    fn injection_slots(&self) -> Vec<SlotPath> {
-        let mut slots = self
-            .values
-            .iter()
-            .flat_map(SlotsTrait::injection_slots)
-            .collect::<Vec<_>>();
-        slots.extend(self.prompts.iter().flat_map(SlotsTrait::injection_slots));
-        slots
-    }
-}
-
 impl IntoLlmStep for ExtractorBuilder {
     fn into_llm_step(
         mut self,
@@ -61,10 +49,6 @@ impl IntoLlmStep for ExtractorBuilder {
         self.prompts.iter_mut().for_each(|p| {
             p.insert_constant(&constants);
         });
-
-        // insert_constants must be called before we extract the slots
-
-        let slots: Vec<SlotPath> = self.injection_slots();
 
         let ExtractorBuilder {
             values,
@@ -97,7 +81,6 @@ impl IntoLlmStep for ExtractorBuilder {
         let core = LlmCore::new(
             prompts,
             model.with_default_temperature(temperature),
-            slots,
             memory_filter,
             memory_limit,
             Some(Tool::ExtractionTool(values)),
@@ -135,13 +118,10 @@ impl ExtractionValues {
     }
 }
 
-impl SlotsTrait for ExtractionValues {
+impl InjectionTrait for ExtractionValues {
     fn injection_slots(&self) -> Vec<SlotPath> {
         self.schema.injection_slots()
     }
-}
-
-impl InjectionTrait for ExtractionValues {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         ExtractionValues {
             target: self.target.clone(),
@@ -174,19 +154,16 @@ pub struct ExtractionSchema {
     pub r#enum: Option<Vec<String>>,
 }
 
-impl SlotsTrait for ExtractionSchema {
+impl InjectionTrait for ExtractionSchema {
     fn injection_slots(&self) -> Vec<SlotPath> {
         let mut slots = self.description.injection_slots();
-        slots.extend(self.examples.iter().flat_map(SlotsTrait::injection_slots));
+        slots.extend(self.examples.iter().flat_map(InjectionTrait::injection_slots));
         slots.extend(self.r#items.as_ref().map_or(vec![], |item| item.injection_slots()));
         slots.extend(self.r#properties.as_ref().map_or(vec![], |props| {
-            props.values().flat_map(SlotsTrait::injection_slots).collect()
+            props.values().flat_map(InjectionTrait::injection_slots).collect()
         }));
         slots
     }
-}
-
-impl InjectionTrait for ExtractionSchema {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         ExtractionSchema {
             description: self.description.inject(values),

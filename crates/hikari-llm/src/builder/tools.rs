@@ -1,8 +1,8 @@
 use crate::builder::slot::SlotValuePair;
 use crate::builder::slot::paths::SlotPath;
+use crate::builder::steps::InjectionTrait;
 use crate::builder::steps::extractor::ExtractionValues;
 use crate::builder::steps::validator::ConversationGoal;
-use crate::builder::steps::{InjectionTrait, SlotsTrait};
 use hikari_core::openai::tools::{AsOpenApiField, OpenApiField, ToolSchema};
 use std::collections::HashMap;
 
@@ -13,17 +13,14 @@ pub enum Tool {
     Summarizer,
 }
 
-impl SlotsTrait for Tool {
+impl InjectionTrait for Tool {
     fn injection_slots(&self) -> Vec<SlotPath> {
         match self {
-            Tool::ValidationTool(goals) => goals.iter().flat_map(SlotsTrait::injection_slots).collect(),
-            Tool::ExtractionTool(values) => values.iter().flat_map(SlotsTrait::injection_slots).collect(),
+            Tool::ValidationTool(goals) => goals.iter().flat_map(InjectionTrait::injection_slots).collect(),
+            Tool::ExtractionTool(values) => values.iter().flat_map(InjectionTrait::injection_slots).collect(),
             Tool::Summarizer => vec![],
         }
     }
-}
-
-impl InjectionTrait for Tool {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         match self {
             Tool::ValidationTool(goals) => Tool::ValidationTool(goals.iter().map(|g| g.inject(values)).collect()),

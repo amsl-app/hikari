@@ -3,7 +3,8 @@ use crate::{
         slot::{SaveTarget, paths::SlotPath},
         steps::Condition,
     },
-    execution::{error::LlmExecutionError, steps::LlmStepContent, utils::get_slot},
+    execution::{error::LlmExecutionError, steps::LlmStepContent},
+    utils::get_slot,
 };
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;

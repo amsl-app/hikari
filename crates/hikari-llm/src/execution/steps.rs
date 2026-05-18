@@ -1,4 +1,3 @@
-use super::utils::{add_usage, get_slots};
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::SlotValuePair;
 use crate::builder::slot::paths::SlotPath;
@@ -9,6 +8,8 @@ use crate::execution::steps::api_call::ApiCall;
 use crate::execution::steps::counter::Counter;
 use crate::execution::steps::go_to::GoTo;
 use crate::execution::steps::sse_call::SseCall;
+use crate::utils::add_usage;
+use crate::utils::get_slots;
 use combined_step::CombinedStep;
 use conversation_summarizer::ConversationSummarizer;
 use conversation_validator::ConversationValidator;

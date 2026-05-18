@@ -1,8 +1,6 @@
 use super::{LlmExecutionError, LlmStepContent};
-use crate::builder::slot::paths::SlotPath;
-use crate::builder::steps::{Condition, InjectionTrait, SlotsTrait, Template};
+use crate::builder::steps::{Condition, InjectionTrait, Template};
 use crate::execution::steps::{LlmStepResponse, LlmStepTrait};
-use crate::execution::utils::get_slots;
 use async_stream::stream;
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
@@ -49,9 +47,11 @@ impl LlmStepTrait for TextMessage {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
-            let slots: Vec<SlotPath> = self.message.injection_slots();
-            let slots = get_slots(&conn, conversation_id, user_id, module_id, session_id, slots).await?;
-            let message = self.message.inject(&slots).to_string();
+            let message = self
+                .message
+                .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                .await?
+                .to_string();
 
             let stream = stream! {
                 let chars: Vec<char> = message.chars().collect();
