@@ -3,13 +3,14 @@ use crate::openai::streaming::MessageStream;
 use crate::openai::tools::{ToolChoice, ToolSchema};
 use async_openai::Client;
 use async_openai::config::{Config, OpenAIConfig};
+use async_openai::middleware::ReqwestService;
+use async_openai::middleware::retry::OpenAIRetryLayer;
 use async_openai::types::chat::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionMessageToolCalls,
     ChatCompletionRequestMessage, ChatCompletionTools, CreateChatCompletionRequestArgs, CreateChatCompletionResponse,
     FunctionCall, FunctionCallStream,
 };
 use async_stream::try_stream;
-use backoff::ExponentialBackoffBuilder;
 use futures::Stream;
 use futures::StreamExt;
 use regex::Regex;
@@ -228,10 +229,6 @@ pub struct CallConfig {
     total_timeout: Duration,
     #[builder(default = Duration::from_secs(20))]
     iteration_timeout: Duration,
-    #[builder(default = Duration::from_millis(500))]
-    min_retry_interval: Duration,
-    #[builder(default = Duration::from_secs(1))]
-    max_retry_interval: Duration,
 }
 
 pub enum OpenAiCallResult {
@@ -313,17 +310,13 @@ pub async fn openai_call_with_timeout(
         OpenAiError::HttpClientBuild(error)
     })?;
 
-    let mut backoff_builder = ExponentialBackoffBuilder::default();
-    backoff_builder
-        .with_initial_interval(config.min_retry_interval)
-        .with_max_interval(config.max_retry_interval)
-        .with_max_elapsed_time(Some(config.total_timeout));
+    let http_service = tower::ServiceBuilder::new()
+        .concurrency_limit(8)
+        .timeout(config.total_timeout)
+        .layer(OpenAIRetryLayer::default())
+        .service(ReqwestService::new(http_client));
 
-    let backoff = backoff_builder.build();
-
-    let client = Client::with_config(openai_config)
-        .with_http_client(http_client)
-        .with_backoff(backoff);
+    let client = Client::with_config(openai_config).with_http_service(http_service);
 
     if streaming {
         tracing::debug!("Using streaming OpenAI call");

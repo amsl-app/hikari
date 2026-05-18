@@ -94,7 +94,6 @@ pub async fn generate_prompt(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -195,7 +194,6 @@ Es folgen die Fragen.",
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -280,7 +278,6 @@ pub async fn merge_prompts(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -376,7 +373,6 @@ Rufe die Funktion `TextZusammenfuehren` auf um die Formulierungen zurückzugeben
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
