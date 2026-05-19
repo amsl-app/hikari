@@ -7,7 +7,7 @@ use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 use crate::builder::slot::{SaveTarget, SlotValuePair};
-use crate::builder::steps::InjectionTrait;
+use crate::builder::steps::resolve_multiple;
 use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 
 use super::{LlmStepContent, LlmStepResponse, LlmStepTrait};
@@ -44,12 +44,8 @@ impl LlmStepTrait for SetSlot {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
-            let values = futures_util::future::try_join_all(
-                self.values
-                    .iter()
-                    .map(|s| async { s.resolve(conversation_id, user_id, module_id, session_id, &conn).await }),
-            )
-            .await?;
+            let values: Vec<SlotValuePair> =
+                resolve_multiple(&self.values, conversation_id, user_id, module_id, session_id, &conn).await?;
 
             let values = values
                 .into_iter()

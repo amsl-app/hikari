@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::error::LlmExecutionError;
 use crate::{
     builder::{
-        steps::{InjectionTrait, LlmModel, llm::PromptType},
+        steps::{InjectionTrait, LlmModel, llm::PromptType, resolve_multiple},
         tools::Tool,
     },
     utils::get_memory,
@@ -166,7 +166,7 @@ impl LlmCore {
     ) -> Result<(Vec<ChatCompletionRequestMessage>, Option<ToolSchema>), LlmExecutionError> {
         let memory = self.generate_memory(&conn, conversation_id).await?;
 
-        let tool: Option<ToolSchema> = if let Some(body) = &self.tool {
+        let tool_schema: Option<ToolSchema> = if let Some(body) = &self.tool {
             let tool = body
                 .resolve(conversation_id, user_id, module_id, session_id, &conn)
                 .await?;
@@ -177,12 +177,9 @@ impl LlmCore {
 
         let mut formatted_prompt = Vec::with_capacity(self.prompt.len() + memory.len() + 1);
 
-        for prompt in &self.prompt {
-            let prompt = prompt
-                .resolve(conversation_id, user_id, module_id, session_id, &conn)
-                .await?;
-            formatted_prompt.push(prompt);
-        }
+        let prompts = resolve_multiple(&self.prompt, conversation_id, user_id, module_id, session_id, &conn).await?;
+
+        formatted_prompt.extend(prompts);
 
         if let Some(previous_response) = previous_response {
             formatted_prompt.push(PromptType::System(format!("VorherigeAntwort: \n Du hast bereits angefangen eine Antwort zu generieren: '''{previous_response}'''. Generiere eine neue Antwort, die mit der Antwort beginnt, die du bereits generiert hast.").into()));
@@ -194,7 +191,7 @@ impl LlmCore {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok((messages, tool))
+        Ok((messages, tool_schema))
     }
 
     async fn generate_memory(

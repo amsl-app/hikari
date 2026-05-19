@@ -16,26 +16,12 @@ pub enum SlotError {
     DatabaseError(#[from] sea_orm::DbErr),
 }
 
-#[derive(Debug, Error)]
-pub enum MemoryError {
-    #[error("Conversation not found: {0}")]
-    ConversationNotFound(Uuid),
-    #[error(transparent)]
-    DatabaseError(#[from] sea_orm::DbErr),
-}
-
-#[derive(Debug, Error)]
-pub enum UsageError {
-    #[error(transparent)]
-    DatabaseError(#[from] sea_orm::DbErr),
-}
-
 pub async fn get_memory(
     conn: &DatabaseConnection,
     conversation_id: &Uuid,
     steps: Option<&[String]>,
     limit: Option<u64>,
-) -> Result<Vec<ConversationMessage>, MemoryError> {
+) -> Result<Vec<ConversationMessage>, sea_orm::DbErr> {
     let res: Vec<ConversationMessage> =
         hikari_db::llm::message::Query::get_memory_from_conversation(conn, conversation_id, steps, limit)
             .await?
@@ -194,8 +180,13 @@ pub async fn get_module_slots(
     Ok(slots)
 }
 
-pub async fn add_usage(conn: &DatabaseConnection, user_id: &Uuid, tokens: u32, step: String) -> Result<(), UsageError> {
-    tracing::debug!(?tokens, "Tokens used");
+pub async fn add_usage(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    tokens: u32,
+    step: String,
+) -> Result<(), sea_orm::DbErr> {
+    tracing::debug!(?tokens, "tokens used");
     hikari_db::llm::usage::Mutation::add_usage(conn, user_id, tokens, step).await?;
     Ok(())
 }

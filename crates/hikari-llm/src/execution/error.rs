@@ -1,4 +1,7 @@
-use crate::builder::{error::LlmBuildingError, slot::paths::SlotPath};
+use crate::{
+    builder::{error::LlmBuildingError, slot::paths::SlotPath},
+    utils::SlotError,
+};
 use sea_orm::DbErr;
 use std::str::ParseBoolError;
 use thiserror::Error;
@@ -45,12 +48,17 @@ pub enum LlmExecutionError {
     UnexpectedResponseFormat,
     #[error(transparent)]
     Undefined(#[from] Box<dyn std::error::Error + Send + Sync>),
-    #[error(transparent)]
-    SlotError(#[from] crate::utils::SlotError),
-    #[error(transparent)]
-    MemoryError(#[from] crate::utils::MemoryError),
-    #[error(transparent)]
-    UsageError(#[from] crate::utils::UsageError),
+    #[error("Slot not found: {0}")]
+    NotFound(SlotPath),
+}
+
+impl From<SlotError> for LlmExecutionError {
+    fn from(value: SlotError) -> Self {
+        match value {
+            SlotError::NotFound(slot) => LlmExecutionError::NotFound(slot),
+            SlotError::DatabaseError(err) => LlmExecutionError::DatabaseError(err),
+        }
+    }
 }
 
 #[derive(Debug, Error)]

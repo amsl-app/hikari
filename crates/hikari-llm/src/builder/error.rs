@@ -15,9 +15,5 @@ pub enum LlmBuildingError {
     #[error("Missed formatation: {0}")]
     MissedFormatation(String),
     #[error(transparent)]
-    SlotError(#[from] crate::utils::SlotError),
-    #[error(transparent)]
-    MemoryError(#[from] crate::utils::MemoryError),
-    #[error(transparent)]
-    UsageError(#[from] crate::utils::UsageError),
+    DatabaseError(#[from] sea_orm::DbErr),
 }

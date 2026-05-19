@@ -416,18 +416,48 @@ pub trait InjectionTrait: Sized {
         session_id: &str,
         conn: &DatabaseConnection,
     ) -> Result<Self, SlotError> {
-        let values = get_slots(
-            conn,
-            conversation_id,
-            user_id,
-            module_id,
-            session_id,
-            self.injection_slots(),
-        )
-        .await?;
+        let slots = self.injection_slots();
+        if slots.is_empty() {
+            return Ok(self.inject(&[]));
+        }
+        let values = get_slots(conn, conversation_id, user_id, module_id, session_id, slots).await?;
         let res = self.inject(&values);
         Ok(res)
     }
+}
+
+pub(crate) async fn resolve_optional<T: InjectionTrait + Sync>(
+    item: &Option<T>,
+    conversation_id: &Uuid,
+    user_id: &Uuid,
+    module_id: &str,
+    session_id: &str,
+    conn: &DatabaseConnection,
+) -> Result<Option<T>, SlotError> {
+    match item {
+        Some(item) => Ok(Some(
+            item.resolve(conversation_id, user_id, module_id, session_id, conn)
+                .await?,
+        )),
+        None => Ok(None),
+    }
+}
+
+pub(crate) async fn resolve_multiple<T: InjectionTrait>(
+    items: &[T],
+    conversation_id: &Uuid,
+    user_id: &Uuid,
+    module_id: &str,
+    session_id: &str,
+    conn: &DatabaseConnection,
+) -> Result<Vec<T>, SlotError> {
+    let slots: Vec<SlotPath> = items.iter().flat_map(|i| i.injection_slots()).collect();
+    let values = if slots.is_empty() {
+        vec![]
+    } else {
+        get_slots(conn, conversation_id, user_id, module_id, session_id, slots).await?
+    };
+    Ok(items.iter().map(|i| i.inject(&values)).collect())
 }
 
 #[derive(Deserialize, Debug, Clone, JsonSchema)]

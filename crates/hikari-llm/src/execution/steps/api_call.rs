@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{LlmStepResponse, LlmStepTrait};
 use crate::builder::slot::SaveTarget;
 use crate::builder::steps::api::{ApiHeader, ApiMethod};
-use crate::builder::steps::{InjectionTrait, Template};
+use crate::builder::steps::{Template, resolve_multiple, resolve_optional};
 use crate::execution::error::APIExecutionError;
 use crate::execution::steps::LlmStepContent;
 use crate::execution::steps::conversation_validator::NextStep;
@@ -76,21 +76,9 @@ impl LlmStepTrait for ApiCall {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
-            let headers: Vec<ApiHeader> = futures_util::future::try_join_all(self.headers.iter().map(|header| async {
-                header
-                    .resolve(conversation_id, user_id, module_id, session_id, &conn)
-                    .await
-            }))
-            .await?;
-
-            let body: Option<Template> = if let Some(body) = &self.body {
-                let value = body
-                    .resolve(conversation_id, user_id, module_id, session_id, &conn)
-                    .await?;
-                Some(value)
-            } else {
-                None
-            };
+            let headers =
+                resolve_multiple(&self.headers, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let body = resolve_optional(&self.body, conversation_id, user_id, module_id, session_id, &conn).await?;
 
             let client = reqwest::Client::new();
 
