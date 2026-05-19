@@ -179,14 +179,3 @@ pub async fn get_module_slots(
             .collect();
     Ok(slots)
 }
-
-pub async fn add_usage(
-    conn: &DatabaseConnection,
-    user_id: &Uuid,
-    tokens: u32,
-    step: String,
-) -> Result<(), sea_orm::DbErr> {
-    tracing::debug!(?tokens, "tokens used");
-    hikari_db::llm::usage::Mutation::add_usage(conn, user_id, tokens, step).await?;
-    Ok(())
-}

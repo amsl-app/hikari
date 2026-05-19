@@ -3,6 +3,7 @@ use crate::journal::summarize::error::SummarizeError;
 use crate::llm_config::LlmConfig;
 use crate::openai::error::OpenAiError;
 use crate::openai::{CallConfig, openai_single_tool_call};
+use crate::usage::add_usage;
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
 };
@@ -374,7 +375,7 @@ Verwende Valides JSON als Argumente für den Funktionsaufruf.
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, &user_id, usage, "journal_summary".to_owned()).await?;
+        add_usage(conn, &user_id, usage, "journal_summary").await?;
     }
 
     res.fix_escapes();

@@ -4,13 +4,14 @@ use crate::execution::agent::response::{ChatChunk, Response};
 use crate::execution::error::LlmExecutionError;
 use crate::execution::iterator::LlmStepIterator;
 use crate::execution::steps::LlmStepTrait;
-use crate::utils::{add_usage, get_memory};
+use crate::utils::get_memory;
 use async_stream::try_stream;
 use futures_core::stream::Stream;
 use futures_util::StreamExt;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::Content;
+use hikari_core::usage::add_usage;
 use hikari_model::chat::{Direction, TextContent, TypeSafePayload};
 use hikari_model::llm::message::{ConversationMessage, MessageStatus};
 use hikari_model::llm::slot::Slot;
@@ -207,7 +208,7 @@ impl LlmAgent {
                                 complete_message.push_str(content);
                                 let usage = value.tokens.unwrap_or(0);
                                 tracing::trace!(?usage, "tokens used");
-                                add_usage(&self.conn, &self.user_id, usage, step_id.to_owned()).await?;
+                                add_usage(&self.conn, &self.user_id, usage, step_id).await?;
 
                                 if complete_message.len() > offset.saturating_add(BUFFER_SIZE) {
                                     let payload = TypeSafePayload::Text(TextContent {
