@@ -91,7 +91,6 @@ impl LlmCore {
 
         let message = openai_call_with_timeout(
             CallConfig::builder()
-                .max_retry_interval(Duration::from_secs(1))
                 .total_timeout(Duration::from_secs(30))
                 .iteration_timeout(Duration::from_secs(15))
                 .build(),
@@ -137,7 +136,6 @@ impl LlmCore {
 
         let answer = openai_call_with_timeout(
             CallConfig::builder()
-                .max_retry_interval(Duration::from_secs(1))
                 .total_timeout(Duration::from_secs(30))
                 .iteration_timeout(Duration::from_secs(5))
                 .build(),
