@@ -43,22 +43,27 @@ impl BubbleAccumulator {
 
         let mut bubble_chunks = Vec::new();
 
-        while let Some(sep_pos) = self.current_bubble.find("---") {
-            let complete_bubble_text: String = self.current_bubble.drain(..sep_pos).collect();
-            self.current_bubble.drain(..3); // consume the "---" separator
-            let id: i32 = self.update_message_fn.as_ref()(complete_bubble_text.clone(), self.current_id, true).await?;
-
-            if self.delta_offset < complete_bubble_text.len() {
-                let delta = complete_bubble_text
-                    .get(self.delta_offset..)
-                    .expect("delta_offset is a valid byte boundary")
-                    .to_string();
-
-                bubble_chunks.push((delta, id));
+        if self.current_bubble.contains("---") {
+            let full = std::mem::take(&mut self.current_bubble);
+            let mut parts = full.split("---").peekable();
+            while let Some(part) = parts.next() {
+                if parts.peek().is_some() {
+                    // not the last part: finalize this bubble and start a new one
+                    let bubble = part.to_string();
+                    let id = self.update_message_fn.as_ref()(bubble.clone(), self.current_id, true).await?;
+                    if self.delta_offset < bubble.len() {
+                        let delta = bubble
+                            .get(self.delta_offset..)
+                            .expect("delta_offset is a valid byte boundary")
+                            .to_string();
+                        bubble_chunks.push((delta, id));
+                    }
+                    self.current_id = None;
+                    self.delta_offset = 0;
+                } else {
+                    self.current_bubble = part.to_string();
+                }
             }
-
-            self.current_id = None;
-            self.delta_offset = 0;
         }
 
         if self.current_bubble.len() > self.delta_offset {
