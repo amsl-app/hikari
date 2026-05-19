@@ -9,4 +9,5 @@ pub mod quiz;
 pub mod status;
 pub mod tag;
 pub mod user;
+pub mod user_context_log;
 pub mod user_handle;

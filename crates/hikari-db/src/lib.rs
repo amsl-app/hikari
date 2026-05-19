@@ -12,6 +12,7 @@ pub mod util;
 
 pub mod assessment;
 pub mod tag;
+pub mod user_context_logs;
 pub mod user_handle;
 
 pub use sea_orm;

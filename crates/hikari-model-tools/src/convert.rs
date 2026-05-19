@@ -5,6 +5,7 @@ pub mod llm;
 pub mod module;
 pub mod quiz;
 pub mod user;
+pub mod user_context_log;
 pub mod user_handle;
 
 pub trait IntoDbModel<T>: Sized {
