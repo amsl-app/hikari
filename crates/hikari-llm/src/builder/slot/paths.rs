@@ -94,6 +94,7 @@ pub struct UserContextLogPath {
     /// Key of the user context log to load from
     pub key: String,
 
+    #[serde(default)]
     /// # Filter for the user context log entries to load
     pub filter: UserContextLogPathFilter,
 }

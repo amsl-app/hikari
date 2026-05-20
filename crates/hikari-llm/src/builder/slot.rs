@@ -23,7 +23,7 @@ pub enum ValueSource {
     /// User configs are custom objects
     UserConfig(UserConfigPath),
     /// # Load value from the user context log
-    /// User context log are custom json objects with a datetime
+    /// User context logs are custom JSON objects with a datetime
     UserContextLog(UserContextLogPath),
 }
 #[derive(Deserialize, Debug, Clone, JsonSchema)]

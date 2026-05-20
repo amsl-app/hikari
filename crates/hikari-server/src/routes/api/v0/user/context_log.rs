@@ -29,7 +29,7 @@ where
         .nest(
             "/{type}",
             Router::new()
-                .route("/", get(get_user_context_logs_by_type).put(add_user_context_log))
+                .route("/", get(get_user_context_logs_by_type).post(add_user_context_log))
                 .route("/latest", get(get_latest_user_context_log_by_type)),
         )
         .with_state(())
@@ -110,7 +110,7 @@ pub(crate) async fn get_user_context_logs_by_type(
 }
 
 #[utoipa::path(
-    put,
+    post,
     path = "/api/v0/user/context_log/{type}",
     request_body = Value,
     responses(

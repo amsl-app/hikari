@@ -7,7 +7,8 @@ pub struct Model {
     pub user_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
     pub created_at: DateTime,
-    pub r#type: String, // We do not want to use an enum here because the types can be dynamic and we want to be able to adding new types without new migrations
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub r#type: String, // We do not want to use an enum here because the types can be dynamic and we want to be able to add new types without new migrations
     pub data: Json,
 }
 
