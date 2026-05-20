@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use crate::data::opt::{NamedOptionalValue, NamedOptionalValueParser};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use hikari_utils::args::{
     llm::{LlmConfig, LlmServices},
     s3::S3,
@@ -16,9 +16,23 @@ pub(crate) struct Cli {
     pub command: Commands,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 pub(crate) enum Commands {
     Run(Run),
+    Openapi(Openapi),
+}
+
+#[derive(Debug, Clone, Args)]
+pub(crate) struct Openapi {
+    #[arg(long, value_enum, default_value = "compact", help = "OpenAPI output format")]
+    pub(crate) format: OpenapiFormat,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, Eq, PartialEq)]
+pub(crate) enum OpenapiFormat {
+    Compact,
+    Pretty,
 }
 
 #[derive(Debug, Clone, Args)]

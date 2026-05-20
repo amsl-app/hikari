@@ -14,6 +14,9 @@ use protect_axum::protect;
 use sea_orm::ConnectionTrait;
 use serde_derive::Deserialize;
 use serde_json::{Map, Value};
+use utoipa::openapi::schema::{AdditionalProperties, AnyOfBuilder};
+use utoipa::openapi::{ObjectBuilder, RefOr, Schema, Type};
+use utoipa::{PartialSchema, ToSchema};
 use uuid::Uuid;
 
 use hikari_db::sea_orm::DatabaseConnection;
@@ -114,9 +117,36 @@ pub(crate) async fn read_user_config(db: &DatabaseConnection, user_id: Uuid, key
     config.ok_or(UserError::NotFound)
 }
 
+struct AnyJson;
+
+impl PartialSchema for AnyJson {
+    fn schema() -> RefOr<Schema> {
+        let object = ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::Type(Type::Object))
+            .additional_properties(Some(AdditionalProperties::FreeForm(true)))
+            .build();
+        let array = utoipa::openapi::schema::ArrayBuilder::new()
+            .items(ObjectBuilder::new().schema_type(utoipa::openapi::schema::SchemaType::AnyValue))
+            .build();
+        RefOr::T(Schema::AnyOf(
+            AnyOfBuilder::new()
+                .item(object)
+                .item(String::schema())
+                .item(array)
+                .item(ObjectBuilder::new().schema_type(Type::Number).build())
+                .item(ObjectBuilder::new().schema_type(Type::Integer).build())
+                .item(bool::schema())
+                .build(),
+        ))
+    }
+}
+
+impl ToSchema for AnyJson {}
+
 #[utoipa::path(
     put,
     path = "/api/v0/user/config/{key}",
+    request_body(content = inline(AnyJson), description = "Any valid json"),
     responses(
         (status = CREATED, description = "Stores the body as value for the given key, note overrides existing values"),
     ),

@@ -27,9 +27,9 @@ where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .route("/", get(get_quizzes))
+        .route("/", get(get_module_quizzes))
         .route("/start", post(start_quiz))
-        .route("/scores", get(get_scores))
+        .route("/scores", get(get_module_scores))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -57,7 +57,7 @@ pub(crate) struct QuizFlags {
     )
 )]
 #[protect("Permission::Basic", ty = "Permission")]
-async fn get_quizzes(
+async fn get_module_quizzes(
     ExtractUserId(user_id): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
     Path(module_id): Path<String>,
@@ -169,7 +169,7 @@ async fn start_quiz(
     )
 )]
 #[protect("Permission::Basic", ty = "Permission")]
-async fn get_scores(
+async fn get_module_scores(
     ExtractUserId(user_id): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
     Path(module_id): Path<String>,

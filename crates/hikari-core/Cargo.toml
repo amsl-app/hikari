@@ -45,7 +45,7 @@ tower = "0.5.3"
 typed-builder = "0.23.2"
 tracing = "0.1.41"
 metrics = "0.24.3"
-utoipa = { version = "5.4.0" }
+utoipa = { version = "5.4", features = ["macros"] }
 pdf-extract = "0.10.0"
 futures = "0.3.32"
 hex = "0.4.3"
