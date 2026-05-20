@@ -1,23 +1,24 @@
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::paths::Destination;
 use crate::execution::agent::response::{ChatChunk, Response};
+use crate::execution::bubble::BubbleAccumulator;
 use crate::execution::error::LlmExecutionError;
 use crate::execution::iterator::LlmStepIterator;
 use crate::execution::steps::LlmStepTrait;
 use crate::utils::get_memory;
 use async_stream::try_stream;
 use futures_core::stream::Stream;
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::Content;
 use hikari_core::usage::add_usage;
 use hikari_model::chat::{Direction, TextContent, TypeSafePayload};
-use hikari_model::llm::message::{ConversationMessage, MessageStatus};
+use hikari_model::llm::message::MessageStatus;
 use hikari_model::llm::slot::Slot;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
+use hikari_model_tools::convert::IntoDbModel;
 use hikari_model_tools::convert::llm::split_payload_for_database;
-use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
 use std::error::Error;
@@ -30,8 +31,6 @@ use yaml_serde::Value;
 use super::steps::{LlmStep, LlmStepContent};
 
 pub mod response;
-
-const BUFFER_SIZE: usize = 16;
 
 pub struct LlmAgent {
     user_id: Uuid,
@@ -114,7 +113,18 @@ impl LlmAgent {
                         }
                         LlmStepStatus::WaitingForInput => {
                             if let Some(message) = message.take() {
-                                self.add_message_to_memory(step_id, message.clone(), Direction::Receive, MessageStatus::Completed).await?;
+                                let (content_type, message) = split_payload_for_database(message).map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
+                                hikari_db::llm::message::Mutation::insert_new_message(
+                                    &self.conn,
+                                    self.conversation_id,
+                                    step_id,
+                                    content_type,
+                                    message,
+                                    Direction::Receive.into_db_model(),
+                                    MessageStatus::Completed.into_db_model(),
+                                )
+                                .await?;
+
                                 // Now the action is completed
                                 let mut current_action = self.current_action.as_ref().ok_or(LlmExecutionError::NoAction)?.lock().await;
                                 let state = current_action.set_status(LlmStepStatus::Completed);
@@ -183,15 +193,51 @@ impl LlmAgent {
                     }
                 }
                 LlmStepContent::Message{message, store} => {
-                    let mut complete_message = String::new(); // Initialize a complete message buffer
-                    let mut offset: usize = 0;
-                    // Init a new message in the database
-                    let mut id = None;
-                    // Create streaming content with the current message chunk
+                    let conn = self.conn.clone();
+                    let conversation_id = self.conversation_id;
+                    let step_id_owned = step_id.to_owned();
+                    let mut acc = BubbleAccumulator::new(move |content, id, is_last| {
+                        let conn = conn.clone();
+                        let step_id_owned = step_id_owned.clone();
+                        async move {
+                            let status = if is_last { MessageStatus::Completed } else { MessageStatus::Generating };
+                            match id {
+                                Some(id) => {
+                                    let (_, message) = split_payload_for_database(TypeSafePayload::Text(TextContent { text: content }))
+                                        .map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
+                                    hikari_db::llm::message::Mutation::update_message(
+                                        &conn,
+                                        conversation_id,
+                                        id,
+                                        message,
+                                        Some(status.into_db_model()),
+                                    ).await?;
+                                    Ok::<i32, LlmExecutionError>(id)
+                                }
+                                None => {
+                                    let (content_type, message) = split_payload_for_database(TypeSafePayload::Text(TextContent { text: content }))
+                                        .map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
+                                    let res = hikari_db::llm::message::Mutation::insert_new_message(
+                                        &conn,
+                                        conversation_id,
+                                        step_id_owned,
+                                        content_type,
+                                        message,
+                                        Direction::Send.into_db_model(),
+                                        status.into_db_model(),
+                                    ).await?;
+                                    Ok(res.message_order)
+                                }
+                            }
+                        }.boxed()
+                    });
+
+
+
+
                     while let Some(result) = message.next().await {
                         match result {
                             Ok(value) => {
-                                // Check if agent has start times present and take it to send time to first token metric
                                 if let Some(start_time) = self.start_time.take() {
                                     // The precision loss is fine here, as we are only using it for metrics.
                                     // TODO use as_millis_f64() once it is stable
@@ -200,48 +246,26 @@ impl LlmAgent {
                                     metrics::histogram!("agent_time_to_first_token_ms").record(elapsed);
                                 }
                                 tracing::trace!(?value, "message chunk");
+
                                 let content = if let Content::Text { text, .. } = &value.content {
-                                        Ok(text.as_deref().unwrap_or(""))
+                                    Ok(text.as_deref().unwrap_or(""))
                                 } else {
                                     Err(LlmExecutionError::UnexpectedResponseFormat)
                                 }?;
-                                complete_message.push_str(content);
+
                                 let usage = value.tokens.unwrap_or(0);
                                 tracing::trace!(?usage, "tokens used");
                                 add_usage(&self.conn, &self.user_id, usage, step_id).await?;
 
-                                if complete_message.len() > offset.saturating_add(BUFFER_SIZE) {
-                                    let payload = TypeSafePayload::Text(TextContent {
-                                        text: complete_message.clone(),
-                                    });
-                                    let id = match id {
-                                        None => {
-                                            // Only create a message, when we have something to send
-                                            let new_id = self
-                                                .add_message_to_memory(
-                                                    step_id.to_owned(),
-                                                    payload,
-                                                    Direction::Send,
-                                                    MessageStatus::Generating,
-                                                )
-                                                .await?
-                                                .message_order;
-                                            id = Some(new_id);
-                                            new_id
-                                        }
-                                        Some(id) => {
-                                            self.update_message(id, payload, Some(MessageStatus::Generating))
-                                                .await?;
-                                            id
-                                        }
-                                    };
-                                    yield Some(Response::Chat(ChatChunk::new(
-                                        complete_message[offset..].to_string(),
-                                        id,
-                                        step_id.to_owned(),
-                                    )));
-                                    offset = complete_message.len();
+                                // Push the new content
+                                let bubble_chunks = acc.push(content).await?;
+
+                                for bubble in bubble_chunks {
+                                    let bubble_id = bubble.1;
+                                    let delta = bubble.0;
+                                    yield Some(Response::Chat(ChatChunk::new(delta, bubble_id, step_id.to_owned())));
                                 }
+
                             }
                             Err(error) => {
                                 tracing::error!(error = &*error as &dyn Error, "error sending streaming message");
@@ -252,34 +276,10 @@ impl LlmAgent {
                         }
                     }
 
-                    match id {
-                        Some(id) => {
-                            let chunk = complete_message[offset..].to_string();
-                            let payload = TypeSafePayload::Text(TextContent { text: complete_message.clone()});
-                            self.update_message(id, payload, Some(MessageStatus::Completed)).await?;
-                            if !chunk.is_empty() {
-                                yield Some(Response::Chat(ChatChunk::new(chunk, id, step_id.to_owned())));
-                            }
-                        }
-                        None => {
-                            if !complete_message.is_empty() {
-                                // We have some chars but didn't create a message yet.
-                                //  So create a message and send it.
-                                let id = self
-                                    .add_message_to_memory(
-                                        step_id.to_owned(),
-                                        TypeSafePayload::Text(TextContent {
-                                            text: complete_message.clone(),
-                                        }),
-                                        Direction::Send,
-                                        MessageStatus::Completed,
-                                    )
-                                    .await?
-                                    .message_order;
-                                yield Some(Response::Chat(ChatChunk::new(complete_message.clone(), id, step_id.to_owned())));
-                            }
-                        }
-                    }
+                    // Finalize the last bubbble for the database
+                    let complete_message = acc.finalize().await?;
+
+
                     if let Some(SaveTarget::Slot(slot_path)) = store {
                         let destination = slot_path.destination().clone();
                         let slot = Slot {
@@ -313,50 +313,6 @@ impl LlmAgent {
                 }
             }
         })
-    }
-
-    // Memory
-    async fn add_message_to_memory(
-        &self,
-        step: String,
-        payload: TypeSafePayload,
-        direction: Direction,
-        status: MessageStatus,
-    ) -> Result<ConversationMessage, LlmExecutionError> {
-        let (content_type, message) =
-            split_payload_for_database(payload).map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
-
-        let direction = direction.into_db_model();
-        let res = hikari_db::llm::message::Mutation::insert_new_message(
-            &self.conn,
-            self.conversation_id,
-            step,
-            content_type,
-            message,
-            direction,
-            status.into_db_model(),
-        )
-        .await?;
-        Ok(res.into_model())
-    }
-
-    async fn update_message(
-        &self,
-        message_order: i32,
-        payload: TypeSafePayload,
-        status: Option<MessageStatus>,
-    ) -> Result<ConversationMessage, LlmExecutionError> {
-        let (_, message) =
-            split_payload_for_database(payload).map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
-        let res = hikari_db::llm::message::Mutation::update_message(
-            &self.conn,
-            self.conversation_id,
-            message_order,
-            message,
-            status.map(IntoDbModel::into_db_model),
-        )
-        .await?;
-        Ok(res.into_model())
     }
 
     // Slots
