@@ -3,6 +3,7 @@ use crate::openai::{CallConfig, openai_single_tool_call};
 use crate::pgvector::search;
 use crate::quiz::error::QuizError;
 use crate::quiz::max_five_random_exam_questions;
+use crate::usage::add_usage;
 use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
@@ -268,7 +269,7 @@ pub async fn create_question(
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "quiz_generation".to_owned()).await?;
+        add_usage(conn, user_id, usage, "quiz_generation").await?;
     }
 
     match question.question {

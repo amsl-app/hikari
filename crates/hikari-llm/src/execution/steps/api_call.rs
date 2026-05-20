@@ -2,13 +2,11 @@ use std::collections::HashMap;
 
 use super::{LlmStepResponse, LlmStepTrait};
 use crate::builder::slot::SaveTarget;
-use crate::builder::slot::paths::SlotPath;
 use crate::builder::steps::api::{ApiHeader, ApiMethod};
-use crate::builder::steps::{InjectionTrait, Template};
+use crate::builder::steps::{Template, resolve_multiple, resolve_optional};
 use crate::execution::error::APIExecutionError;
 use crate::execution::steps::LlmStepContent;
 use crate::execution::steps::conversation_validator::NextStep;
-use crate::execution::utils::get_slots;
 use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
@@ -23,7 +21,6 @@ use yaml_serde::Value;
 #[derive(Clone)]
 pub struct ApiCall {
     id: String,
-    slots: Vec<SlotPath>,
     url: String,
     method: ApiMethod,
     headers: Vec<ApiHeader>,
@@ -41,7 +38,6 @@ impl ApiCall {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
-        slots: Vec<SlotPath>,
         url: String,
         method: ApiMethod,
         headers: Vec<ApiHeader>,
@@ -54,7 +50,6 @@ impl ApiCall {
     ) -> Self {
         Self {
             id,
-            slots,
             url,
             method,
             headers,
@@ -81,19 +76,9 @@ impl LlmStepTrait for ApiCall {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
-            let values = get_slots(
-                &conn,
-                conversation_id,
-                user_id,
-                module_id,
-                session_id,
-                self.slots.clone(),
-            )
-            .await?;
-
-            let headers: Vec<ApiHeader> = self.headers.iter().map(|header| header.inject(&values)).collect();
-
-            let body = self.body.as_ref().map(|body| body.inject(&values));
+            let headers =
+                resolve_multiple(&self.headers, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let body = resolve_optional(&self.body, conversation_id, user_id, module_id, session_id, &conn).await?;
 
             let client = reqwest::Client::new();
 

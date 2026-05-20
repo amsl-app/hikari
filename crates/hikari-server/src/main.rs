@@ -5,7 +5,7 @@ use crate::data::WorkerUrl;
 use crate::data::csml::Bots;
 use crate::db::error::DbError::UnknownDbType;
 use crate::db::migration;
-use crate::opt::{Commands, Db, Run};
+use crate::opt::{Commands, Db, OpenapiFormat, Run};
 use anyhow::{Result, anyhow};
 use axum::serve;
 use clap::Parser;
@@ -278,6 +278,11 @@ fn main() -> Result<()> {
 
         match opt.command {
             Commands::Run(o) => run(o).await?,
+            Commands::Openapi(o) => {
+                let pretty = o.format == OpenapiFormat::Pretty;
+                let json = routes::swagger::openapi_json(pretty)?;
+                println!("{json}");
+            }
         }
         Ok(())
     };

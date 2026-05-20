@@ -5,9 +5,8 @@ use yaml_serde::Value;
 
 use crate::builder::build_memory_filter;
 use crate::builder::error::LlmBuildingError;
-use crate::builder::slot::paths::SlotPath;
 use crate::builder::steps::llm::PromptType;
-use crate::builder::steps::{Condition, Documents, IntoLlmStep, ParentStep, SlotsTrait, load_prompt_and_temp};
+use crate::builder::steps::{Condition, Documents, IntoLlmStep, ParentStep, load_prompt_and_temp};
 use crate::builder::tools::Tool;
 use crate::execution::core::LlmCore;
 use crate::execution::steps::LlmStep;
@@ -33,15 +32,6 @@ pub struct SummarizerBuilder {
     pub skip_prefix: bool,
 }
 
-impl SlotsTrait for SummarizerBuilder {
-    fn injection_slots(&self) -> Vec<SlotPath> {
-        self.prompts
-            .iter()
-            .flat_map(SlotsTrait::injection_slots)
-            .collect::<Vec<_>>()
-    }
-}
-
 impl IntoLlmStep for SummarizerBuilder {
     fn into_llm_step(
         mut self,
@@ -54,10 +44,6 @@ impl IntoLlmStep for SummarizerBuilder {
         self.prompts.iter_mut().for_each(|p| {
             p.insert_constant(&constants);
         });
-
-        // insert_constants must be called before we extract the slots
-
-        let slots: Vec<SlotPath> = self.injection_slots();
 
         let SummarizerBuilder {
             mut prompts,
@@ -86,7 +72,6 @@ impl IntoLlmStep for SummarizerBuilder {
         let core = LlmCore::new(
             prompts,
             model.with_default_temperature(temperature),
-            slots,
             memory_filter,
             memory_limit,
             Some(Tool::Summarizer),

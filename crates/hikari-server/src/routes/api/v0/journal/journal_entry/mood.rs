@@ -73,7 +73,7 @@ pub(crate) async fn set_mood(
     delete,
     path = "/api/v0/journal/entries/{journal_entry}/mood",
     responses(
-        (status = OK, description = "Sets the mood for a journal entry."),
+        (status = OK, description = "Deletes the mood for a journal entry."),
     ),
     tag = "v0/journal",
     security(

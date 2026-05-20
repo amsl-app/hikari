@@ -1,13 +1,12 @@
 use std::time::Duration;
 
-use super::{
-    error::LlmExecutionError,
-    utils::{get_memory, get_slots},
-};
-use crate::builder::{
-    slot::paths::SlotPath,
-    steps::{InjectionTrait, LlmModel, llm::PromptType},
-    tools::Tool,
+use super::error::LlmExecutionError;
+use crate::{
+    builder::{
+        steps::{InjectionTrait, LlmModel, llm::PromptType, resolve_multiple},
+        tools::Tool,
+    },
+    utils::get_memory,
 };
 use async_openai::types::chat::ChatCompletionRequestMessage;
 use hikari_config::module::llm_agent::LlmService;
@@ -26,7 +25,6 @@ pub struct LlmCore {
     prompt: Vec<PromptType>,
     model: LlmModel,
     memory: Option<Vec<String>>,
-    slots: Vec<SlotPath>,
     memory_limit: Option<usize>,
     tool: Option<Tool>,
 }
@@ -37,7 +35,6 @@ impl LlmCore {
     pub fn new(
         prompt: Vec<PromptType>,
         model: LlmModel,
-        slots: Vec<SlotPath>,
         memory_filter: Option<Vec<String>>,
         memory_limit: Option<usize>,
         tool: Option<Tool>,
@@ -46,7 +43,6 @@ impl LlmCore {
             prompt,
             model,
             memory: memory_filter,
-            slots,
             memory_limit,
             tool,
         }
@@ -91,7 +87,6 @@ impl LlmCore {
 
         let message = openai_call_with_timeout(
             CallConfig::builder()
-                .max_retry_interval(Duration::from_secs(1))
                 .total_timeout(Duration::from_secs(30))
                 .iteration_timeout(Duration::from_secs(15))
                 .build(),
@@ -137,7 +132,6 @@ impl LlmCore {
 
         let answer = openai_call_with_timeout(
             CallConfig::builder()
-                .max_retry_interval(Duration::from_secs(1))
                 .total_timeout(Duration::from_secs(30))
                 .iteration_timeout(Duration::from_secs(5))
                 .build(),
@@ -169,23 +163,21 @@ impl LlmCore {
         previous_response: Option<String>,
     ) -> Result<(Vec<ChatCompletionRequestMessage>, Option<ToolSchema>), LlmExecutionError> {
         let memory = self.generate_memory(&conn, conversation_id).await?;
-        let values = get_slots(
-            &conn,
-            conversation_id,
-            user_id,
-            module_id,
-            session_id,
-            self.slots.clone(),
-        )
-        .await?;
 
-        let tool = self.tool.clone().map(|t| t.inject(&values).tool_schema());
+        let tool_schema: Option<ToolSchema> = if let Some(body) = &self.tool {
+            let tool = body
+                .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                .await?;
+            Some(tool.tool_schema())
+        } else {
+            None
+        };
 
         let mut formatted_prompt = Vec::with_capacity(self.prompt.len() + memory.len() + 1);
 
-        for prompt in &self.prompt {
-            formatted_prompt.push(prompt.inject(&values));
-        }
+        let prompts = resolve_multiple(&self.prompt, conversation_id, user_id, module_id, session_id, &conn).await?;
+
+        formatted_prompt.extend(prompts);
 
         if let Some(previous_response) = previous_response {
             formatted_prompt.push(PromptType::System(format!("VorherigeAntwort: \n Du hast bereits angefangen eine Antwort zu generieren: '''{previous_response}'''. Generiere eine neue Antwort, die mit der Antwort beginnt, die du bereits generiert hast.").into()));
@@ -197,7 +189,7 @@ impl LlmCore {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok((messages, tool))
+        Ok((messages, tool_schema))
     }
 
     async fn generate_memory(

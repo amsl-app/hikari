@@ -5,6 +5,7 @@ use crate::{
     journal::assistant::error::AssistantError,
     llm_config::LlmConfig,
     openai::{CallConfig, error::OpenAiError, openai_single_tool_call},
+    usage::add_usage,
 };
 use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
@@ -94,7 +95,6 @@ pub async fn generate_prompt(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -105,7 +105,7 @@ pub async fn generate_prompt(
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assistant_prompt".to_owned()).await?;
+        add_usage(conn, user_id, usage, "assistant_prompt").await?;
     }
 
     res.fix_escapes();
@@ -195,7 +195,6 @@ Es folgen die Fragen.",
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -206,7 +205,7 @@ Es folgen die Fragen.",
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_text_prompt".to_owned()).await?;
+        add_usage(conn, user_id, usage, "assisstant_text_prompt").await?;
     }
 
     res.fix_escapes();
@@ -280,7 +279,6 @@ pub async fn merge_prompts(
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -291,7 +289,7 @@ pub async fn merge_prompts(
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_merge".to_owned()).await?;
+        add_usage(conn, user_id, usage, "assisstant_merge").await?;
     }
 
     res.fix_escapes();
@@ -376,7 +374,6 @@ Rufe die Funktion `TextZusammenfuehren` auf um die Formulierungen zurückzugeben
         CallConfig::builder()
             .iteration_timeout(Duration::from_secs(25))
             .total_timeout(Duration::from_mins(1))
-            .max_retry_interval(Duration::from_secs(1))
             .build(),
         openai_config,
         None,
@@ -387,7 +384,7 @@ Rufe die Funktion `TextZusammenfuehren` auf um die Formulierungen zurückzugeben
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, user_id, usage, "assisstant_text_merge".to_owned()).await?;
+        add_usage(conn, user_id, usage, "assisstant_text_merge").await?;
     }
 
     res.fix_escapes();

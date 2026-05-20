@@ -3,6 +3,7 @@ use crate::journal::summarize::error::SummarizeError;
 use crate::llm_config::LlmConfig;
 use crate::openai::error::OpenAiError;
 use crate::openai::{CallConfig, openai_single_tool_call};
+use crate::usage::add_usage;
 use async_openai::types::chat::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
 };
@@ -32,7 +33,9 @@ use utoipa::ToSchema;
     description = "Die Zusammenfassung des Journals. Die Zusammenfassung ist in zwei Komponenten aufgeteilt. Die erste Komponente ist die Gesamtzusammenfassung der Journaleinträge. Die zweite Komponente sind die Zusammenfassungen der Kernthemen."
 )]
 pub struct Summary {
-    /// Gesamtzusammenfassung in der der Nutzer geduzt wird (zweite Person). Die Zusammenfassung sollte maximal 6 Sätze lang sein und sollte, wenn möglich, nicht mit den Kernthemen überlappen. Beispiele: \"Die letzten Tage hattest du viel Stress. Dennoch ging es dir überwiegend gut auch wenn du einen Tag hattest an dem deine Stimmung schlecht war. Beim Lernen konntest du dich dennoch gut konzentrieren.\"
+    #[schemars(
+        description = "Gesamtzusammenfassung in der der Nutzer geduzt wird (zweite Person). Die Zusammenfassung sollte maximal 6 Sätze lang sein und sollte, wenn möglich, nicht mit den Kernthemen überlappen. Beispiele: \"Die letzten Tage hattest du viel Stress. Dennoch ging es dir überwiegend gut auch wenn du einen Tag hattest an dem deine Stimmung schlecht war. Beim Lernen konntest du dich dennoch gut konzentrieren.\""
+    )]
     pub summary: String,
     pub topic_summaries: Vec<TopicSummary>,
 }
@@ -47,9 +50,13 @@ impl Summary {
 #[derive(Debug, Clone, ToSchema, Serialize, Deserialize, JsonSchema)]
 #[schemars(inline)]
 pub struct TopicSummary {
-    /// Der name des Kernthemas in wenigen Worten. Beispiele: \"Stress\", \"Motivation beim Lernen\", \"Freunde\"
+    #[schemars(
+        description = "Der name des Kernthemas in wenigen Worten. Beispiele: \"Stress\", \"Motivation beim Lernen\", \"Freunde\""
+    )]
     pub topic: String,
-    /// Zusammenfassung des Kernthemas in ein bis zwei Sätzen. Die Zusammenfassung sollte den Nutzer duzen (in zweiter Person geschrieben sein). Beispiele: \"Du hattest viel Stress und Probleme damit umzugehen\", \"Deine Motivation beim Lernen kam ganz auf das Fach an. Bei Mathe hast du dich Angestrengt, aber für Urheberrecht konntest du dich nicht begeistern.\"
+    #[schemars(
+        description = "Zusammenfassung des Kernthemas in ein bis zwei Sätzen. Die Zusammenfassung sollte den Nutzer duzen (in zweiter Person geschrieben sein). Beispiele: \"Du hattest viel Stress und Probleme damit umzugehen\", \"Deine Motivation beim Lernen kam ganz auf das Fach an. Bei Mathe hast du dich Angestrengt, aber für Urheberrecht konntest du dich nicht begeistern.\""
+    )]
     pub summary: String,
 }
 
@@ -374,7 +381,7 @@ Verwende Valides JSON als Argumente für den Funktionsaufruf.
     .await?;
 
     if let Some(usage) = tokens {
-        hikari_db::llm::usage::Mutation::add_usage(conn, &user_id, usage, "journal_summary".to_owned()).await?;
+        add_usage(conn, &user_id, usage, "journal_summary").await?;
     }
 
     res.fix_escapes();
@@ -439,6 +446,7 @@ fn generate_key(entry_ids: &[Uuid]) -> [u8; 32] {
 mod tests {
     use super::*;
     use chrono::{DateTime, FixedOffset};
+    use schemars::schema_for;
 
     #[test]
     fn test_days_between() {
@@ -487,5 +495,18 @@ mod tests {
         );
         assert_eq!(summary_response.topic_summaries.get(1).unwrap().topic, "ts-b-t mäßig");
         assert_eq!(summary_response.topic_summaries.get(1).unwrap().summary, "ts-b-s mäßig");
+    }
+
+    #[test]
+    fn test_json_schema() {
+        let schema = schema_for!(TopicSummary);
+        assert!(
+            schema
+                .pointer("/properties/summary/description")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("Die Zusammenfassung sollte den Nutzer duzen")
+        );
     }
 }

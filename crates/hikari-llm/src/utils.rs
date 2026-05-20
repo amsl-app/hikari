@@ -1,19 +1,27 @@
 use crate::builder::slot::paths::{Destination, SlotPath};
 
 use crate::builder::slot::SlotValuePair;
-use crate::execution::error::LlmExecutionError;
 use futures_util::future::try_join4;
 use hikari_model::llm::message::ConversationMessage;
 use hikari_model::llm::slot::Slot;
 use sea_orm::DatabaseConnection;
+use thiserror::Error;
 use uuid::Uuid;
+
+#[derive(Debug, Error)]
+pub enum SlotError {
+    #[error("Slot not found: {0}")]
+    NotFound(SlotPath),
+    #[error(transparent)]
+    DatabaseError(#[from] sea_orm::DbErr),
+}
 
 pub async fn get_memory(
     conn: &DatabaseConnection,
     conversation_id: &Uuid,
     steps: Option<&[String]>,
     limit: Option<u64>,
-) -> Result<Vec<ConversationMessage>, LlmExecutionError> {
+) -> Result<Vec<ConversationMessage>, sea_orm::DbErr> {
     let res: Vec<ConversationMessage> =
         hikari_db::llm::message::Query::get_memory_from_conversation(conn, conversation_id, steps, limit)
             .await?
@@ -30,7 +38,7 @@ pub async fn get_slot(
     module_id: &str,
     session_id: &str,
     slot: SlotPath,
-) -> Result<SlotValuePair, LlmExecutionError> {
+) -> Result<SlotValuePair, SlotError> {
     let mut slots = get_slots(
         conn,
         conversation_id,
@@ -43,7 +51,7 @@ pub async fn get_slot(
     if let Some(slot) = slots.pop() {
         Ok(slot)
     } else {
-        Err(LlmExecutionError::SlotNotFound(slot))
+        Err(SlotError::NotFound(slot))
     }
 }
 
@@ -54,7 +62,7 @@ pub async fn get_slots(
     module_id: &str,
     session_id: &str,
     slots: Vec<SlotPath>,
-) -> Result<Vec<SlotValuePair>, LlmExecutionError> {
+) -> Result<Vec<SlotValuePair>, SlotError> {
     let mut global_names = vec![];
     let mut conv_names = vec![];
     let mut module_names = vec![];
@@ -117,7 +125,7 @@ pub async fn get_conversation_slots(
     conn: &DatabaseConnection,
     conversation_id: &Uuid,
     slots: Vec<String>,
-) -> Result<Vec<Slot>, LlmExecutionError> {
+) -> Result<Vec<Slot>, SlotError> {
     let slots: Vec<Slot> =
         hikari_db::llm::slot::conversation_slot::Query::get_conversation_slots(conn, conversation_id, Some(slots))
             .await?
@@ -131,7 +139,7 @@ pub async fn get_global_slots(
     conn: &DatabaseConnection,
     user_id: &Uuid,
     slots: Vec<String>,
-) -> Result<Vec<Slot>, LlmExecutionError> {
+) -> Result<Vec<Slot>, SlotError> {
     let slots: Vec<Slot> = hikari_db::llm::slot::global_slot::Query::get_global_slots(conn, user_id, Some(slots))
         .await?
         .into_iter()
@@ -146,7 +154,7 @@ pub async fn get_session_slots(
     module_id: &str,
     session_id: &str,
     slots: Vec<String>,
-) -> Result<Vec<Slot>, LlmExecutionError> {
+) -> Result<Vec<Slot>, SlotError> {
     let slots: Vec<Slot> =
         hikari_db::llm::slot::session_slot::Query::get_session_slots(conn, user_id, module_id, session_id, Some(slots))
             .await?
@@ -162,7 +170,7 @@ pub async fn get_module_slots(
     user_id: &Uuid,
     module_id: &str,
     slots: Vec<String>,
-) -> Result<Vec<Slot>, LlmExecutionError> {
+) -> Result<Vec<Slot>, SlotError> {
     let slots: Vec<Slot> =
         hikari_db::llm::slot::module_slot::Query::get_module_slots(conn, user_id, module_id, Some(slots))
             .await?
@@ -170,15 +178,4 @@ pub async fn get_module_slots(
             .map(hikari_model_tools::convert::IntoModel::into_model)
             .collect();
     Ok(slots)
-}
-
-pub async fn add_usage(
-    conn: &DatabaseConnection,
-    user_id: &Uuid,
-    tokens: u32,
-    step: String,
-) -> Result<(), LlmExecutionError> {
-    tracing::debug!(?tokens, "Tokens used");
-    hikari_db::llm::usage::Mutation::add_usage(conn, user_id, tokens, step).await?;
-    Ok(())
 }

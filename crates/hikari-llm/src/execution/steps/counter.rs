@@ -1,7 +1,8 @@
 use super::{LlmStepContent, LlmStepResponse, LlmStepTrait};
 use crate::{
     builder::{slot::SaveTarget, steps::Condition},
-    execution::{error::LlmExecutionError, utils::get_slots},
+    execution::error::LlmExecutionError,
+    utils::get_slots,
 };
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;

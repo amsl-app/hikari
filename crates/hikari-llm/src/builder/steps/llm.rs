@@ -2,7 +2,7 @@ use crate::builder::build_memory_filter;
 use crate::builder::error::LlmBuildingError;
 use crate::builder::slot::paths::SlotPath;
 use crate::builder::slot::{SaveTarget, SlotValuePair};
-use crate::builder::steps::{Condition, Documents, InjectionTrait, IntoLlmStep, ParentStep, SlotsTrait, Template};
+use crate::builder::steps::{Condition, Documents, InjectionTrait, IntoLlmStep, ParentStep, Template};
 use crate::execution::core::LlmCore;
 use crate::execution::steps::LlmStep;
 use crate::execution::steps::message_generator::MessageGenerator;
@@ -39,18 +39,6 @@ pub struct LlmBuilder {
     pub store: Option<SaveTarget>,
 }
 
-impl SlotsTrait for LlmBuilder {
-    fn injection_slots(&self) -> Vec<SlotPath> {
-        let mut slots = self
-            .prompts
-            .iter()
-            .flat_map(SlotsTrait::injection_slots)
-            .collect::<Vec<_>>();
-        slots.extend(self.prompts.iter().flat_map(SlotsTrait::injection_slots));
-        slots
-    }
-}
-
 impl IntoLlmStep for LlmBuilder {
     fn into_llm_step(
         mut self,
@@ -63,10 +51,6 @@ impl IntoLlmStep for LlmBuilder {
         self.prompts.iter_mut().for_each(|p| {
             p.insert_constant(&constants);
         });
-
-        // insert_constants must be called before we extract the slots
-
-        let slots: Vec<SlotPath> = self.injection_slots();
 
         let LlmBuilder {
             prompts,
@@ -86,7 +70,7 @@ impl IntoLlmStep for LlmBuilder {
 
         let memory_filter = build_memory_filter(&memory_selector, &id);
 
-        let core = LlmCore::new(prompts, model, slots, memory_filter, memory_limit, None);
+        let core = LlmCore::new(prompts, model, memory_filter, memory_limit, None);
         let message_generator = LlmStep::MessageGenerator(MessageGenerator::new(id, core, hold, conditions, store));
         Ok(message_generator)
     }
@@ -162,7 +146,7 @@ impl TryFrom<PromptType> for ChatCompletionRequestMessage {
     }
 }
 
-impl SlotsTrait for PromptType {
+impl InjectionTrait for PromptType {
     fn injection_slots(&self) -> Vec<SlotPath> {
         match self {
             PromptType::System(template) | PromptType::User(template) | PromptType::AI(template) => {
@@ -174,9 +158,6 @@ impl SlotsTrait for PromptType {
             }
         }
     }
-}
-
-impl InjectionTrait for PromptType {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         match self {
             PromptType::System(template) => PromptType::System(template.inject(values)),

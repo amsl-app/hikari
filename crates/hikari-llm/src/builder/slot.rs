@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::builder::{
     slot::paths::{ModulePath, SessionPath, SlotPath, UserConfigPath, UserContextLogPath, UserPath},
-    steps::{InjectionTrait, SlotsTrait, Template},
+    steps::{InjectionTrait, Template},
 };
 
 pub mod paths;
@@ -47,13 +47,10 @@ pub struct SlotValuePair {
     pub value: Template,
 }
 
-impl SlotsTrait for SlotValuePair {
+impl InjectionTrait for SlotValuePair {
     fn injection_slots(&self) -> Vec<SlotPath> {
         self.value.injection_slots()
     }
-}
-
-impl InjectionTrait for SlotValuePair {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         let value = self.value.inject(values);
         Self {
