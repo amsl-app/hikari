@@ -44,47 +44,47 @@ impl BubbleAccumulator {
         let mut bubble_chunks = Vec::new();
 
         if self.current_bubble.contains("---") {
-            let full = std::mem::take(&mut self.current_bubble);
-            let mut parts = full.split("---").peekable();
-            while let Some(part) = parts.next() {
-                if parts.peek().is_some() {
-                    // not the last part: finalize this bubble and start a new one
-                    let bubble = part.to_string();
-                    let id = self.update_message_fn.as_ref()(bubble.clone(), self.current_id, true).await?;
-                    if self.delta_offset < bubble.len() {
-                        let delta = bubble
-                            .get(self.delta_offset..)
-                            .expect("delta_offset is a valid byte boundary")
-                            .to_string();
-                        bubble_chunks.push((delta, id));
+            let mut last_part: Option<String> = None;
+            for part in self.current_bubble.split("---") {
+                if let Some(prev) = last_part.replace(part.to_string()) {
+                    if !prev.is_empty() {
+                        let id = self.update_message_fn.as_ref()(prev.clone(), self.current_id, true).await?;
+                        if self.delta_offset < prev.len() {
+                            let delta = prev
+                                .get(self.delta_offset..)
+                                .expect("delta_offset is a valid byte boundary")
+                                .to_string();
+                            bubble_chunks.push((delta, id));
+                        }
                     }
                     self.current_id = None;
                     self.delta_offset = 0;
-                } else {
-                    self.current_bubble = part.to_string();
                 }
+            }
+            if let Some(last) = last_part {
+                self.current_bubble = last;
             }
         }
 
-        if self.current_bubble.len() > self.delta_offset {
-            // Only if we have new content in the bubble
-
-            let id = self.update_message_fn.as_ref()(self.current_bubble.clone(), self.current_id, false).await?;
+        // Hold back trailing "-" or "--" — they might be the start of a "---" separator.
+        // Only save and stream content we're sure isn't part of an upcoming separator.
+        let safe_end = self.current_bubble.len() - trailing_partial_sep(&self.current_bubble);
+        if safe_end > self.delta_offset {
+            let safe_content = self
+                .current_bubble
+                .get(..safe_end)
+                .expect("safe_end is a valid byte boundary")
+                .to_string();
+            let id = self.update_message_fn.as_ref()(safe_content, self.current_id, false).await?;
             self.current_id = Some(id);
 
-            // Hold back trailing "-" or "--" — they might be the start of a "---" separator.
-            // Only stream content we're sure isn't part of an upcoming separator.
-            let safe_end = self.current_bubble.len() - trailing_partial_sep(&self.current_bubble);
-            if safe_end > self.delta_offset {
-                let delta = self
-                    .current_bubble
-                    .get(self.delta_offset..safe_end)
-                    .expect("delta_offset and safe_end are valid byte boundaries")
-                    .to_string();
-
-                self.delta_offset = safe_end;
-                bubble_chunks.push((delta, id));
-            }
+            let delta = self
+                .current_bubble
+                .get(self.delta_offset..safe_end)
+                .expect("delta_offset and safe_end are valid byte boundaries")
+                .to_string();
+            self.delta_offset = safe_end;
+            bubble_chunks.push((delta, id));
         }
 
         Ok(bubble_chunks)
@@ -293,7 +293,7 @@ mod tests {
             calls.as_slice(),
             [
                 // DB receives full "Hello-" (incl. partial sep) on every incremental save
-                ("Hello-".to_string(), None, false),
+                ("Hello".to_string(), None, false),
                 // Finalized with content before "---"
                 ("Hello".to_string(), Some(1), true),
                 ("World".to_string(), None, false),
@@ -316,7 +316,7 @@ mod tests {
         assert_eq!(
             calls.as_slice(),
             [
-                ("Hello--".to_string(), None, false),
+                ("Hello".to_string(), None, false),
                 ("Hello".to_string(), Some(1), true),
                 ("World".to_string(), None, false),
             ]
@@ -327,23 +327,15 @@ mod tests {
     #[tokio::test]
     async fn push_separator_split_one_two_at_start() {
         let (mut acc, calls) = make_accumulator();
-        // Entire "-" held back; nothing emitted to client
+        // Entire "-" held back; nothing emitted to client no update
         let first = acc.push("-").await.expect("push failed");
         assert!(first.is_empty());
 
         let second = acc.push("--World").await.expect("push failed");
-        assert_eq!(second, vec![("World".to_string(), 2)]);
+        assert_eq!(second, vec![("World".to_string(), 1)]);
 
         let calls = calls.lock().expect("lock");
-        assert_eq!(
-            calls.as_slice(),
-            [
-                ("-".to_string(), None, false),
-                // empty bubble: the "-" was entirely separator noise
-                ("".to_string(), Some(1), true),
-                ("World".to_string(), None, false),
-            ]
-        );
+        assert_eq!(calls.as_slice(), [("World".to_string(), None, false),]);
     }
 
     // separator split 2+1 with no leading content (separator starts the stream)
@@ -355,14 +347,28 @@ mod tests {
         assert!(first.is_empty());
 
         let second = acc.push("-World").await.expect("push failed");
+        assert_eq!(second, vec![("World".to_string(), 1)]);
+
+        let calls = calls.lock().expect("lock");
+        assert_eq!(calls.as_slice(), [("World".to_string(), None, false),]);
+    }
+
+    #[tokio::test]
+    async fn push_separator_with_previous() {
+        let (mut acc, calls) = make_accumulator();
+        // Entire "--" held back; nothing emitted to client
+        let first = acc.push("Text--").await.expect("push failed");
+        assert_eq!(first, vec![("Text".to_string(), 1)]);
+
+        let second = acc.push("-World").await.expect("push failed");
         assert_eq!(second, vec![("World".to_string(), 2)]);
 
         let calls = calls.lock().expect("lock");
         assert_eq!(
             calls.as_slice(),
             [
-                ("--".to_string(), None, false),
-                ("".to_string(), Some(1), true),
+                ("Text".to_string(), None, false),
+                ("Text".to_string(), Some(1), true),
                 ("World".to_string(), None, false),
             ]
         );
@@ -405,7 +411,7 @@ mod tests {
         assert_eq!(
             calls.as_slice(),
             [
-                ("-item\n-".to_string(), None, false),
+                ("-item\n".to_string(), None, false),
                 ("-item\n-World".to_string(), Some(1), false),
             ]
         );
