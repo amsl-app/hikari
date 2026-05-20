@@ -6,7 +6,7 @@ use crate::builder::steps::summarizer::UpdateType;
 use crate::execution::core::LlmCore;
 use crate::execution::error::LlmExecutionError;
 use crate::execution::steps::{LlmStepResponse, LlmStepTrait};
-use crate::execution::utils::get_conversation_slots;
+use crate::utils::get_conversation_slots;
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
 use hikari_config::module::llm_agent::LlmService;

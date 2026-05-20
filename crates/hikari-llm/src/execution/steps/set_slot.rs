@@ -7,11 +7,8 @@ use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 use crate::builder::slot::{SaveTarget, SlotValuePair};
-use crate::builder::steps::InjectionTrait;
-use crate::{
-    builder::steps::Condition,
-    execution::{error::LlmExecutionError, utils::get_slots},
-};
+use crate::builder::steps::resolve_multiple;
+use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 
 use super::{LlmStepContent, LlmStepResponse, LlmStepTrait};
 
@@ -47,19 +44,8 @@ impl LlmStepTrait for SetSlot {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
-            let injection_slots = self
-                .values
-                .iter()
-                .flat_map(crate::builder::steps::SlotsTrait::injection_slots)
-                .collect::<Vec<_>>();
-            let injection_slots =
-                get_slots(&conn, conversation_id, user_id, module_id, session_id, injection_slots).await?;
-
-            let values = self
-                .values
-                .iter()
-                .map(|s| s.inject(&injection_slots))
-                .collect::<Vec<_>>();
+            let values: Vec<SlotValuePair> =
+                resolve_multiple(&self.values, conversation_id, user_id, module_id, session_id, &conn).await?;
 
             let values = values
                 .into_iter()

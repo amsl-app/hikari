@@ -14,4 +14,6 @@ pub enum LlmBuildingError {
     OpenAI(#[from] async_openai::error::OpenAIError),
     #[error("Missed formatation: {0}")]
     MissedFormatation(String),
+    #[error(transparent)]
+    DatabaseError(#[from] sea_orm::DbErr),
 }

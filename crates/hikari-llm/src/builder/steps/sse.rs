@@ -8,9 +8,9 @@ use super::{Condition, IntoLlmStep, ParentStep};
 use crate::{
     builder::{
         error::LlmBuildingError,
-        slot::{SaveTarget, paths::SlotPath},
+        slot::SaveTarget,
         steps::{
-            Documents, SlotsTrait, Template,
+            Documents, Template,
             api::{ApiHeader, ApiMethod},
         },
     },
@@ -32,14 +32,6 @@ pub struct SseBuilder {
     pub store: Option<SaveTarget>,
 }
 
-impl SlotsTrait for SseBuilder {
-    fn injection_slots(&self) -> Vec<SlotPath> {
-        let mut slots = self.body.as_ref().map_or_else(Vec::new, SlotsTrait::injection_slots);
-        slots.extend(self.headers.iter().flat_map(SlotsTrait::injection_slots));
-        slots
-    }
-}
-
 impl IntoLlmStep for SseBuilder {
     fn into_llm_step(
         self,
@@ -49,8 +41,6 @@ impl IntoLlmStep for SseBuilder {
         _constants: HashMap<String, Value>,
         _documents: Documents,
     ) -> Result<LlmStep, LlmBuildingError> {
-        let slots: Vec<SlotPath> = self.injection_slots();
-
         let SseBuilder {
             url,
             method,
@@ -66,7 +56,6 @@ impl IntoLlmStep for SseBuilder {
 
         Ok(LlmStep::SseCall(SseCall::new(
             id,
-            slots,
             url,
             method,
             headers,

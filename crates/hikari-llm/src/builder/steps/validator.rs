@@ -4,7 +4,7 @@ use crate::builder::error::LlmBuildingError;
 use crate::builder::slot::SlotValuePair;
 use crate::builder::slot::paths::SlotPath;
 use crate::builder::steps::{
-    Condition, Documents, Flow, InjectionTrait, IntoLlmStep, ParentStep, SlotsTrait, Template, load_prompt_and_temp,
+    Condition, Documents, Flow, InjectionTrait, IntoLlmStep, ParentStep, Template, load_prompt_and_temp,
 };
 use crate::builder::tools::Tool;
 use crate::builder::{build_memory_filter, step_id_from_flow};
@@ -29,15 +29,12 @@ pub struct ConversationGoal {
     pub examples: Vec<Template>,
 }
 
-impl SlotsTrait for ConversationGoal {
+impl InjectionTrait for ConversationGoal {
     fn injection_slots(&self) -> Vec<SlotPath> {
         let mut slots = self.goal.injection_slots();
-        slots.extend(self.examples.iter().flat_map(SlotsTrait::injection_slots));
+        slots.extend(self.examples.iter().flat_map(InjectionTrait::injection_slots));
         slots
     }
-}
-
-impl InjectionTrait for ConversationGoal {
     fn inject(&self, values: &[SlotValuePair]) -> Self {
         ConversationGoal {
             name: self.name.clone(),
@@ -74,18 +71,6 @@ pub struct ValidatorBuilder {
     pub validation_type: ValidationType,
 }
 
-impl SlotsTrait for ValidatorBuilder {
-    fn injection_slots(&self) -> Vec<SlotPath> {
-        let mut slots = self
-            .goals
-            .iter()
-            .flat_map(SlotsTrait::injection_slots)
-            .collect::<Vec<_>>();
-        slots.extend(self.prompts.iter().flat_map(SlotsTrait::injection_slots));
-        slots
-    }
-}
-
 impl IntoLlmStep for ValidatorBuilder {
     fn into_llm_step(
         mut self,
@@ -98,11 +83,6 @@ impl IntoLlmStep for ValidatorBuilder {
         self.prompts.iter_mut().for_each(|p| {
             p.insert_constant(&constants);
         });
-
-        // insert_constants must be called before we extract the slots
-
-        let slots: Vec<SlotPath> = self.injection_slots();
-
         let ValidatorBuilder {
             goals,
             mut prompts,
@@ -134,7 +114,6 @@ impl IntoLlmStep for ValidatorBuilder {
         let core = LlmCore::new(
             prompts,
             model.with_default_temperature(temperature),
-            slots,
             memory_filter,
             memory_limit,
             Some(Tool::ValidationTool(goals)),

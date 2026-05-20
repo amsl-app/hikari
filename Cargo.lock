@@ -3119,6 +3119,7 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "async-stream",
+ "async-trait",
  "eventsource-stream",
  "futures-core",
  "futures-util",

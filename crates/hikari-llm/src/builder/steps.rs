@@ -12,6 +12,8 @@ use crate::builder::steps::summarizer::SummarizerBuilder;
 use crate::builder::steps::validator::ValidatorBuilder;
 use crate::execution::steps::LlmStep;
 use crate::execution::steps::combined_step::CombinedStep;
+use crate::utils::{SlotError, get_slots};
+use async_trait::async_trait;
 use hikari_core::openai::ReasoningEffort;
 use hikari_utils::values::ValueDecoder;
 use indexmap::{IndexMap, indexmap};
@@ -21,12 +23,14 @@ use nonempty::NonEmpty;
 use num_traits::cast::ToPrimitive;
 use regex::Regex;
 use schemars::JsonSchema;
+use sea_orm::DatabaseConnection;
 use serde::Deserialize;
 use set_slot::SetSlotBuilder;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
+use uuid::Uuid;
 use yaml_serde::Value;
 
 pub mod api;
@@ -398,13 +402,62 @@ impl From<Placeholder> for SlotPath {
     }
 }
 
-pub trait SlotsTrait {
+#[async_trait]
+pub trait InjectionTrait: Sized {
     fn injection_slots(&self) -> Vec<SlotPath>;
+
+    fn inject(&self, values: &[SlotValuePair]) -> Self;
+
+    async fn resolve(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        module_id: &str,
+        session_id: &str,
+        conn: &DatabaseConnection,
+    ) -> Result<Self, SlotError> {
+        let slots = self.injection_slots();
+        if slots.is_empty() {
+            return Ok(self.inject(&[]));
+        }
+        let values = get_slots(conn, conversation_id, user_id, module_id, session_id, slots).await?;
+        let res = self.inject(&values);
+        Ok(res)
+    }
 }
 
-pub trait InjectionTrait: SlotsTrait {
-    #[must_use]
-    fn inject(&self, values: &[SlotValuePair]) -> Self;
+pub(crate) async fn resolve_optional<T: InjectionTrait + Sync>(
+    item: &Option<T>,
+    conversation_id: &Uuid,
+    user_id: &Uuid,
+    module_id: &str,
+    session_id: &str,
+    conn: &DatabaseConnection,
+) -> Result<Option<T>, SlotError> {
+    match item {
+        Some(item) => Ok(Some(
+            item.resolve(conversation_id, user_id, module_id, session_id, conn)
+                .await?,
+        )),
+        None => Ok(None),
+    }
+}
+
+pub(crate) async fn resolve_multiple<T: InjectionTrait>(
+    items: &[T],
+    conversation_id: &Uuid,
+    user_id: &Uuid,
+    module_id: &str,
+    session_id: &str,
+    conn: &DatabaseConnection,
+) -> Result<Vec<T>, SlotError> {
+    let slots: Vec<SlotPath> = items.iter().flat_map(|i| i.injection_slots()).collect();
+    let values = if slots.is_empty() {
+        vec![]
+    } else {
+        get_slots(conn, conversation_id, user_id, module_id, session_id, slots).await?
+    };
+    Ok(items.iter().map(|i| i.inject(&values)).collect())
 }
 
 #[derive(Deserialize, Debug, Clone, JsonSchema)]
@@ -455,13 +508,12 @@ impl Template {
             .collect()
     }
 }
-impl SlotsTrait for Template {
+
+impl InjectionTrait for Template {
     fn injection_slots(&self) -> Vec<SlotPath> {
         self.placeholders().into_iter().map(SlotPath::from).collect()
     }
-}
 
-impl InjectionTrait for Template {
     fn inject(&self, values: &[SlotValuePair]) -> Template {
         let mut content = self.0.encode();
         tracing::debug!(?content, "Injecting values into template");
