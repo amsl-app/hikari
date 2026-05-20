@@ -13,7 +13,7 @@ use futures_util::FutureExt;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
-use hikari_utils::values::{JsonToYaml, QueryJson, ValueDecoder, YamlToJson};
+use hikari_utils::values::{JsonToYaml, QueryJson, YamlToJson};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 use yaml_serde::Value;
@@ -125,12 +125,10 @@ impl LlmStepTrait for ApiCall {
             };
 
             let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let next_step = goto.map(super::template_to_step_id).transpose()?;
 
             Ok(LlmStepResponse::new(
-                LlmStepContent::StepValue {
-                    values,
-                    next_step: goto.map(|g| g.as_ref().encode()),
-                },
+                LlmStepContent::StepValue { values, next_step },
                 None,
             ))
         }

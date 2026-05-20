@@ -677,6 +677,49 @@ mod tests {
         assert_eq!(result.to_string(), "no placeholders here");
     }
 
+    // --- Flow::Goto(Template) ---
+
+    #[test]
+    fn test_flow_goto_deserialization_static() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "step-two"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        assert_eq!(template.to_string(), "step-two");
+    }
+
+    #[test]
+    fn test_flow_goto_deserialization_with_placeholder() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "{{conversation.next_step}}"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        let placeholders = template.placeholders();
+        assert_eq!(placeholders.len(), 1);
+        assert!(matches!(&placeholders[0], Placeholder::Conversation(k) if k == "next_step"));
+    }
+
+    #[test]
+    fn test_flow_goto_inject_produces_expected_step_id() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "{{conversation.next_step}}"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        let values = vec![make_pair("next_step", Destination::Conversation, "step-three")];
+        let resolved = template.inject(&values);
+        assert_eq!(resolved.to_string(), "step-three");
+    }
+
+    #[test]
+    fn test_flow_goto_missing_placeholder_becomes_empty() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "prefix-{{conversation.missing}}"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        let resolved = template.inject(&[]);
+        assert_eq!(resolved.to_string(), "prefix-");
+    }
+
     // --- existing test ---
 
     #[test]

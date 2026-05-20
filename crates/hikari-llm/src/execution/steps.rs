@@ -1,7 +1,7 @@
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::SlotValuePair;
 use crate::builder::slot::paths::SlotPath;
-use crate::builder::steps::Condition;
+use crate::builder::steps::{Condition, Template};
 use crate::builder::steps::ConditionOperation;
 use crate::execution::error::LlmExecutionError;
 use crate::execution::steps::api_call::ApiCall;
@@ -473,6 +473,15 @@ impl LlmStepTrait for LlmStep {
             LlmStep::Counter(step) => step.id(),
             LlmStep::GoTo(step) => step.id(),
         }
+    }
+}
+
+pub(crate) fn template_to_step_id(template: Template) -> Result<String, LlmExecutionError> {
+    match template.0 {
+        Value::String(s) => Ok(s.trim().to_string()),
+        other => Err(LlmExecutionError::InvalidGotoTarget(
+            yaml_serde::to_string(&other).unwrap_or_else(|_| String::from("(non-scalar value)")),
+        )),
     }
 }
 

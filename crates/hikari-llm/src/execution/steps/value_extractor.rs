@@ -11,7 +11,6 @@ use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
-use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -129,12 +128,10 @@ impl LlmStepTrait for ValueExtractor {
                 };
 
                 let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+                let next_step = goto.map(super::template_to_step_id).transpose()?;
 
                 Ok(LlmStepResponse::new(
-                    LlmStepContent::StepValue {
-                        values: step_values,
-                        next_step: goto.map(|g| g.as_ref().encode()),
-                    },
+                    LlmStepContent::StepValue { values: step_values, next_step },
                     tokens,
                 ))
             } else {

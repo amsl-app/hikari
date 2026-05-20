@@ -13,7 +13,6 @@ use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
-use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -130,11 +129,9 @@ impl LlmStepTrait for ConversationValidator {
             };
 
             let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let next_step = goto.map(super::template_to_step_id).transpose()?;
 
-            let content = LlmStepContent::StepValue {
-                values: slots,
-                next_step: goto.map(|g| g.as_ref().encode()),
-            };
+            let content = LlmStepContent::StepValue { values: slots, next_step };
 
             Ok(LlmStepResponse::new(content, tokens))
         }
