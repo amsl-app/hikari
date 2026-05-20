@@ -1,11 +1,17 @@
 use super::{LlmStepContent, LlmStepResponse, LlmStepTrait};
-use crate::execution::steps::conversation_validator::NextStep;
-use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
+use crate::{
+    builder::{
+        NextStep,
+        steps::{Condition, resolve_optional},
+    },
+    execution::error::LlmExecutionError,
+};
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
+use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -34,18 +40,21 @@ impl LlmStepTrait for GoTo {
     fn call<'a>(
         &'a mut self,
         _config: &'a LlmConfig,
-        _conversation_id: &'a Uuid,
-        _user_id: &'a Uuid,
-        _module_id: &'a str,
-        _session_id: &'a str,
+        conversation_id: &'a Uuid,
+        user_id: &'a Uuid,
+        module_id: &'a str,
+        session_id: &'a str,
         _llm_service: LlmService,
-        _conn: DatabaseConnection,
+        conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
+            let goto =
+                resolve_optional(&self.next_step, conversation_id, user_id, module_id, session_id, &conn).await?;
+
             Ok(LlmStepResponse::new(
                 LlmStepContent::StepValue {
                     values: HashMap::new(),
-                    next_step: self.next_step.clone(),
+                    next_step: goto.map(|g| g.as_ref().encode()),
                 },
                 None,
             ))

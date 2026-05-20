@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 
 use super::{LlmStepResponse, LlmStepTrait};
+use crate::builder::NextStep;
 use crate::builder::slot::SaveTarget;
 use crate::builder::steps::api::{ApiHeader, ApiMethod};
 use crate::builder::steps::{Template, resolve_multiple, resolve_optional};
 use crate::execution::error::APIExecutionError;
 use crate::execution::steps::LlmStepContent;
-use crate::execution::steps::conversation_validator::NextStep;
 use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
 use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
-use hikari_utils::values::{JsonToYaml, QueryJson, YamlToJson};
+use hikari_utils::values::{JsonToYaml, QueryJson, ValueDecoder, YamlToJson};
 use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 use yaml_serde::Value;
@@ -118,19 +118,21 @@ impl LlmStepTrait for ApiCall {
 
             let values = HashMap::from([(self.store.clone(), content)]);
 
-            let content = if success {
-                LlmStepContent::StepValue {
-                    values,
-                    next_step: self.goto_on_success.clone(),
-                }
+            let goto = if success {
+                self.goto_on_success.clone()
             } else {
-                LlmStepContent::StepValue {
-                    values,
-                    next_step: self.goto_on_fail.clone(),
-                }
+                self.goto_on_fail.clone()
             };
 
-            Ok(LlmStepResponse::new(content, None))
+            let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+
+            Ok(LlmStepResponse::new(
+                LlmStepContent::StepValue {
+                    values,
+                    next_step: goto.map(|g| g.as_ref().encode()),
+                },
+                None,
+            ))
         }
         .boxed()
     }

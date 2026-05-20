@@ -315,7 +315,7 @@ pub enum Flow {
     Action(Next),
     /// # Goto another step by its ID
     /// NOTE: IDs of Chains steps are not allowed here. Insted use the ID of the first step in the chain
-    Goto(String),
+    Goto(Template),
 }
 
 #[derive(Deserialize, Debug, Clone, JsonSchema)]

@@ -66,7 +66,7 @@ impl LlmStepTrait for ConversationSummarizer {
                     module_id,
                     session_id,
                     llm_service,
-                    conn,
+                    &conn,
                     self.previous_response.take(),
                 )
                 .await?;

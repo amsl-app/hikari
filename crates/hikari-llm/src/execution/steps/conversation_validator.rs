@@ -1,8 +1,9 @@
 use super::LlmStepContent;
+use crate::builder::NextStep;
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::paths::{Destination, SlotPath};
-use crate::builder::steps::Condition;
 use crate::builder::steps::validator::ValidationType;
+use crate::builder::steps::{Condition, resolve_optional};
 use crate::execution::core::LlmCore;
 use crate::execution::error::LlmExecutionError;
 use crate::execution::steps::{LlmStepResponse, LlmStepTrait};
@@ -12,12 +13,11 @@ use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
+use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
 use yaml_serde::Value;
-
-pub type NextStep = Option<String>;
 
 #[derive(Clone)]
 pub struct ConversationValidator {
@@ -75,7 +75,7 @@ impl LlmStepTrait for ConversationValidator {
                     module_id,
                     session_id,
                     llm_service,
-                    conn,
+                    &conn,
                     self.previous_response.take(),
                 )
                 .await?;
@@ -129,9 +129,11 @@ impl LlmStepTrait for ConversationValidator {
                 self.goto_on_fail.clone()
             };
 
+            let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+
             let content = LlmStepContent::StepValue {
                 values: slots,
-                next_step: goto,
+                next_step: goto.map(|g| g.as_ref().encode()),
             };
 
             Ok(LlmStepResponse::new(content, tokens))

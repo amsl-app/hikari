@@ -1,9 +1,9 @@
+use crate::builder::NextStep;
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::paths::SlotPath;
-use crate::builder::steps::Condition;
+use crate::builder::steps::{Condition, resolve_optional};
 use crate::execution::core::LlmCore;
 use crate::execution::error::LlmExecutionError;
-use crate::execution::steps::conversation_validator::NextStep;
 use crate::execution::steps::{LlmStepContent, LlmStepResponse, LlmStepTrait};
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
@@ -11,6 +11,7 @@ use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::{Content, Message};
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
+use hikari_utils::values::ValueDecoder;
 use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -74,7 +75,7 @@ impl LlmStepTrait for ValueExtractor {
                     module_id,
                     session_id,
                     llm_service,
-                    conn,
+                    &conn,
                     self.previous_response.take(),
                 )
                 .await?;
@@ -121,18 +122,21 @@ impl LlmStepTrait for ValueExtractor {
                     }
                 }
 
-                let content = if success {
-                    LlmStepContent::StepValue {
-                        values: step_values,
-                        next_step: self.goto_on_success.clone(),
-                    }
+                let goto = if success {
+                    self.goto_on_success.clone()
                 } else {
+                    self.goto_on_fail.clone()
+                };
+
+                let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+
+                Ok(LlmStepResponse::new(
                     LlmStepContent::StepValue {
                         values: step_values,
-                        next_step: self.goto_on_fail.clone(),
-                    }
-                };
-                Ok(LlmStepResponse::new(content, tokens))
+                        next_step: goto.map(|g| g.as_ref().encode()),
+                    },
+                    tokens,
+                ))
             } else {
                 Err(LlmExecutionError::UnexpectedResponseFormat)
             }

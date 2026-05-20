@@ -57,18 +57,11 @@ impl LlmCore {
         module_id: &str,
         session_id: &str,
         llm_service: LlmService,
-        conn: DatabaseConnection,
+        conn: &DatabaseConnection,
         previous_response: Option<String>,
     ) -> Result<Message, LlmExecutionError> {
         let (prompt, tool) = self
-            .inner(
-                conversation_id,
-                user_id,
-                module_id,
-                session_id,
-                conn.clone(),
-                previous_response,
-            )
+            .inner(conversation_id, user_id, module_id, session_id, conn, previous_response)
             .await?;
 
         let tool_choice = tool
@@ -116,7 +109,7 @@ impl LlmCore {
         module_id: &str,
         session_id: &str,
         llm_service: LlmService,
-        conn: DatabaseConnection,
+        conn: &DatabaseConnection,
         previous_response: Option<String>,
     ) -> Result<MessageStream, LlmExecutionError> {
         let (prompt, _) = self
@@ -159,14 +152,14 @@ impl LlmCore {
         user_id: &Uuid,
         module_id: &str,
         session_id: &str,
-        conn: DatabaseConnection,
+        conn: &DatabaseConnection,
         previous_response: Option<String>,
     ) -> Result<(Vec<ChatCompletionRequestMessage>, Option<ToolSchema>), LlmExecutionError> {
-        let memory = self.generate_memory(&conn, conversation_id).await?;
+        let memory = self.generate_memory(conn, conversation_id).await?;
 
         let tool_schema: Option<ToolSchema> = if let Some(body) = &self.tool {
             let tool = body
-                .resolve(conversation_id, user_id, module_id, session_id, &conn)
+                .resolve(conversation_id, user_id, module_id, session_id, conn)
                 .await?;
             Some(tool.tool_schema())
         } else {
@@ -175,7 +168,7 @@ impl LlmCore {
 
         let mut formatted_prompt = Vec::with_capacity(self.prompt.len() + memory.len() + 1);
 
-        let prompts = resolve_multiple(&self.prompt, conversation_id, user_id, module_id, session_id, &conn).await?;
+        let prompts = resolve_multiple(&self.prompt, conversation_id, user_id, module_id, session_id, conn).await?;
 
         formatted_prompt.extend(prompts);
 
