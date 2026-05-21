@@ -75,6 +75,30 @@ pub struct UserConfigPath {
     pub key: String,
 }
 
+#[derive(Deserialize, Debug, Clone, Copy, Hash, Eq, PartialEq, JsonSchema, Default)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub enum UserContextLogPathFilter {
+    /// # Only load the latest log entry
+    #[default]
+    Latest,
+
+    /// # Only load the earliest log entry
+    Earliest,
+}
+
+#[derive(Deserialize, Debug, Clone, Default, Hash, Eq, PartialEq, JsonSchema)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct UserContextLogPath {
+    /// # `JsonPath` to values of the user context log
+    pub path: String,
+    /// Key of the user context log to load from
+    pub key: String,
+
+    #[serde(default)]
+    /// # Filter for the user context log entries to load
+    pub filter: UserContextLogPathFilter,
+}
+
 #[derive(Deserialize, Debug, Clone, Default, Hash, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ModulePath {

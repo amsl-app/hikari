@@ -2,10 +2,13 @@ use hashbrown::HashMap;
 use hashbrown::hash_map::EntryRef;
 use hikari_config::module::session::Session;
 use hikari_config::module::{Module, ModuleConfig};
+use hikari_llm::builder::slot::paths::UserContextLogPathFilter;
 use hikari_llm::builder::slot::{LoadToSlot, ValueSource};
 use hikari_llm::execution::error::LlmExecutionError;
 use hikari_model::user::User;
-use hikari_utils::values::{QueryYaml, ValueDecoder};
+use hikari_model::user_context_log::UserContextLog;
+use hikari_model_tools::convert::IntoModel;
+use hikari_utils::values::{JsonToYaml, QueryYaml, ValueDecoder};
 use sea_orm::DatabaseConnection;
 use serde::Serialize;
 use uuid::Uuid;
@@ -20,6 +23,13 @@ macro_rules! gen_match_user_fields {
             _ => Err(LlmExecutionError::Unexpected($x.to_string()))?,
         }
     };
+}
+
+pub fn user_context_log_key(key: &str, filter: UserContextLogPathFilter) -> String {
+    match filter {
+        UserContextLogPathFilter::Latest => format!("{key}_latest"),
+        UserContextLogPathFilter::Earliest => format!("{key}_earliest"),
+    }
 }
 
 pub async fn load_slots<'a>(
@@ -40,6 +50,7 @@ pub async fn load_slots<'a>(
         yaml_serde::to_value(session)?,
     )]);
     let mut user_config_map: HashMap<String, Value> = HashMap::new();
+    let mut user_context_log_map: HashMap<String, Value> = HashMap::new();
 
     for LoadToSlot { name, source } in slots {
         let value = match &source {
@@ -89,6 +100,43 @@ pub async fn load_slots<'a>(
                     tracing::trace!(%key, "Loaded user config from db for load_slots");
                     user_config_map.insert(key.clone(), config_value.clone());
                     config_value.query(user_conf_path)?
+                }
+            }
+
+            ValueSource::UserContextLog(user_context_log_path) => {
+                let key = user_context_log_path.key.as_ref();
+                let user_context_log_path_query = user_context_log_path.path.as_str();
+                let filter = user_context_log_path.filter;
+
+                let user_context_log_key = user_context_log_key(key, filter);
+
+                let config = user_context_log_map.get(&user_context_log_key);
+                if let Some(config) = config {
+                    tracing::trace!(%user_context_log_key, "User context log already loaded for load_slots");
+                    config.query(user_context_log_path_query)?
+                } else {
+                    // We want to allow optional values
+                    let logs_value = match filter {
+                        UserContextLogPathFilter::Latest => {
+                            let log: Option<UserContextLog> =
+                                hikari_db::user_context_logs::Query::get_latest_by_type(conn, user.id, key)
+                                    .await?
+                                    .map(|l| l.into_model());
+
+                            log.map_or(Ok(Value::Null), |s| s.data.to_yaml())?
+                        }
+                        UserContextLogPathFilter::Earliest => {
+                            let log: Option<UserContextLog> =
+                                hikari_db::user_context_logs::Query::get_earliest_by_type(conn, user.id, key)
+                                    .await?
+                                    .map(|l| l.into_model());
+
+                            log.map_or(Ok(Value::Null), |s| s.data.to_yaml())?
+                        }
+                    };
+                    tracing::trace!(%user_context_log_key, "loaded user context log from db for load_slots");
+                    user_context_log_map.insert(user_context_log_key, logs_value.clone());
+                    logs_value.query(user_context_log_path_query)?
                 }
             }
         };

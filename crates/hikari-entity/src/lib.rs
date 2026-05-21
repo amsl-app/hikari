@@ -12,4 +12,5 @@ pub mod oidc_mapping;
 pub mod quiz;
 pub mod tag;
 pub mod user;
+pub mod user_context_logs;
 pub mod user_handle;

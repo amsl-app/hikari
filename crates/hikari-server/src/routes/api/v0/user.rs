@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 pub(crate) mod access;
 pub(crate) mod config;
+pub(crate) mod context_log;
 pub(crate) mod handle;
 
 pub(crate) fn create_router<S>(deletable: bool) -> Router<S>
@@ -27,7 +28,8 @@ where
         .route("/", get(get_user_info).patch(update_user_info))
         .nest("/handle", handle::create_router())
         .nest("/config", config::create_router())
-        .nest("/access", access::create_router());
+        .nest("/access", access::create_router())
+        .nest("/context_log", context_log::create_router());
 
     if deletable {
         router = router.route("/delete", delete(delete_user));
