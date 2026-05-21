@@ -46,6 +46,8 @@ pub enum LlmExecutionError {
     YamlError(#[from] yaml_serde::Error),
     #[error("Unexpected response format")]
     UnexpectedResponseFormat,
+    #[error("Goto target resolved to a non-string value: {0}")]
+    InvalidGotoTarget(String),
     #[error(transparent)]
     Undefined(#[from] Box<dyn std::error::Error + Send + Sync>),
     #[error("Slot not found: {0}")]

@@ -45,7 +45,8 @@ pub mod sse;
 pub mod summarizer;
 pub mod validator;
 
-static TEMPLATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{\{(\w+)}}").expect("template regex is invalid"));
+static TEMPLATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{(\w+(?:\.\w+)?)}}").expect("template regex is invalid"));
 
 #[derive(Debug, Clone, Default)]
 pub struct Documents {
@@ -315,7 +316,7 @@ pub enum Flow {
     Action(Next),
     /// # Goto another step by its ID
     /// NOTE: IDs of Chains steps are not allowed here. Insted use the ID of the first step in the chain
-    Goto(String),
+    Goto(Template),
 }
 
 #[derive(Deserialize, Debug, Clone, JsonSchema)]
@@ -550,6 +551,176 @@ impl InjectionTrait for Template {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builder::slot::SlotValuePair;
+    use crate::builder::slot::paths::{Destination, SlotPath};
+
+    fn make_pair(name: &str, destination: Destination, value: &str) -> SlotValuePair {
+        SlotValuePair {
+            path: SlotPath::new(name.to_string(), destination),
+            value: Template::from(value),
+        }
+    }
+
+    // --- Placeholder::parse ---
+
+    #[test]
+    fn test_placeholder_parse_default() {
+        let p = Placeholder::parse("foo").unwrap();
+        assert!(matches!(p, Placeholder::Default(k) if k == "foo"));
+    }
+
+    #[test]
+    fn test_placeholder_parse_global() {
+        let p = Placeholder::parse("global.mykey").unwrap();
+        assert!(matches!(p, Placeholder::Global(k) if k == "mykey"));
+    }
+
+    #[test]
+    fn test_placeholder_parse_module() {
+        let p = Placeholder::parse("module.mykey").unwrap();
+        assert!(matches!(p, Placeholder::Module(k) if k == "mykey"));
+    }
+
+    #[test]
+    fn test_placeholder_parse_session() {
+        let p = Placeholder::parse("session.mykey").unwrap();
+        assert!(matches!(p, Placeholder::Session(k) if k == "mykey"));
+    }
+
+    #[test]
+    fn test_placeholder_parse_conversation() {
+        let p = Placeholder::parse("conversation.mykey").unwrap();
+        assert!(matches!(p, Placeholder::Conversation(k) if k == "mykey"));
+    }
+
+    #[test]
+    fn test_placeholder_parse_unknown_prefix_returns_none() {
+        assert!(Placeholder::parse("unknown.mykey").is_none());
+    }
+
+    #[test]
+    fn test_placeholder_parse_too_many_parts_returns_none() {
+        assert!(Placeholder::parse("global.foo.bar").is_none());
+    }
+
+    // --- Template::placeholders ---
+
+    #[test]
+    fn test_template_no_placeholders() {
+        let t = Template::from("hello world");
+        assert!(t.placeholders().is_empty());
+    }
+
+    #[test]
+    fn test_template_single_default_placeholder() {
+        let t = Template::from("Hello {{name}}!");
+        let placeholders = t.placeholders();
+        assert_eq!(placeholders.len(), 1);
+        assert!(matches!(&placeholders[0], Placeholder::Default(k) if k == "name"));
+    }
+
+    #[test]
+    fn test_template_multiple_placeholders() {
+        let t = Template::from("{{global.a}} and {{session.b}}");
+        let placeholders = t.placeholders();
+        assert_eq!(placeholders.len(), 2);
+        assert!(matches!(&placeholders[0], Placeholder::Global(k) if k == "a"));
+        assert!(matches!(&placeholders[1], Placeholder::Session(k) if k == "b"));
+    }
+
+    #[test]
+    fn test_template_duplicate_placeholders() {
+        let t = Template::from("{{name}} and {{name}}");
+        assert_eq!(t.placeholders().len(), 2);
+    }
+
+    // --- Template::inject ---
+
+    #[test]
+    fn test_template_inject_default_placeholder() {
+        let t = Template::from("Hello {{name}}!");
+        let values = vec![make_pair("name", Destination::Conversation, "World")];
+        let result = t.inject(&values);
+        assert_eq!(result.to_string(), "Hello World!");
+    }
+
+    #[test]
+    fn test_template_inject_global_placeholder() {
+        let t = Template::from("Result {{global.key}} done");
+        let values = vec![make_pair("key", Destination::Global, "42")];
+        let result = t.inject(&values);
+        assert_eq!(result.to_string().trim(), "Result 42 done");
+    }
+
+    #[test]
+    fn test_template_inject_missing_value_becomes_empty() {
+        let t = Template::from("Hello {{missing}}!");
+        let result = t.inject(&[]);
+        assert_eq!(result.to_string(), "Hello !");
+    }
+
+    #[test]
+    fn test_template_inject_multiple_placeholders() {
+        let t = Template::from("{{first}} {{second}}");
+        let values = vec![
+            make_pair("first", Destination::Conversation, "Hello"),
+            make_pair("second", Destination::Conversation, "World"),
+        ];
+        let result = t.inject(&values);
+        assert_eq!(result.to_string(), "Hello World");
+    }
+
+    #[test]
+    fn test_template_inject_no_placeholders_unchanged() {
+        let t = Template::from("no placeholders here");
+        let result = t.inject(&[]);
+        assert_eq!(result.to_string(), "no placeholders here");
+    }
+
+    // --- Flow::Goto(Template) ---
+
+    #[test]
+    fn test_flow_goto_deserialization_static() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "step-two"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        assert_eq!(template.to_string(), "step-two");
+    }
+
+    #[test]
+    fn test_flow_goto_deserialization_with_placeholder() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "{{conversation.next_step}}"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        let placeholders = template.placeholders();
+        assert_eq!(placeholders.len(), 1);
+        assert!(matches!(&placeholders[0], Placeholder::Conversation(k) if k == "next_step"));
+    }
+
+    #[test]
+    fn test_flow_goto_inject_produces_expected_step_id() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "{{conversation.next_step}}"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        let values = vec![make_pair("next_step", Destination::Conversation, "step-three")];
+        let resolved = template.inject(&values);
+        assert_eq!(resolved.to_string(), "step-three");
+    }
+
+    #[test]
+    fn test_flow_goto_missing_placeholder_becomes_empty() {
+        let flow: Flow = serde_json::from_str(r#"{"goto": "prefix-{{conversation.missing}}"}"#).unwrap();
+        let Flow::Goto(template) = flow else {
+            panic!("Expected Flow::Goto, got {flow:?}");
+        };
+        let resolved = template.inject(&[]);
+        assert_eq!(resolved.to_string(), "prefix-");
+    }
+
+    // --- existing test ---
 
     #[test]
     fn test_action_deserialization() {

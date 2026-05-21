@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
 use super::{LlmStepResponse, LlmStepTrait};
+use crate::builder::NextStep;
 use crate::builder::slot::SaveTarget;
 use crate::builder::steps::api::{ApiHeader, ApiMethod};
 use crate::builder::steps::{Template, resolve_multiple, resolve_optional};
 use crate::execution::error::APIExecutionError;
 use crate::execution::steps::LlmStepContent;
-use crate::execution::steps::conversation_validator::NextStep;
 use crate::{builder::steps::Condition, execution::error::LlmExecutionError};
 use futures_core::future::BoxFuture;
 use futures_util::FutureExt;
@@ -118,19 +118,19 @@ impl LlmStepTrait for ApiCall {
 
             let values = HashMap::from([(self.store.clone(), content)]);
 
-            let content = if success {
-                LlmStepContent::StepValue {
-                    values,
-                    next_step: self.goto_on_success.clone(),
-                }
+            let goto = if success {
+                self.goto_on_success.clone()
             } else {
-                LlmStepContent::StepValue {
-                    values,
-                    next_step: self.goto_on_fail.clone(),
-                }
+                self.goto_on_fail.clone()
             };
 
-            Ok(LlmStepResponse::new(content, None))
+            let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let next_step = goto.map(super::template_to_step_id).transpose()?;
+
+            Ok(LlmStepResponse::new(
+                LlmStepContent::StepValue { values, next_step },
+                None,
+            ))
         }
         .boxed()
     }

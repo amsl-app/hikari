@@ -1,7 +1,7 @@
 use crate::builder::error::LlmBuildingError;
 use crate::builder::slot::LoadToSlot;
 use crate::builder::steps::llm::MemorySelector;
-use crate::builder::steps::{Documents, Flow, Next, ParentStep, StepBuilder};
+use crate::builder::steps::{Documents, Flow, Next, ParentStep, StepBuilder, Template};
 use crate::execution::steps::LlmStep;
 use futures_util::StreamExt;
 use hikari_utils::loader::{Filter, Loader, LoaderTrait, error::LoadingError};
@@ -19,6 +19,7 @@ pub mod steps;
 pub mod error;
 pub mod tools;
 
+pub type NextStep = Option<Template>;
 #[derive(Default, Debug)]
 pub struct LlmStructureConfig {
     pub structures: IndexMap<String, LlmStructureBuilder>,
@@ -137,13 +138,13 @@ pub fn build_memory_filter(memory_selection: &Vec<Selection<MemorySelector>>, ow
 }
 
 #[must_use]
-pub fn step_id_from_flow(flow: Flow, parent_steps: &[ParentStep]) -> Option<String> {
+pub fn step_id_from_flow(flow: Flow, parent_steps: &[ParentStep]) -> NextStep {
     tracing::trace!(?parent_steps, ?flow, "step_id_from_flow");
     match flow {
         Flow::Action(Next::Continue) => None,
         Flow::Action(Next::Repeat) => {
             if let [.., parent] = parent_steps {
-                parent.steps.first().cloned()
+                parent.steps.first().cloned().map(Into::into)
             } else {
                 None
             }
