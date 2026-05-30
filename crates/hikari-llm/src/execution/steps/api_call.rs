@@ -78,7 +78,15 @@ impl LlmStepTrait for ApiCall {
         async move {
             let headers =
                 resolve_multiple(&self.headers, conversation_id, user_id, module_id, session_id, &conn).await?;
-            let body = resolve_optional(&self.body, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let body = resolve_optional(
+                self.body.as_ref(),
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                &conn,
+            )
+            .await?;
 
             let client = reqwest::Client::new();
 
@@ -124,7 +132,7 @@ impl LlmStepTrait for ApiCall {
                 self.goto_on_fail.clone()
             };
 
-            let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let goto = resolve_optional(goto.as_ref(), conversation_id, user_id, module_id, session_id, &conn).await?;
             let next_step = goto.map(super::template_to_step_id).transpose()?;
 
             Ok(LlmStepResponse::new(

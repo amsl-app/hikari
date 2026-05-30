@@ -116,8 +116,8 @@ impl YamlToJson for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yaml_serde::Value;
     use core::assert_matches;
+    use yaml_serde::Value;
 
     #[test]
     fn test_decode_valid_yaml() {

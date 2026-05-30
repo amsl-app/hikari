@@ -37,9 +37,9 @@ pub mod id_map {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::assert_matches;
     use indexmap::IndexMap;
     use serde::{Deserialize, Serialize};
-    use core::assert_matches;
 
     #[derive(Serialize, Deserialize)]
     struct TestStruct {

@@ -76,7 +76,15 @@ impl LlmStepTrait for SseCall {
 
             let headers =
                 resolve_multiple(&self.headers, conversation_id, user_id, module_id, session_id, &conn).await?;
-            let body = resolve_optional(&self.body, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let body = resolve_optional(
+                self.body.as_ref(),
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                &conn,
+            )
+            .await?;
 
             let client = reqwest::Client::new();
 

@@ -407,6 +407,7 @@ impl From<Placeholder> for SlotPath {
 pub trait InjectionTrait: Sized {
     fn injection_slots(&self) -> Vec<SlotPath>;
 
+    #[must_use]
     fn inject(&self, values: &[SlotValuePair]) -> Self;
 
     async fn resolve(
@@ -428,7 +429,7 @@ pub trait InjectionTrait: Sized {
 }
 
 pub(crate) async fn resolve_optional<T: InjectionTrait + Sync>(
-    item: &Option<T>,
+    item: Option<&T>,
     conversation_id: &Uuid,
     user_id: &Uuid,
     module_id: &str,

@@ -128,10 +128,13 @@ impl LlmStepTrait for ConversationValidator {
                 self.goto_on_fail.clone()
             };
 
-            let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let goto = resolve_optional(goto.as_ref(), conversation_id, user_id, module_id, session_id, &conn).await?;
             let next_step = goto.map(super::template_to_step_id).transpose()?;
 
-            let content = LlmStepContent::StepValue { values: slots, next_step };
+            let content = LlmStepContent::StepValue {
+                values: slots,
+                next_step,
+            };
 
             Ok(LlmStepResponse::new(content, tokens))
         }
