@@ -4,10 +4,10 @@ use futures_core::future::BoxFuture;
 type UpdateMessageFn =
     Box<dyn Fn(String, Option<i32>, bool) -> BoxFuture<'static, Result<i32, LlmExecutionError>> + Send>;
 
-fn trailing_partial_sep(s: &str) -> usize {
-    if s.ends_with("--") {
-        2
-    } else { usize::from(s.ends_with('-')) }
+fn count_trailing(s: &str, needle: u8, max: usize) -> usize {
+    // We iterate over bytes here because we are only interessted in byte characters
+    // Iterating over chars is much heavier
+    s.bytes().rev().take(max).take_while(|&b| b == needle).count()
 }
 
 pub struct BubbleAccumulator {
@@ -64,7 +64,7 @@ impl BubbleAccumulator {
 
         // Hold back trailing "-" or "--" — they might be the start of a "---" separator.
         // Only save and stream content we're sure isn't part of an upcoming separator.
-        let safe_end = self.current_bubble.len() - trailing_partial_sep(&self.current_bubble);
+        let safe_end = self.current_bubble.len() - count_trailing(&self.current_bubble, b'-', 2);
         if safe_end > self.delta_offset {
             let safe_content = self
                 .current_bubble
