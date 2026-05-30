@@ -88,12 +88,7 @@ impl LlmStepTrait for SseCall {
 
             let client = reqwest::Client::new();
 
-            let request = match self.method {
-                ApiMethod::GET => client.get(&self.url),
-                ApiMethod::POST => client.post(&self.url),
-                ApiMethod::PUT => client.put(&self.url),
-                ApiMethod::DELETE => client.delete(&self.url),
-            };
+            let request = client.request(self.method.into(), &self.url);
 
             let request = headers
                 .into_iter()

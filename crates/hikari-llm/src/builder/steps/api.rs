@@ -34,7 +34,7 @@ impl InjectionTrait for ApiHeader {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, JsonSchema)]
+#[derive(Deserialize, Debug, Clone, Copy, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum ApiMethod {
     GET,
@@ -42,6 +42,18 @@ pub enum ApiMethod {
     PUT,
     DELETE,
 }
+
+impl From<ApiMethod> for reqwest::Method {
+    fn from(method: ApiMethod) -> Self {
+        match method {
+            ApiMethod::GET => reqwest::Method::GET,
+            ApiMethod::POST => reqwest::Method::POST,
+            ApiMethod::PUT => reqwest::Method::PUT,
+            ApiMethod::DELETE => reqwest::Method::DELETE,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug, Clone, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ApiBuilder {
