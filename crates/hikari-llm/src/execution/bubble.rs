@@ -7,11 +7,7 @@ type UpdateMessageFn =
 fn trailing_partial_sep(s: &str) -> usize {
     if s.ends_with("--") {
         2
-    } else if s.ends_with('-') {
-        1
-    } else {
-        0
-    }
+    } else { usize::from(s.ends_with('-')) }
 }
 
 pub struct BubbleAccumulator {

@@ -452,7 +452,7 @@ pub(crate) async fn resolve_multiple<T: InjectionTrait>(
     session_id: &str,
     conn: &DatabaseConnection,
 ) -> Result<Vec<T>, SlotError> {
-    let slots: Vec<SlotPath> = items.iter().flat_map(|i| i.injection_slots()).collect();
+    let slots: Vec<SlotPath> = items.iter().flat_map(InjectionTrait::injection_slots).collect();
     let values = if slots.is_empty() {
         vec![]
     } else {
