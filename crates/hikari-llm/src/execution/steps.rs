@@ -1,3 +1,4 @@
+use crate::builder::NextStep;
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::SlotValuePair;
 use crate::builder::slot::paths::SlotPath;
@@ -214,6 +215,18 @@ fn check_equals<'a>(
         Ok(value == equals)
     } else {
         Err(ConditionError::SlotNotFound(&slot.name))
+    }
+}
+
+pub(super) fn select_goto<'a>(
+    success: bool,
+    goto_on_success: &'a NextStep,
+    goto_on_fail: &'a NextStep,
+) -> Option<&'a Template> {
+    if success {
+        goto_on_success.as_ref()
+    } else {
+        goto_on_fail.as_ref()
     }
 }
 

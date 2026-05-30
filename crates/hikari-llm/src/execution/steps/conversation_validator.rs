@@ -122,11 +122,7 @@ impl LlmStepTrait for ConversationValidator {
                 ValidationType::Any => decisions.iter().any(|(_, v)| *v == Value::Bool(true)),
             };
 
-            let goto = if success {
-                self.goto_on_success.as_ref()
-            } else {
-                self.goto_on_fail.as_ref()
-            };
+            let goto = super::select_goto(success, &self.goto_on_success, &self.goto_on_fail);
 
             let goto = resolve_optional(goto, conversation_id, user_id, module_id, session_id, &conn).await?;
             let next_step = goto.map(super::template_to_step_id).transpose()?;
