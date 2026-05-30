@@ -126,7 +126,7 @@ impl LlmStepTrait for SseCall {
 
                     let content: String = if let Some(path) = &response_path {
                         let json_value: serde_json::Value = serde_json::from_str(data)?;
-                        json_value.query(path).map(|v| v.to_yaml())??.encode()
+                        json_value.query(path).and_then(|v| v.to_yaml())?.encode()
                     } else {
                         data.to_owned()
                     };

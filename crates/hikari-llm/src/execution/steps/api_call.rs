@@ -114,7 +114,7 @@ impl LlmStepTrait for ApiCall {
             tracing::debug!(%json_value, "API response");
 
             let content: Value = if let Some(path) = &self.response_path {
-                json_value.query(path).map(|v| v.to_yaml())??
+                json_value.query(path).and_then(|v| v.to_yaml())?
             } else {
                 json_value.to_yaml()?
             };
