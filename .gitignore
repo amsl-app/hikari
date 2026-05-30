@@ -1,8 +1,23 @@
-/target
-.DS_Store
+# Rust
+/target/
+
+# Editiors
 .idea/
 .zed/
 .vscode/
+
+# OS Specifics
+.DS_Store
+
+# AI Stuff
+.junie
+.gemini
+.claude
+GEMINI.md
+CLAUDE.md
+
+# Other
+
 *.sqlite
 *.sqlite-journal
 /.env
@@ -17,8 +32,4 @@
 CSML
 run-local.sh
 /schemas/
-/tools/
-.gemini
-.claude
-GEMINI.md
-CLAUDE.md
+/tools

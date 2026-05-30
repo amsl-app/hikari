@@ -201,33 +201,30 @@ impl LlmAgent {
                         let step_id_owned = step_id_owned.clone();
                         async move {
                             let status = if is_last { MessageStatus::Completed } else { MessageStatus::Generating };
-                            match id {
-                                Some(id) => {
-                                    let (_, message) = split_payload_for_database(TypeSafePayload::Text(TextContent { text: content }))
-                                        .map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
-                                    hikari_db::llm::message::Mutation::update_message(
-                                        &conn,
-                                        conversation_id,
-                                        id,
-                                        message,
-                                        Some(status.into_db_model()),
-                                    ).await?;
-                                    Ok::<i32, LlmExecutionError>(id)
-                                }
-                                None => {
-                                    let (content_type, message) = split_payload_for_database(TypeSafePayload::Text(TextContent { text: content }))
-                                        .map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
-                                    let res = hikari_db::llm::message::Mutation::insert_new_message(
-                                        &conn,
-                                        conversation_id,
-                                        step_id_owned,
-                                        content_type,
-                                        message,
-                                        Direction::Send.into_db_model(),
-                                        status.into_db_model(),
-                                    ).await?;
-                                    Ok(res.message_order)
-                                }
+                            if let Some(id) = id {
+                                let (_, message) = split_payload_for_database(TypeSafePayload::Text(TextContent { text: content }))
+                                    .map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
+                                hikari_db::llm::message::Mutation::update_message(
+                                    &conn,
+                                    conversation_id,
+                                    id,
+                                    message,
+                                    Some(status.into_db_model()),
+                                ).await?;
+                                Ok::<i32, LlmExecutionError>(id)
+                            } else {
+                                let (content_type, message) = split_payload_for_database(TypeSafePayload::Text(TextContent { text: content }))
+                                    .map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
+                                let res = hikari_db::llm::message::Mutation::insert_new_message(
+                                    &conn,
+                                    conversation_id,
+                                    step_id_owned,
+                                    content_type,
+                                    message,
+                                    Direction::Send.into_db_model(),
+                                    status.into_db_model(),
+                                ).await?;
+                                Ok(res.message_order)
                             }
                         }.boxed()
                     });

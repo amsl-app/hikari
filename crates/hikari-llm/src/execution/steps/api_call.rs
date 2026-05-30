@@ -78,16 +78,19 @@ impl LlmStepTrait for ApiCall {
         async move {
             let headers =
                 resolve_multiple(&self.headers, conversation_id, user_id, module_id, session_id, &conn).await?;
-            let body = resolve_optional(&self.body, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let body = resolve_optional(
+                self.body.as_ref(),
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                &conn,
+            )
+            .await?;
 
             let client = reqwest::Client::new();
 
-            let request = match self.method {
-                ApiMethod::GET => client.get(&self.url),
-                ApiMethod::POST => client.post(&self.url),
-                ApiMethod::PUT => client.put(&self.url),
-                ApiMethod::DELETE => client.delete(&self.url),
-            };
+            let request = client.request(self.method.into(), &self.url);
 
             let request = headers
                 .into_iter()
@@ -111,20 +114,16 @@ impl LlmStepTrait for ApiCall {
             tracing::debug!(%json_value, "API response");
 
             let content: Value = if let Some(path) = &self.response_path {
-                json_value.query(path).map(|v| v.to_yaml())??
+                json_value.query(path).and_then(|v| v.to_yaml())?
             } else {
                 json_value.to_yaml()?
             };
 
             let values = HashMap::from([(self.store.clone(), content)]);
 
-            let goto = if success {
-                self.goto_on_success.clone()
-            } else {
-                self.goto_on_fail.clone()
-            };
+            let goto = super::select_goto(success, &self.goto_on_success, &self.goto_on_fail);
 
-            let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let goto = resolve_optional(goto, conversation_id, user_id, module_id, session_id, &conn).await?;
             let next_step = goto.map(super::template_to_step_id).transpose()?;
 
             Ok(LlmStepResponse::new(

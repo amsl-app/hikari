@@ -33,7 +33,7 @@ where
 #[macro_export]
 macro_rules! postgres_assert_type_base {
     ($db_type: pat, $columns:ident, $name: literal, $not_null: literal) => {
-        assert!(matches!($columns.get($name).unwrap().col_type, $db_type));
+        assert_matches!($columns.get($name).unwrap().col_type, $db_type);
         assert_eq!($columns.get($name).unwrap().not_null.is_some(), $not_null);
     };
 

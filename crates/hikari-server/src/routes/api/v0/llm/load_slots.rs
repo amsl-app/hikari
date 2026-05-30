@@ -121,7 +121,7 @@ pub async fn load_slots<'a>(
                             let log: Option<UserContextLog> =
                                 hikari_db::user_context_logs::Query::get_latest_by_type(conn, user.id, key)
                                     .await?
-                                    .map(|l| l.into_model());
+                                    .map(IntoModel::into_model);
 
                             log.map_or(Ok(Value::Null), |s| s.data.to_yaml())?
                         }
@@ -129,7 +129,7 @@ pub async fn load_slots<'a>(
                             let log: Option<UserContextLog> =
                                 hikari_db::user_context_logs::Query::get_earliest_by_type(conn, user.id, key)
                                     .await?
-                                    .map(|l| l.into_model());
+                                    .map(IntoModel::into_model);
 
                             log.map_or(Ok(Value::Null), |s| s.data.to_yaml())?
                         }

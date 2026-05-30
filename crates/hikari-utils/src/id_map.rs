@@ -37,6 +37,7 @@ pub mod id_map {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::assert_matches;
     use indexmap::IndexMap;
     use serde::{Deserialize, Serialize};
 
@@ -46,7 +47,7 @@ mod tests {
         map: IndexMap<u64, TestItem>,
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     struct TestItem {
         id: u32,
         value: u32,
@@ -73,10 +74,10 @@ mod tests {
         .unwrap();
         assert_eq!(test_struct.map.len(), 2);
         let data = test_struct.map.into_iter().collect::<Vec<_>>();
-        assert!(matches!(
+        assert_matches!(
             data.as_slice(),
             [(1, TestItem { id: 1, value: 2 }), (3, TestItem { id: 3, value: 4 })]
-        ));
+        );
     }
 
     #[test]

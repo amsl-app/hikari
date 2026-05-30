@@ -76,16 +76,19 @@ impl LlmStepTrait for SseCall {
 
             let headers =
                 resolve_multiple(&self.headers, conversation_id, user_id, module_id, session_id, &conn).await?;
-            let body = resolve_optional(&self.body, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let body = resolve_optional(
+                self.body.as_ref(),
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                &conn,
+            )
+            .await?;
 
             let client = reqwest::Client::new();
 
-            let request = match self.method {
-                ApiMethod::GET => client.get(&self.url),
-                ApiMethod::POST => client.post(&self.url),
-                ApiMethod::PUT => client.put(&self.url),
-                ApiMethod::DELETE => client.delete(&self.url),
-            };
+            let request = client.request(self.method.into(), &self.url);
 
             let request = headers
                 .into_iter()
@@ -123,7 +126,7 @@ impl LlmStepTrait for SseCall {
 
                     let content: String = if let Some(path) = &response_path {
                         let json_value: serde_json::Value = serde_json::from_str(data)?;
-                        json_value.query(path).map(|v| v.to_yaml())??.encode()
+                        json_value.query(path).and_then(|v| v.to_yaml())?.encode()
                     } else {
                         data.to_owned()
                     };

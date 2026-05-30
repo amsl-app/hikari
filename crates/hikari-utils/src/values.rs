@@ -116,48 +116,37 @@ impl YamlToJson for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::assert_matches;
     use yaml_serde::Value;
 
     #[test]
     fn test_decode_valid_yaml() {
         let yaml_str = "key: value";
         let val = Value::decode(yaml_str);
-        assert!(matches!(val, Value::Mapping(_)), "Expected mapping, got {:?}", val);
+        assert_matches!(val, Value::Mapping(_));
 
         let yaml_list = "- item1\n- item2";
         let val_list = Value::decode(yaml_list);
-        assert!(
-            matches!(val_list, Value::Sequence(_)),
-            "Expected sequence, got {:?}",
-            val_list
-        );
+        assert_matches!(val_list, Value::Sequence(_));
 
         let yaml_num = "42";
         let val_num = Value::decode(yaml_num);
-        assert!(
-            matches!(val_num, Value::Number(_)),
-            "Expected number, got {:?}",
-            val_num
-        );
+        assert_matches!(val_num, Value::Number(_));
 
         let yaml_bool = "true";
         let val_bool = Value::decode(yaml_bool);
-        assert!(matches!(val_bool, Value::Bool(_)), "Expected bool, got {:?}", val_bool);
+        assert_matches!(val_bool, Value::Bool(_));
     }
 
     #[test]
     fn test_decode_valid_json() {
         let json_str = r#"{"key": "value"}"#;
         let val = Value::decode(json_str);
-        assert!(matches!(val, Value::Mapping(_)), "Expected mapping, got {:?}", val);
+        assert_matches!(val, Value::Mapping(_));
 
         let json_list = r#"["item1", "item2"]"#;
         let val_list = Value::decode(json_list);
-        assert!(
-            matches!(val_list, Value::Sequence(_)),
-            "Expected sequence, got {:?}",
-            val_list
-        );
+        assert_matches!(val_list, Value::Sequence(_));
     }
 
     #[test]

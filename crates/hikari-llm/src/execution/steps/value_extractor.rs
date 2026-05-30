@@ -121,17 +121,16 @@ impl LlmStepTrait for ValueExtractor {
                     }
                 }
 
-                let goto = if success {
-                    self.goto_on_success.clone()
-                } else {
-                    self.goto_on_fail.clone()
-                };
+                let goto = super::select_goto(success, &self.goto_on_success, &self.goto_on_fail);
 
-                let goto = resolve_optional(&goto, conversation_id, user_id, module_id, session_id, &conn).await?;
+                let goto = resolve_optional(goto, conversation_id, user_id, module_id, session_id, &conn).await?;
                 let next_step = goto.map(super::template_to_step_id).transpose()?;
 
                 Ok(LlmStepResponse::new(
-                    LlmStepContent::StepValue { values: step_values, next_step },
+                    LlmStepContent::StepValue {
+                        values: step_values,
+                        next_step,
+                    },
                     tokens,
                 ))
             } else {

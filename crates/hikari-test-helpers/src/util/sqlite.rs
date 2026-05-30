@@ -30,12 +30,7 @@ where
 #[macro_export]
 macro_rules! sqlite_assert_type_base {
     ($db_type: pat, $columns:ident, $name: literal, $not_null: literal) => {
-        assert!(
-            matches!($columns.get($name).unwrap().r#type, $db_type),
-            "expected type {}. actual type {:?}",
-            stringify!($db_type),
-            $columns.get($name).unwrap().r#type
-        );
+        core::assert_matches!($columns.get($name).unwrap().r#type, $db_type);
         assert_eq!($columns.get($name).unwrap().not_null, $not_null);
     };
 

@@ -47,12 +47,22 @@ impl LlmStepTrait for GoTo {
         conn: DatabaseConnection,
     ) -> BoxFuture<'a, Result<LlmStepResponse, LlmExecutionError>> {
         async move {
-            let goto =
-                resolve_optional(&self.next_step, conversation_id, user_id, module_id, session_id, &conn).await?;
+            let goto = resolve_optional(
+                self.next_step.as_ref(),
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                &conn,
+            )
+            .await?;
             let next_step = goto.map(super::template_to_step_id).transpose()?;
 
             Ok(LlmStepResponse::new(
-                LlmStepContent::StepValue { values: HashMap::new(), next_step },
+                LlmStepContent::StepValue {
+                    values: HashMap::new(),
+                    next_step,
+                },
                 None,
             ))
         }
