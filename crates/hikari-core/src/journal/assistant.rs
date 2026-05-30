@@ -230,6 +230,28 @@ impl MergeResponse {
     }
 }
 
+async fn merge_tool_call(
+    llm_config: &LlmConfig,
+    messages: Vec<ChatCompletionRequestMessage>,
+) -> Result<(MergeResponse, Option<u32>), AssistantError> {
+    let openai_config = llm_config.get_journaling_openai_config();
+    let model = llm_config.get_journaling_model();
+
+    openai_single_tool_call::<MergeResponse>(
+        CallConfig::builder()
+            .iteration_timeout(Duration::from_secs(25))
+            .total_timeout(Duration::from_mins(1))
+            .build(),
+        openai_config,
+        None,
+        None,
+        model,
+        messages,
+    )
+    .await
+    .map_err(AssistantError::from)
+}
+
 #[instrument(skip(llm_config, conn), err)]
 pub async fn merge_prompts(
     user_id: &Uuid,
@@ -272,21 +294,7 @@ pub async fn merge_prompts(
 
     tracing::info!("sending {} messages to openAI", messages.len());
 
-    let openai_config = llm_config.get_journaling_openai_config();
-    let model = llm_config.get_journaling_model();
-
-    let (mut res, tokens) = openai_single_tool_call::<MergeResponse>(
-        CallConfig::builder()
-            .iteration_timeout(Duration::from_secs(25))
-            .total_timeout(Duration::from_mins(1))
-            .build(),
-        openai_config,
-        None,
-        None,
-        model,
-        messages,
-    )
-    .await?;
+    let (mut res, tokens) = merge_tool_call(llm_config, messages).await?;
 
     if let Some(usage) = tokens {
         add_usage(conn, user_id, usage, "assisstant_merge").await?;
@@ -367,21 +375,7 @@ Rufe die Funktion `TextZusammenfuehren` auf um die Formulierungen zurückzugeben
 
     tracing::info!("sending {} messages to openAI", messages.len());
 
-    let openai_config = llm_config.get_journaling_openai_config();
-    let model = llm_config.get_journaling_model();
-
-    let (mut res, tokens) = openai_single_tool_call::<MergeResponse>(
-        CallConfig::builder()
-            .iteration_timeout(Duration::from_secs(25))
-            .total_timeout(Duration::from_mins(1))
-            .build(),
-        openai_config,
-        None,
-        None,
-        model,
-        messages,
-    )
-    .await?;
+    let (mut res, tokens) = merge_tool_call(llm_config, messages).await?;
 
     if let Some(usage) = tokens {
         add_usage(conn, user_id, usage, "assisstant_text_merge").await?;
