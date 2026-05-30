@@ -347,6 +347,7 @@ async fn read_config<C: ConnectionTrait>(conn: &C, client: Client, body: ReadCon
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::assert_matches;
 
     #[test]
     fn test_deserialize() {
@@ -369,6 +370,6 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        assert!(matches!(serde_json::to_value(()).unwrap(), Value::Null));
+        assert_matches!(serde_json::to_value(()).unwrap(), Value::Null);
     }
 }

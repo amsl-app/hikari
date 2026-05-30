@@ -554,6 +554,8 @@ mod tests {
     use crate::builder::slot::SlotValuePair;
     use crate::builder::slot::paths::{Destination, SlotPath};
 
+    use core::assert_matches;
+
     fn make_pair(name: &str, destination: Destination, value: &str) -> SlotValuePair {
         SlotValuePair {
             path: SlotPath::new(name.to_string(), destination),
@@ -566,31 +568,31 @@ mod tests {
     #[test]
     fn test_placeholder_parse_default() {
         let p = Placeholder::parse("foo").unwrap();
-        assert!(matches!(p, Placeholder::Default(k) if k == "foo"));
+        assert_matches!(p, Placeholder::Default(k) if k == "foo");
     }
 
     #[test]
     fn test_placeholder_parse_global() {
         let p = Placeholder::parse("global.mykey").unwrap();
-        assert!(matches!(p, Placeholder::Global(k) if k == "mykey"));
+        assert_matches!(p, Placeholder::Global(k) if k == "mykey");
     }
 
     #[test]
     fn test_placeholder_parse_module() {
         let p = Placeholder::parse("module.mykey").unwrap();
-        assert!(matches!(p, Placeholder::Module(k) if k == "mykey"));
+        assert_matches!(p, Placeholder::Module(k) if k == "mykey");
     }
 
     #[test]
     fn test_placeholder_parse_session() {
         let p = Placeholder::parse("session.mykey").unwrap();
-        assert!(matches!(p, Placeholder::Session(k) if k == "mykey"));
+        assert_matches!(p, Placeholder::Session(k) if k == "mykey");
     }
 
     #[test]
     fn test_placeholder_parse_conversation() {
         let p = Placeholder::parse("conversation.mykey").unwrap();
-        assert!(matches!(p, Placeholder::Conversation(k) if k == "mykey"));
+        assert_matches!(p, Placeholder::Conversation(k) if k == "mykey");
     }
 
     #[test]
@@ -616,7 +618,7 @@ mod tests {
         let t = Template::from("Hello {{name}}!");
         let placeholders = t.placeholders();
         assert_eq!(placeholders.len(), 1);
-        assert!(matches!(&placeholders[0], Placeholder::Default(k) if k == "name"));
+        assert_matches!(&placeholders[0], Placeholder::Default(k) if k == "name");
     }
 
     #[test]
@@ -624,8 +626,8 @@ mod tests {
         let t = Template::from("{{global.a}} and {{session.b}}");
         let placeholders = t.placeholders();
         assert_eq!(placeholders.len(), 2);
-        assert!(matches!(&placeholders[0], Placeholder::Global(k) if k == "a"));
-        assert!(matches!(&placeholders[1], Placeholder::Session(k) if k == "b"));
+        assert_matches!(&placeholders[0], Placeholder::Global(k) if k == "a");
+        assert_matches!(&placeholders[1], Placeholder::Session(k) if k == "b");
     }
 
     #[test]
@@ -696,7 +698,7 @@ mod tests {
         };
         let placeholders = template.placeholders();
         assert_eq!(placeholders.len(), 1);
-        assert!(matches!(&placeholders[0], Placeholder::Conversation(k) if k == "next_step"));
+        assert_matches!(&placeholders[0], Placeholder::Conversation(k) if k == "next_step");
     }
 
     #[test]
