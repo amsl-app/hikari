@@ -127,12 +127,12 @@ impl LlmStepTrait for ApiCall {
             let values = HashMap::from([(self.store.clone(), content)]);
 
             let goto = if success {
-                self.goto_on_success.clone()
+                self.goto_on_success.as_ref()
             } else {
-                self.goto_on_fail.clone()
+                self.goto_on_fail.as_ref()
             };
 
-            let goto = resolve_optional(goto.as_ref(), conversation_id, user_id, module_id, session_id, &conn).await?;
+            let goto = resolve_optional(goto, conversation_id, user_id, module_id, session_id, &conn).await?;
             let next_step = goto.map(super::template_to_step_id).transpose()?;
 
             Ok(LlmStepResponse::new(
