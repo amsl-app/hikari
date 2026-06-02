@@ -39,7 +39,7 @@ impl IntoResponse for PlannerError {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct PlannerEntryChanges {
+pub(crate) struct PlannerEntryChanges {
     pub date: Option<NaiveDate>,
     pub title: Option<String>,
     pub completed: Option<bool>,
