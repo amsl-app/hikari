@@ -9,6 +9,7 @@ pub mod llm;
 pub mod module;
 pub mod oidc_groups;
 pub mod oidc_mapping;
+pub mod planner_entry;
 pub mod quiz;
 pub mod tag;
 pub mod user;
