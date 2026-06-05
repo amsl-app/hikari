@@ -1,6 +1,7 @@
 use hikari::OidcClientType;
 use openidconnect::core::{CoreClient, CoreProviderMetadata};
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
+use openidconnect::reqwest;
 
 pub async fn create_client(
     oidc_issuer_url: String,
