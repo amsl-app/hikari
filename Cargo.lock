@@ -3129,6 +3129,7 @@ dependencies = [
 name = "hikari-oidc"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "jsonwebtoken",
  "reqwest 0.13.4",
  "serde",
