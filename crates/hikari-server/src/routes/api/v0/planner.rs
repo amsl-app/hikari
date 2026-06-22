@@ -468,7 +468,7 @@ fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
     for entry in entries {
         let start = entry.date.format("%Y%m%d").to_string();
         let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d").to_string();
-        let status = if entry.completed { "COMPLETED" } else { "NEEDS-ACTION" };
+        let status = if entry.completed { "CANCELLED" } else { "CONFIRMED" };
         let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
 
         out.push_str("BEGIN:VEVENT\r\n");
