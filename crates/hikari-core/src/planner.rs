@@ -72,8 +72,8 @@ pub async fn planner_assistant(
 
     tracing::info!("sending {} messages to openAI for planner assistant", messages.len());
 
-    let openai_config = llm_config.get_journaling_openai_config();
-    let model = llm_config.get_journaling_model();
+    let openai_config = llm_config.get_planner_openai_config();
+    let model = llm_config.get_planner_model();
 
     let (res, tokens) = openai_single_tool_call::<PlannerEntriesResponse>(
         CallConfig::builder()
