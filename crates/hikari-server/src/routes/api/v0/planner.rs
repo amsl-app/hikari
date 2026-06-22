@@ -9,8 +9,8 @@ use axum::routing::get;
 use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::sea_orm::DatabaseConnection;
-use hikari_model::planner::{NewPlannerEntry, PlannerEntry, Priority};
-use hikari_model_tools::convert::{FromDbModel, IntoDbModel};
+use hikari_model::planner::{NewPlannerEntry, PlannerEntry};
+use hikari_model_tools::convert::FromDbModel;
 use http::StatusCode;
 use protect_axum::protect;
 use sea_orm::{ActiveValue, DbErr};
@@ -18,7 +18,6 @@ use serde::Deserialize;
 use thiserror::Error;
 use utoipa::ToSchema;
 use uuid::Uuid;
-
 
 #[derive(Error, Debug)]
 pub(crate) enum PlannerError {
@@ -43,7 +42,7 @@ pub struct PlannerEntryChanges {
     pub date: Option<NaiveDate>,
     pub title: Option<String>,
     pub completed: Option<bool>,
-    pub priority: Option<Priority>,
+    pub priority: Option<i32>,
     #[serde(default, with = "::serde_with::rust::double_option")]
     #[allow(clippy::option_option)]
     pub module_id: Option<Option<String>>,
@@ -94,8 +93,7 @@ pub(crate) async fn get_planner_entries(
     Extension(conn): Extension<DatabaseConnection>,
     Query(filter): Query<DateRangeFilter>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let entries =
-        planner::planner_entry::Query::get_user_planner_entries(&conn, user, filter.from, filter.to).await?;
+    let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user, filter.from, filter.to).await?;
     let entries = entries
         .into_iter()
         .map(FromDbModel::from_db_model)
@@ -148,13 +146,12 @@ pub(crate) async fn create_planner_entry(
     Extension(conn): Extension<DatabaseConnection>,
     Json(body): Json<NewPlannerEntry>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let priority_db = body.priority.into_db_model();
     let entry = planner::planner_entry::Mutation::create_planner_entry(
         &conn,
         user,
         body.date,
         body.title,
-        priority_db,
+        body.priority,
         body.module_id,
         body.session_id,
     )
@@ -205,7 +202,7 @@ pub(crate) async fn update_planner_entry(
         active_model.completed = ActiveValue::Set(completed);
     }
     if let Some(priority) = changes.priority {
-        active_model.priority = ActiveValue::Set(priority.into_db_model());
+        active_model.priority = ActiveValue::Set(priority);
     }
 
     if let Some(inner) = changes.module_id {

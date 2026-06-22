@@ -1,17 +1,6 @@
 use chrono::NaiveDate;
 use sea_orm::entity::prelude::*;
 
-#[derive(Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Clone, Copy)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "priority_enum")]
-pub enum Priority {
-    #[sea_orm(string_value = "low")]
-    Low,
-    #[sea_orm(string_value = "medium")]
-    Medium,
-    #[sea_orm(string_value = "high")]
-    High,
-}
-
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "planner_entry")]
 pub struct Model {
@@ -21,7 +10,7 @@ pub struct Model {
     pub date: NaiveDate,
     pub title: String,
     pub completed: bool,
-    pub priority: Priority,
+    pub priority: i32,
     pub module_id: Option<String>,
     pub session_id: Option<String>,
     pub created_at: DateTime,

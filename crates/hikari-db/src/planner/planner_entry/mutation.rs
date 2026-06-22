@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use hikari_entity::planner_entry::{ActiveModel, Entity as PlannerEntry, Model as PlannerEntryModel, Priority};
+use hikari_entity::planner_entry::{ActiveModel, Entity as PlannerEntry, Model as PlannerEntryModel};
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, NotSet, QueryFilter};
 use uuid::Uuid;
 
@@ -11,7 +11,7 @@ impl Mutation {
         user_id: Uuid,
         date: NaiveDate,
         title: String,
-        priority: Priority,
+        priority: i32,
         module_id: Option<String>,
         session_id: Option<String>,
     ) -> Result<PlannerEntryModel, DbErr> {
