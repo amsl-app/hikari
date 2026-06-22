@@ -1,7 +1,17 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDate;
 use hikari_entity::planner_entry::{ActiveModel, Entity as PlannerEntry, Model as PlannerEntryModel};
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, NotSet, QueryFilter};
 use uuid::Uuid;
+
+pub struct PlannerEntryInput {
+    pub date: NaiveDate,
+    pub title: String,
+    pub priority: i32,
+    pub module_id: Option<String>,
+    pub session_id: Option<String>,
+}
 
 pub struct Mutation;
 
@@ -43,6 +53,50 @@ impl Mutation {
         res.inspect_err(|error| {
             tracing::error!(error = %error, "failed to update planner entry");
         })
+    }
+
+    pub async fn create_planner_entries_bulk<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        entries: Vec<PlannerEntryInput>,
+    ) -> Result<Vec<PlannerEntryModel>, DbErr> {
+        if entries.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let ids: Vec<Uuid> = (0..entries.len()).map(|_| Uuid::new_v4()).collect();
+        let order: HashMap<Uuid, usize> = ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+
+        let active_models = ids.iter().zip(entries).map(|(id, input)| ActiveModel {
+            id: ActiveValue::Set(*id),
+            user_id: ActiveValue::Set(user_id),
+            date: ActiveValue::Set(input.date),
+            title: ActiveValue::Set(input.title),
+            completed: ActiveValue::Set(false),
+            priority: ActiveValue::Set(input.priority),
+            module_id: ActiveValue::Set(input.module_id),
+            session_id: ActiveValue::Set(input.session_id),
+            created_at: NotSet,
+            updated_at: NotSet,
+        });
+
+        PlannerEntry::insert_many(active_models)
+            .exec(db)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(error = %error, "failed to bulk create planner entries");
+            })?;
+
+        let mut models = PlannerEntry::find()
+            .filter(hikari_entity::planner_entry::Column::Id.is_in(ids))
+            .all(db)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(error = %error, "failed to fetch bulk-created planner entries");
+            })?;
+
+        models.sort_by_key(|m| order.get(&m.id).copied().unwrap_or(usize::MAX));
+        Ok(models)
     }
 
     pub async fn delete_planner_entry<C: ConnectionTrait>(db: &C, user_id: Uuid, id: Uuid) -> Result<u64, DbErr> {

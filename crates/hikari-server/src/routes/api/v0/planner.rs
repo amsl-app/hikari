@@ -1,15 +1,19 @@
+use crate::AppConfig;
 use crate::permissions::Permission;
-use crate::user::ExtractUserId;
+use crate::user::{ExtractUser, ExtractUserId};
 use axum::Extension;
 use axum::Json;
 use axum::Router;
 use axum::extract::{Path, Query};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::sea_orm::DatabaseConnection;
-use hikari_model::planner::{NewPlannerEntry, PlannerEntry, PlannerIcalToken};
+use hikari_model::planner::{
+    NewPlannerEntry, PlannerAssistantExistingEntry, PlannerAssistantModule, PlannerAssistantRequest,
+    PlannerAssistantSession, PlannerEntry, PlannerIcalToken,
+};
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
 use protect_axum::protect;
@@ -26,12 +30,19 @@ pub(crate) enum PlannerError {
 
     #[error("Planner entry could not be found")]
     NotFound,
+
+    #[error("LLM error")]
+    LlmError,
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 impl IntoResponse for PlannerError {
     fn into_response(self) -> Response {
         match self {
             Self::NotFound | Self::SeaOrmError(DbErr::RecordNotFound(_)) => StatusCode::NOT_FOUND.into_response(),
+            Self::ValidationError(_) => StatusCode::UNPROCESSABLE_ENTITY.into_response(),
             _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     }
@@ -57,6 +68,7 @@ where
 {
     Router::new()
         .route("/entries", get(get_planner_entries).post(create_planner_entry))
+        .route("/entries/bulk", post(create_planner_entries_bulk))
         .route(
             "/entries/{id}",
             get(get_planner_entry)
@@ -65,6 +77,7 @@ where
         )
         .route("/ical-token", get(get_ical_token).delete(delete_ical_token))
         .route("/ical/{token}", get(get_planner_ical))
+        .route("/assistant", post(planner_assistant))
         .with_state(())
 }
 
@@ -316,6 +329,136 @@ pub(crate) async fn get_planner_ical(
         )],
         body,
     ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/planner/entries/bulk",
+    request_body = Vec<NewPlannerEntry>,
+    responses(
+        (status = CREATED, description = "Create multiple planner entries", body = [PlannerEntry]),
+    ),
+    tag = "v0/planner",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn create_planner_entries_bulk(
+    ExtractUserId(user): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Json(body): Json<Vec<NewPlannerEntry>>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let inputs = body
+        .into_iter()
+        .enumerate()
+        .map(|(i, e)| validate_new_entry(i, e))
+        .collect::<Result<Vec<_>, _>>()?;
+    let created = planner::planner_entry::Mutation::create_planner_entries_bulk(&conn, user, inputs).await?;
+    let entries = created
+        .into_iter()
+        .map(FromDbModel::from_db_model)
+        .collect::<Vec<PlannerEntry>>();
+    Ok((StatusCode::CREATED, Json(entries)))
+}
+
+fn validate_new_entry(
+    index: usize,
+    entry: NewPlannerEntry,
+) -> Result<planner::planner_entry::PlannerEntryInput, PlannerError> {
+    let title = entry.title.trim().to_owned();
+    if title.is_empty() {
+        return Err(PlannerError::ValidationError(format!(
+            "entry {index}: title must not be empty"
+        )));
+    }
+    if title.len() > 500 {
+        return Err(PlannerError::ValidationError(format!(
+            "entry {index}: title exceeds 500 characters"
+        )));
+    }
+    if !(0..=3).contains(&entry.priority) {
+        return Err(PlannerError::ValidationError(format!(
+            "entry {index}: priority must be between 0 and 3"
+        )));
+    }
+    Ok(planner::planner_entry::PlannerEntryInput {
+        date: entry.date,
+        title,
+        priority: entry.priority,
+        module_id: entry.module_id,
+        session_id: entry.session_id,
+    })
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/planner/assistant",
+    request_body = PlannerAssistantRequest,
+    responses(
+        (status = OK, description = "Parsed planner entries from free text", body = [NewPlannerEntry]),
+    ),
+    tag = "v0/planner",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn planner_assistant(
+    ExtractUser(user): ExtractUser,
+    Extension(conn): Extension<DatabaseConnection>,
+    Extension(app_config): Extension<AppConfig>,
+    Json(body): Json<PlannerAssistantRequest>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let today = body.today.unwrap_or_else(|| chrono::Utc::now().date_naive());
+
+    let module_config = app_config.module_config();
+    let filtered = module_config.modules_filtered(&user.groups);
+
+    let modules: Vec<PlannerAssistantModule> = filtered
+        .iter()
+        .filter(|m| !m.hidden)
+        .map(|m| PlannerAssistantModule {
+            id: m.id.clone(),
+            name: m.title.clone(),
+        })
+        .collect();
+
+    let sessions: Vec<PlannerAssistantSession> = filtered
+        .iter()
+        .filter(|m| !m.hidden)
+        .flat_map(|m| m.sessions.values().filter(|s| !s.hidden))
+        .map(|s| PlannerAssistantSession {
+            id: s.id.clone(),
+            name: s.title.clone(),
+        })
+        .collect();
+
+    let existing_db =
+        planner::planner_entry::Query::get_user_planner_entries(&conn, user.id, Some(today), None).await?;
+    let existing_entries: Vec<PlannerAssistantExistingEntry> = existing_db
+        .into_iter()
+        .map(|e| PlannerAssistantExistingEntry {
+            date: e.date,
+            title: e.title,
+        })
+        .collect();
+
+    let entries = hikari_core::planner::planner_assistant(
+        &user.id,
+        body.text,
+        today,
+        modules,
+        sessions,
+        existing_entries,
+        app_config.llm_config(),
+        &conn,
+    )
+    .await
+    .inspect_err(|e| tracing::error!(error = %e, "planner assistant LLM call failed"))
+    .map_err(|_| PlannerError::LlmError)?;
+
+    Ok(Json(entries))
 }
 
 fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {

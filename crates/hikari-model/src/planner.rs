@@ -4,6 +4,32 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerAssistantModule {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerAssistantSession {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerAssistantExistingEntry {
+    pub date: NaiveDate,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerAssistantRequest {
+    pub text: String,
+    /// Client's local date for resolving relative expressions like "tomorrow". Falls back to UTC if absent.
+    #[serde(default)]
+    pub today: Option<NaiveDate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlannerEntry {
     pub id: Uuid,
     #[serde(skip_serializing)]
