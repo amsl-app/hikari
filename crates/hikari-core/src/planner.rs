@@ -35,7 +35,7 @@ struct PlannerEntryResponse {
     title: String,
     /// Date in ISO 8601 format (YYYY-MM-DD)
     date: String,
-    /// Priority: 0 = none, 1 = low, 2 = medium, 3 = high
+    /// Priority: 1 = low, 2 = medium, 3 = high
     priority: i32,
     /// ID of the matching module from the provided list, or null if none fits
     module_id: Option<String>,
@@ -108,7 +108,7 @@ pub async fn planner_assistant(
             Ok(NewPlannerEntry {
                 date: parsed_date,
                 title: title.trim().to_owned(),
-                priority: priority.clamp(0, 3),
+                priority: priority.clamp(1, 3),
                 module_id,
                 session_id,
             })
@@ -155,7 +155,7 @@ fn build_system_prompt(
         "Extract all distinct tasks or events from the user's text. For each entry:\n\
          - Set a short, clear title\n\
          - Determine the date in ISO 8601 format (YYYY-MM-DD); calculate absolute dates for relative expressions like \"tomorrow\" or \"next Monday\" based on today's date\n\
-         - Set priority: 0 = none, 1 = low, 2 = medium, 3 = high (default 0 if unspecified)\n\
+         - Set priority: 1 = low, 2 = medium, 3 = high (default 2 if unspecified)\n\
          - Only set module_id or session_id if the task clearly maps to one of the provided IDs\n\
          Call the `PlannerEntries` function with all extracted entries.",
     );
