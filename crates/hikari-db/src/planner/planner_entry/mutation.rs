@@ -25,6 +25,7 @@ impl Mutation {
             module_id: ActiveValue::Set(module_id),
             session_id: ActiveValue::Set(session_id),
             created_at: NotSet,
+            updated_at: NotSet,
         };
 
         let res = entry.insert(db).await;
@@ -35,8 +36,9 @@ impl Mutation {
 
     pub async fn update_planner_entry<C: ConnectionTrait>(
         db: &C,
-        active_model: ActiveModel,
+        mut active_model: ActiveModel,
     ) -> Result<PlannerEntryModel, DbErr> {
+        active_model.updated_at = ActiveValue::Set(chrono::Utc::now().naive_utc());
         let res = active_model.update(db).await;
         res.inspect_err(|error| {
             tracing::error!(error = %error, "failed to update planner entry");

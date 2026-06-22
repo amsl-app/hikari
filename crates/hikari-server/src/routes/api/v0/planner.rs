@@ -9,9 +9,9 @@ use axum::routing::get;
 use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::sea_orm::DatabaseConnection;
-use hikari_model::planner::{NewPlannerEntry, PlannerEntry};
+use hikari_model::planner::{NewPlannerEntry, PlannerEntry, PlannerIcalToken};
 use hikari_model_tools::convert::FromDbModel;
-use http::StatusCode;
+use http::{HeaderValue, StatusCode, header};
 use protect_axum::protect;
 use sea_orm::{ActiveValue, DbErr};
 use serde::Deserialize;
@@ -63,6 +63,8 @@ where
                 .patch(update_planner_entry)
                 .delete(delete_planner_entry),
         )
+        .route("/ical-token", get(get_ical_token).delete(delete_ical_token))
+        .route("/ical/{token}", get(get_planner_ical))
         .with_state(())
 }
 
@@ -242,4 +244,136 @@ pub(crate) async fn delete_planner_entry(
         return Err(PlannerError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/planner/ical-token",
+    responses(
+        (status = OK, description = "Get or create the iCal feed token", body = PlannerIcalToken),
+    ),
+    tag = "v0/planner",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_ical_token(
+    ExtractUserId(user): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let row = planner::ical_token::Mutation::get_or_create_ical_token(&conn, user).await?;
+    Ok(Json(PlannerIcalToken { token: row.token }))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v0/planner/ical-token",
+    responses(
+        (status = NO_CONTENT, description = "Revoke the iCal feed token"),
+    ),
+    tag = "v0/planner",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn delete_ical_token(
+    ExtractUserId(user): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    planner::ical_token::Mutation::delete_ical_token(&conn, user).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/planner/ical/{token}",
+    responses(
+        (status = OK, description = "iCal feed of planner entries", content_type = "text/calendar"),
+        (status = NOT_FOUND, description = "Token not found"),
+    ),
+    params(
+        ("token" = String, Path, description = "The iCal feed token"),
+    ),
+    tag = "v0/planner",
+)]
+pub(crate) async fn get_planner_ical(
+    Path(token): Path<String>,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let user_id = planner::ical_token::Query::find_by_token(&conn, &token)
+        .await?
+        .ok_or(PlannerError::NotFound)?;
+
+    let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user_id, None, None).await?;
+
+    let body = build_ical(entries);
+    Ok((
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/calendar; charset=utf-8"),
+        )],
+        body,
+    ))
+}
+
+fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
+    let mut out =
+        String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
+
+    for entry in entries {
+        let start = entry.date.format("%Y%m%d").to_string();
+        let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d").to_string();
+        let status = if entry.completed { "COMPLETED" } else { "NEEDS-ACTION" };
+        let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
+
+        out.push_str("BEGIN:VEVENT\r\n");
+        out.push_str(&format!("UID:{}@hikari\r\n", entry.id));
+        out.push_str(&format!("DTSTAMP:{}\r\n", dtstamp));
+        out.push_str(&format!("DTSTART;VALUE=DATE:{}\r\n", start));
+        out.push_str(&format!("DTEND;VALUE=DATE:{}\r\n", end));
+        ical_fold_line(&mut out, "SUMMARY", &ical_escape(&entry.title));
+        out.push_str(&format!("STATUS:{}\r\n", status));
+        out.push_str("END:VEVENT\r\n");
+    }
+
+    out.push_str("END:VCALENDAR\r\n");
+    out
+}
+
+fn ical_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace(';', "\\;")
+        .replace(',', "\\,")
+        .replace("\r\n", "\\n")
+        .replace(['\r', '\n'], "\\n")
+}
+
+// RFC 5545 §3.1: fold at 75 octets
+fn ical_fold_line(out: &mut String, name: &str, value: &str) {
+    if name.len() + 1 + value.len() <= 75 {
+        out.push_str(name);
+        out.push(':');
+        out.push_str(value);
+        out.push_str("\r\n");
+        return;
+    }
+    let line = format!("{}:{}", name, value);
+    let bytes = line.as_bytes();
+    let mut pos = 0;
+    let mut first = true;
+    while pos < bytes.len() {
+        let limit = if first { 75 } else { 74 };
+        let end = (pos + limit).min(bytes.len());
+        // Walk back to a UTF-8 character boundary
+        let end = (pos..=end).rev().find(|&i| line.is_char_boundary(i)).unwrap_or(end);
+        if !first {
+            out.push(' ');
+        }
+        out.push_str(&line[pos..end]);
+        out.push_str("\r\n");
+        first = false;
+        pos = end;
+    }
 }

@@ -17,6 +17,12 @@ pub struct PlannerEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerIcalToken {
+    pub token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

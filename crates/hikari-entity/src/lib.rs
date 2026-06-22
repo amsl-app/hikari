@@ -10,6 +10,7 @@ pub mod module;
 pub mod oidc_groups;
 pub mod oidc_mapping;
 pub mod planner_entry;
+pub mod planner_ical_token;
 pub mod quiz;
 pub mod tag;
 pub mod user;

@@ -14,6 +14,7 @@ impl FromDbModel<PlannerEntryModel> for PlannerEntry {
             module_id: model.module_id,
             session_id: model.session_id,
             created_at: model.created_at,
+            updated_at: model.updated_at,
         }
     }
 }

@@ -14,6 +14,7 @@ pub struct Model {
     pub module_id: Option<String>,
     pub session_id: Option<String>,
     pub created_at: DateTime,
+    pub updated_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
