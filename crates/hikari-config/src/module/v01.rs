@@ -5,3 +5,4 @@ pub(crate) mod llm_agent;
 pub(crate) mod module;
 pub(crate) mod session;
 pub(crate) mod unlock;
+pub(crate) mod next_session;

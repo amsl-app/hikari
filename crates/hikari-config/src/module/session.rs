@@ -3,7 +3,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     generic::{Metadata, Theme},
-    module::{content::Content, error::ModuleError, llm_agent::LlmAgent, unlock::Unlock, v01::session::SessionV01},
+    module::{
+        content::Content, error::ModuleError, llm_agent::LlmAgent, next_session::NextSession, unlock::Unlock,
+        v01::session::SessionV01,
+    },
 };
 
 #[derive(Serialize, Debug, Clone)]
@@ -17,7 +20,7 @@ pub struct Session {
     pub banner: Option<String>,
     pub bot: Option<String>,
     #[allow(clippy::struct_field_names)]
-    pub next_session: Option<String>,
+    pub next_session: Option<NextSession>,
     pub theme: Option<Theme>,
     pub time: Option<i32>,
     pub unlock: Option<Unlock>,
@@ -44,6 +47,12 @@ impl Session {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        let next_session = if let Some(next_session) = session.next_session {
+            Some(NextSession::from_v01(next_session))
+        } else {
+            None
+        };
+
         Ok(Self {
             id: session.id,
             title: session.title,
@@ -52,7 +61,7 @@ impl Session {
             icon: session.icon,
             banner: session.banner,
             bot: session.bot,
-            next_session: session.next_session,
+            next_session,
             theme: session.theme,
             time: session.time,
             unlock: session.unlock,
@@ -71,8 +80,8 @@ impl Session {
     }
 
     #[must_use]
-    pub fn next_session(&self) -> Option<&str> {
-        self.next_session.as_deref()
+    pub fn next_session(&self) -> Option<&NextSession> {
+        self.next_session.as_ref()
     }
 
     #[must_use]

@@ -19,6 +19,7 @@ pub mod assessment;
 pub mod content;
 pub mod error;
 pub mod llm_agent;
+pub mod next_session;
 pub mod session;
 pub mod unlock;
 mod v01;
