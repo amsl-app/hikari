@@ -23,6 +23,7 @@ pub struct LlmConfig {
     pub embedding_config: LlmFeatureConfig,
     pub journaling_config: LlmFeatureConfig,
     pub quiz_config: LlmFeatureConfig,
+    pub planner_config: LlmFeatureConfig,
 }
 
 impl From<LlmServiceArgs> for LlmConfig {
@@ -41,6 +42,11 @@ impl From<LlmServiceArgs> for LlmConfig {
             .quiz_service
             .as_deref()
             .map(|s| LlmService::from_str(s).expect("Invalid quiz_service string"));
+
+        let planner_service = config
+            .planner_service
+            .as_deref()
+            .map(|s| LlmService::from_str(s).expect("Invalid planner_service string"));
 
         Self {
             openai: LlmServiceConfig {
@@ -67,6 +73,10 @@ impl From<LlmServiceArgs> for LlmConfig {
                 service: quiz_service,
                 model: config.quiz_model,
             },
+            planner_config: LlmFeatureConfig {
+                service: planner_service,
+                model: config.planner_model,
+            },
         }
     }
 }
@@ -80,6 +90,7 @@ impl LlmConfig {
         embeddings: LlmFeatureConfig,
         journaling: LlmFeatureConfig,
         quiz: LlmFeatureConfig,
+        planner: LlmFeatureConfig,
     ) -> Self {
         Self {
             openai,
@@ -88,6 +99,7 @@ impl LlmConfig {
             embedding_config: embeddings,
             journaling_config: journaling,
             quiz_config: quiz,
+            planner_config: planner,
         }
     }
 
@@ -168,5 +180,20 @@ impl LlmConfig {
     #[must_use]
     pub fn get_quiz_openai_config(&self) -> OpenAIConfig {
         self.get_openai_config(self.quiz_config.service.as_ref())
+    }
+
+    #[must_use]
+    pub fn get_planner_model(&self) -> &str {
+        if let Some(model) = &self.planner_config.model {
+            model.as_str()
+        } else {
+            tracing::debug!("Using default model for planner feature");
+            self.get_default_model(self.planner_config.service.as_ref())
+        }
+    }
+
+    #[must_use]
+    pub fn get_planner_openai_config(&self) -> OpenAIConfig {
+        self.get_openai_config(self.planner_config.service.as_ref())
     }
 }

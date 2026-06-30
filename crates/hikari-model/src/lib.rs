@@ -5,6 +5,7 @@ pub mod journal;
 pub mod llm;
 pub mod login;
 pub mod module;
+pub mod planner;
 pub mod quiz;
 pub mod status;
 pub mod tag;

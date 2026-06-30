@@ -3,6 +3,7 @@ pub mod history;
 pub mod journal;
 pub mod llm;
 pub mod module;
+pub mod planner;
 pub mod quiz;
 pub mod user;
 pub mod user_context_log;
