@@ -10,7 +10,7 @@ use hikari_config::{
     module::{
         content::{Content, ContentSource},
         llm_agent::LlmService,
-        next_session::NextSession,
+        next_session::Next,
         session::Session,
         unlock::{LockedUntil, Unlock},
     },
@@ -74,11 +74,12 @@ pub struct SessionFull<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion: Option<DateTime<Utc>>,
 
+    #[deprecated(note = "Use `next` instead")]
     #[serde(rename = "next-session", skip_serializing_if = "Option::is_none")]
     pub next_session: Option<&'a str>,
 
-    #[serde(rename = "next-session-force")]
-    pub next_session_force: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<&'a Next>,
 
     pub status: SessionInstanceStatus,
 
@@ -140,14 +141,6 @@ impl<'a> SessionFull<'a> {
             .as_ref()
             .and_then(|unlock| locked_until(unlock, &module_session_entries));
 
-        let (next_session, next_session_force) = match &session.next_session {
-            Some(next_session) => match next_session {
-                NextSession::Simple(id) => (Some(id.as_str()), false),
-                NextSession::Full(full) => (Some(full.id.as_str()), full.force),
-            },
-            None => (None, false),
-        };
-
         SessionFull {
             id: &session.id,
             title: &session.title,
@@ -158,8 +151,8 @@ impl<'a> SessionFull<'a> {
             banner: session.banner.as_deref(),
             theme: session.theme.as_ref(),
             time: session.time.as_ref(),
-            next_session,
-            next_session_force,
+            next: session.next.as_ref(),
+            next_session: session.next_session.as_deref(),
             unlock: session.unlock.as_ref(),
             locked_until,
             metadata: session.metadata.as_ref(),

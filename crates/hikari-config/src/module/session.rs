@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     generic::{Metadata, Theme},
     module::{
-        content::Content, error::ModuleError, llm_agent::LlmAgent, next_session::NextSession, unlock::Unlock,
+        content::Content, error::ModuleError, llm_agent::LlmAgent, next_session::Next, unlock::Unlock,
         v01::session::SessionV01,
     },
 };
@@ -20,7 +20,8 @@ pub struct Session {
     pub banner: Option<String>,
     pub bot: Option<String>,
     #[allow(clippy::struct_field_names)]
-    pub next_session: Option<NextSession>,
+    pub next: Option<Next>,
+    pub next_session: Option<String>,
     pub theme: Option<Theme>,
     pub time: Option<i32>,
     pub unlock: Option<Unlock>,
@@ -34,7 +35,11 @@ pub struct Session {
 }
 
 impl Session {
-    pub(crate) fn from_v01(session: SessionV01, all_contents: &[Content]) -> Result<Self, ModuleError> {
+    pub(crate) fn from_v01(
+        session: SessionV01,
+        all_contents: &[Content],
+        module_id: &str,
+    ) -> Result<Self, ModuleError> {
         let contents = session
             .contents
             .into_iter()
@@ -47,10 +52,18 @@ impl Session {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let next_session = if let Some(next_session) = session.next_session {
-            Some(NextSession::from_v01(next_session))
+        let (next, next_session) = if let Some(next_session) = session.next_session {
+            let next = Next::from_v01(next_session, module_id);
+
+            let next_session = if next.module_id == module_id {
+                Some(next.session_id.clone())
+            } else {
+                None
+            };
+
+            (Some(next), next_session)
         } else {
-            None
+            (None, None)
         };
 
         Ok(Self {
@@ -61,6 +74,7 @@ impl Session {
             icon: session.icon,
             banner: session.banner,
             bot: session.bot,
+            next,
             next_session,
             theme: session.theme,
             time: session.time,
@@ -79,20 +93,26 @@ impl Session {
         self.id.as_str()
     }
 
+    #[deprecated(note = "Use `next` instead")]
+    pub fn next_session(&self) -> Option<&str> {
+        self.next_session.as_deref()
+    }
+
     #[must_use]
-    pub fn next_session(&self) -> Option<&NextSession> {
-        self.next_session.as_ref()
+    pub fn next(&self) -> Option<&Next> {
+        self.next.as_ref()
     }
 
     #[must_use]
     pub fn bot_flow(&self) -> Option<&str> {
         self.bot.as_deref()
     }
-
+    #[must_use]
     fn get_bot_parts(&self) -> Option<std::str::Split<'_, char>> {
         self.bot.as_ref().map(|bot| bot.split('/'))
     }
 
+    #[must_use]
     fn get_bot_part(&self, n: usize) -> Option<&str> {
         self.get_bot_parts().and_then(|mut parts| parts.nth(n))
     }

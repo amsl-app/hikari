@@ -1,10 +1,12 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::module::next_session::NextSessionFull;
-
-
-pub(crate) type NextSessionFullV01 = NextSessionFull;
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct NextSessionFullV01 {
+    pub module_id: Option<String>,
+    pub session_id: String,
+    pub force: bool,
+}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(untagged)]

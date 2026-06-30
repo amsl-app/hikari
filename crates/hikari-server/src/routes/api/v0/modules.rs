@@ -11,7 +11,7 @@ use csml_engine::data::AsyncDatabase;
 use error::ModuleError;
 use futures::future::try_join_all;
 use futures::future::try_join3;
-use hikari_config::module::next_session;
+use hikari_config::module::next_session::{self, Next};
 use hikari_db::module::session::status;
 use hikari_db::util::{FlattenTransactionResultExt, InspectTransactionError};
 use hikari_model::history::{HistoryEntry, HistoryEntryType};
@@ -447,18 +447,11 @@ pub(crate) async fn finish_session(
     .map(|()| StatusCode::NO_CONTENT)
 }
 
-#[derive(Serialize, ToSchema)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) struct NextSession<'a> {
-    next_session: Option<&'a str>,
-    next_session_force: bool,
-}
-
 #[utoipa::path(
     get,
     path = "/api/v0/modules/{module}/sessions/{session}/next",
     responses(
-        (status = OK, body = NextSession, description = "The next session", example = json ! ({ "next-session": "session-id"})),
+        (status = OK, body = Next, description = "The next session", example = json ! ({ "module-id": "some-module", "session-id": "some-session", "force": false })),
         (status = NOT_FOUND, description = "Module or session weren't found"),
     ),
     params(
@@ -484,20 +477,9 @@ pub(crate) async fn next_session_custom(
 
     let (_, session) = get_session(&module_id, &session_id, app_config.module_config(), &user.groups)?;
 
-    let session = session.next_session();
-    let (next_session, next_session_force) = match session {
-        Some(next_session) => match next_session {
-            next_session::NextSession::Simple(id) => (Some(id.as_str()), false),
-            next_session::NextSession::Full(full) => (Some(full.id.as_str()), full.force),
-        },
-        None => (None, false),
-    };
+    let session = session.next();
 
-    Ok(Json(NextSession {
-        next_session,
-        next_session_force,
-    })
-    .into_response())
+    Ok(Json(session).into_response())
 }
 
 #[derive(Serialize, ToSchema)]
