@@ -15,11 +15,11 @@ FROM base AS builder
 
 COPY --from=planner /app/recipe.json recipe.json
 
-RUN cargo chef cook --release --package hikari-server --package hikari-worker --package hikari-cli --recipe-path recipe.json
+RUN CARGO_BUILD_JOBS=4 cargo chef cook --release --package hikari-server --package hikari-worker --package hikari-cli --recipe-path recipe.json
 
 COPY . ./
 
-RUN cargo build --release --package hikari-server --package hikari-worker --package hikari-cli
+RUN CARGO_BUILD_JOBS=4 cargo build --release --package hikari-server --package hikari-worker --package hikari-cli
 
 RUN find . -name hikari-server && find . -name hikari-worker && find . -name hikari-cli
 
