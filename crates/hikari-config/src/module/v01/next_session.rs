@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub(crate) struct NextSessionFullV01 {
     pub module_id: Option<String>,
     pub session_id: String,

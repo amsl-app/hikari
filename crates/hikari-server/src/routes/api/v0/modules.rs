@@ -11,7 +11,7 @@ use csml_engine::data::AsyncDatabase;
 use error::ModuleError;
 use futures::future::try_join_all;
 use futures::future::try_join3;
-use hikari_config::module::next_session::{self, Next};
+use hikari_config::module::next_session::Next;
 use hikari_db::module::session::status;
 use hikari_db::util::{FlattenTransactionResultExt, InspectTransactionError};
 use hikari_model::history::{HistoryEntry, HistoryEntryType};
