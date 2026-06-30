@@ -21,6 +21,7 @@ pub struct Session {
     pub bot: Option<String>,
     #[allow(clippy::struct_field_names)]
     pub next: Option<Next>,
+    #[deprecated(note = "Use `next` instead")]
     pub next_session: Option<String>,
     pub theme: Option<Theme>,
     pub time: Option<i32>,
@@ -75,6 +76,7 @@ impl Session {
             banner: session.banner,
             bot: session.bot,
             next,
+            #[allow(deprecated)]
             next_session,
             theme: session.theme,
             time: session.time,
@@ -91,11 +93,6 @@ impl Session {
     #[must_use]
     pub fn get_id(&self) -> &str {
         self.id.as_str()
-    }
-
-    #[deprecated(note = "Use `next` instead")]
-    pub fn next_session(&self) -> Option<&str> {
-        self.next_session.as_deref()
     }
 
     #[must_use]

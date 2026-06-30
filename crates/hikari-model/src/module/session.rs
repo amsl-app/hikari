@@ -152,6 +152,7 @@ impl<'a> SessionFull<'a> {
             theme: session.theme.as_ref(),
             time: session.time.as_ref(),
             next: session.next.as_ref(),
+            #[allow(deprecated)]
             next_session: session.next_session.as_deref(),
             unlock: session.unlock.as_ref(),
             locked_until,
