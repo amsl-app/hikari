@@ -184,6 +184,7 @@ fn build_self_learning(module: &v01::module::ModuleV01, contents: &[Content]) ->
             banner: None,
             bot: None,
             next: None,
+            #[allow(deprecated)]
             next_session: None,
             theme: module.self_learning.theme.clone(),
             time: None,
