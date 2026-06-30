@@ -19,6 +19,7 @@ pub mod assessment;
 pub mod content;
 pub mod error;
 pub mod llm_agent;
+pub mod next_session;
 pub mod session;
 pub mod unlock;
 mod v01;
@@ -85,7 +86,7 @@ impl Module<'_> {
         let mut sessions = module
             .sessions
             .into_iter()
-            .map(|session| Session::from_v01(session, contents.as_ref()).map(|s| (s.id.clone(), s)))
+            .map(|session| Session::from_v01(session, contents.as_ref(), &module.id).map(|s| (s.id.clone(), s)))
             .collect::<Result<IndexMap<_, _>, _>>()?;
 
         if let Some(self_learning) = self_learning_sessions {
@@ -182,6 +183,8 @@ fn build_self_learning(module: &v01::module::ModuleV01, contents: &[Content]) ->
             icon: None,
             banner: None,
             bot: None,
+            next: None,
+            #[allow(deprecated)]
             next_session: None,
             theme: module.self_learning.theme.clone(),
             time: None,

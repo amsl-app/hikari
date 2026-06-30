@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::{
     generic::{Metadata, Theme},
-    module::v01::{llm_agent::LlmAgentV01, unlock::UnlockV01},
+    module::v01::{llm_agent::LlmAgentV01, next_session::NextSessionV01, unlock::UnlockV01},
 };
 
 pub fn validate_session_id<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -47,7 +47,7 @@ pub(crate) struct SessionV01 {
     #[allow(clippy::struct_field_names)]
     #[serde(rename = "next-session")]
     /// # Next session for quick navigation after completing this session
-    pub(crate) next_session: Option<String>,
+    pub(crate) next_session: Option<NextSessionV01>,
     /// # Theme of the session
     pub(crate) theme: Option<Theme>,
     /// # Estimated time to complete the session in minutes

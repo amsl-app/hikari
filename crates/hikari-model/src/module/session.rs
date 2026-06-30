@@ -10,6 +10,7 @@ use hikari_config::{
     module::{
         content::{Content, ContentSource},
         llm_agent::LlmService,
+        next_session::Next,
         session::Session,
         unlock::{LockedUntil, Unlock},
     },
@@ -73,8 +74,12 @@ pub struct SessionFull<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion: Option<DateTime<Utc>>,
 
+    #[deprecated(note = "Use `next` instead")]
     #[serde(rename = "next-session", skip_serializing_if = "Option::is_none")]
     pub next_session: Option<&'a str>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<&'a Next>,
 
     pub status: SessionInstanceStatus,
 
@@ -146,6 +151,8 @@ impl<'a> SessionFull<'a> {
             banner: session.banner.as_deref(),
             theme: session.theme.as_ref(),
             time: session.time.as_ref(),
+            next: session.next.as_ref(),
+            #[allow(deprecated)]
             next_session: session.next_session.as_deref(),
             unlock: session.unlock.as_ref(),
             locked_until,
