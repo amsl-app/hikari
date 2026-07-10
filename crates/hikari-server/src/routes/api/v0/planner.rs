@@ -1,11 +1,12 @@
 use crate::AppConfig;
 use crate::permissions::Permission;
+use crate::routes::api::v0::planner::error::PlannerError;
 use crate::user::{ExtractUser, ExtractUserId};
 use axum::Extension;
 use axum::Json;
 use axum::Router;
 use axum::extract::{Path, Query};
-use axum::response::{IntoResponse, Response};
+use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use chrono::NaiveDate;
 use hikari_db::planner;
@@ -17,36 +18,12 @@ use hikari_model::planner::{
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
 use protect_axum::protect;
-use sea_orm::{ActiveValue, DbErr};
+use sea_orm::ActiveValue;
 use serde::Deserialize;
-use thiserror::Error;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Error, Debug)]
-pub(crate) enum PlannerError {
-    #[error(transparent)]
-    SeaOrmError(#[from] DbErr),
-
-    #[error("Planner entry could not be found")]
-    NotFound,
-
-    #[error("LLM error")]
-    LlmError,
-
-    #[error("Validation error: {0}")]
-    ValidationError(String),
-}
-
-impl IntoResponse for PlannerError {
-    fn into_response(self) -> Response {
-        match self {
-            Self::NotFound | Self::SeaOrmError(DbErr::RecordNotFound(_)) => StatusCode::NOT_FOUND.into_response(),
-            Self::ValidationError(_) => StatusCode::UNPROCESSABLE_ENTITY.into_response(),
-            _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        }
-    }
-}
+mod error;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub(crate) struct PlannerEntryChanges {
@@ -495,28 +472,139 @@ fn ical_escape(s: &str) -> String {
 
 // RFC 5545 §3.1: fold at 75 octets
 fn ical_fold_line(out: &mut String, name: &str, value: &str) {
-    if name.len() + 1 + value.len() <= 75 {
-        out.push_str(name);
-        out.push(':');
-        out.push_str(value);
+    out.reserve(name.len() + value.len() + (name.len() + value.len()) / 74 + 2);
+    out.push_str(name);
+    out.push(':');
+
+    let bytes = value.as_bytes();
+    if bytes.is_empty() {
         out.push_str("\r\n");
         return;
     }
-    let line = format!("{}:{}", name, value);
-    let bytes = line.as_bytes();
+
     let mut pos = 0;
-    let mut first = true;
+    // First line: name + ":" + value_part must be <= 75
+    // Continuation lines: " " + value_part must be <= 75
+    let mut limit = 75 - name.len() - 1;
+
     while pos < bytes.len() {
-        let limit = if first { 75 } else { 74 };
-        let end = (pos + limit).min(bytes.len());
-        // Walk back to a UTF-8 character boundary
-        let end = (pos..=end).rev().find(|&i| line.is_char_boundary(i)).unwrap_or(end);
-        if !first {
-            out.push(' ');
+        let mut end = (pos + limit).min(bytes.len());
+        if end != bytes.len() {
+            // Walk back to find UTF-8 char boundary
+            end = (pos..end).rev().find(|&i| value.is_char_boundary(i)).unwrap_or(pos);
+            if end == pos {
+                // Must advance at least one byte
+                end = (pos + 1).min(bytes.len());
+            }
         }
-        out.push_str(&line[pos..end]);
-        out.push_str("\r\n");
-        first = false;
+        out.push_str(&value[pos..end]);
+        if end != bytes.len() {
+            out.push_str("\r\n ");
+            limit = 74;
+        } else {
+            out.push_str("\r\n");
+        }
         pos = end;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fold(name: &str, value: &str) -> String {
+        let mut out = String::new();
+        ical_fold_line(&mut out, name, value);
+        out
+    }
+
+    #[test]
+    fn test_short_line_no_folding() {
+        let result = fold("SUMMARY", "Short event");
+        assert_eq!(result, "SUMMARY:Short event\r\n");
+    }
+
+    #[test]
+    fn test_exact_75_chars_no_folding() {
+        let value = "a".repeat(67); // SUMMARY: is 8 chars, so 67 + 8 = 75
+        let result = fold("SUMMARY", &value);
+        assert_eq!(result, format!("SUMMARY:{}\r\n", value));
+    }
+
+    #[test]
+    fn test_just_over_75_chars_folds() {
+        let value = "a".repeat(68); // SUMMARY: is 8 chars, 68 > 67 available on first line
+        let result = fold("SUMMARY", &value);
+        let lines: Vec<&str> = result.split("\r\n").filter(|s| !s.is_empty()).collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].len() <= 75, "First line exceeds 75 bytes");
+        assert!(lines[1].starts_with(' '), "Continuation line missing leading space");
+        // Verify reassembly
+        let reassembled: String = format!("{}{}", &lines[0][8..], &lines[1][1..]);
+        assert_eq!(reassembled, value);
+    }
+
+    #[test]
+    fn test_multiple_folds() {
+        let value = "x".repeat(200);
+        let result = fold("SUMMARY", &value);
+        let lines: Vec<&str> = result.split("\r\n").filter(|s| !s.is_empty()).collect();
+        assert_eq!(lines.len(), 3);
+        for (i, line) in lines.iter().enumerate() {
+            assert!(line.len() <= 75, "Line {} exceeds 75 bytes: len={}", i, line.len());
+            if i > 0 {
+                assert!(line.starts_with(' '), "Continuation line {} missing leading space", i);
+            }
+        }
+        // Verify reassembly
+        let reassembled: String = lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| if i == 0 { &l[8..] } else { &l[1..] })
+            .collect();
+        assert_eq!(reassembled, value);
+    }
+
+    #[test]
+    fn test_utf8_char_boundary() {
+        let value = "ä".repeat(40); // 80 bytes (2 bytes per ä)
+        let result = fold("SUMMARY", &value);
+        let lines: Vec<&str> = result.split("\r\n").filter(|s| !s.is_empty()).collect();
+        // Verify no line exceeds 75 bytes
+        for line in &lines {
+            assert!(line.len() <= 75, "Line exceeds 75 bytes: {}", line.len());
+        }
+        // Reassemble by removing fold prefixes
+        let mut reassembled = String::new();
+        for (i, line) in lines.iter().enumerate() {
+            if i == 0 {
+                reassembled.push_str(&line[8..]); // skip "SUMMARY:"
+            } else {
+                reassembled.push_str(&line[1..]); // skip leading space
+            }
+        }
+        assert_eq!(reassembled, value);
+    }
+
+    #[test]
+    fn test_empty_value() {
+        let result = fold("SUMMARY", "");
+        assert_eq!(result, "SUMMARY:\r\n");
+    }
+
+    #[test]
+    fn test_long_name() {
+        let name = "DESCRIPTION";
+        let value = "This is a very long description that should be folded properly according to RFC 5545 section 3.1 guidelines for iCalendar format";
+        let result = fold(name, value);
+        let lines: Vec<&str> = result.trim_end_matches("\r\n").split("\r\n").collect();
+        for (i, line) in lines.iter().enumerate() {
+            if i == 0 {
+                assert!(line.len() <= 75);
+            } else {
+                assert!(line.len() <= 75);
+                assert!(line.starts_with(' '));
+            }
+        }
     }
 }
