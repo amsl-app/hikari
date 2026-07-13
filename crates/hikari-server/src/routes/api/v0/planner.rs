@@ -776,4 +776,22 @@ END:VCALENDAR\r\n", vevent)
             assert_eq!(result.lines().count(), expected_lines);
         }
     }
+
+    #[test]
+    fn test_ical_escape() {
+        let test_cases = [
+            ("", ""),
+            ("a", "a"),
+            ("a,b", "a\\,b"),
+            ("a;", "a\\;"),
+            ("a\\", "a\\\\"),
+            ("a\\;", "a\\\\\\;"),
+            ("a\r\nb", "a\\nb"),
+            ("a\r\n\nb", "a\\n\\nb"),
+        ];
+        for (input, expected) in test_cases {
+            let result = ical_escape(input);
+            assert_eq!(result, expected);
+        }
+    }
 }
