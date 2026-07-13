@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use crate::AppConfig;
 use crate::permissions::Permission;
 use crate::routes::api::v0::planner::error::PlannerError;
@@ -482,34 +483,37 @@ fn ical_fold_line(out: &mut String, name: &str, value: &str) {
     out.push(':');
 
     let bytes = value.as_bytes();
-    if bytes.is_empty() {
-        out.push_str("\r\n");
-        return;
-    }
 
     let mut pos = 0;
     // First line: name + ":" + value_part must be <= 75
     // Continuation lines: " " + value_part must be <= 75
     let mut limit = 75 - name.len() - 1;
 
-    while pos < bytes.len() {
-        let mut end = (pos + limit).min(bytes.len());
-        if end != bytes.len() {
-            // Walk back to find UTF-8 char boundary
-            end = (pos..end).rev().find(|&i| value.is_char_boundary(i)).unwrap_or(pos);
-            if end == pos {
-                // Must advance at least one byte
-                end = (pos + 1).min(bytes.len());
-            }
+    loop {
+        let mut new_pos = pos + limit;
+        match new_pos.cmp(&bytes.len()) {
+             Ordering::Greater => {
+                new_pos = bytes.len();
+            },
+            Ordering::Equal => {
+                // Already at the end of the line, do nothing
+            },
+            Ordering::Less => {
+                // pos might point into the middle of a UTF-8 char, Walk back to find UTF-8 char boundary
+                new_pos = value.floor_char_boundary(new_pos);
+                // This should never fail: value is valid utf-8, and an utf-8 char cannot be longer than 6 bytes, so we should always find a valid boundary
+                debug_assert!(new_pos > pos);
+            },
         }
-        out.push_str(&value[pos..end]);
-        if end != bytes.len() {
-            out.push_str("\r\n ");
-            limit = 74;
-        } else {
+        out.push_str(&value[pos..new_pos]);
+        pos = new_pos;
+        if new_pos == bytes.len() {
             out.push_str("\r\n");
+            break;
+        } else {
+            out.push_str("\r\n ");
         }
-        pos = end;
+        limit = 74;
     }
 }
 
