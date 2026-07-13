@@ -470,9 +470,14 @@ fn ical_escape(s: &str) -> String {
         .replace(['\r', '\n'], "\\n")
 }
 
+/// Calculates the required space for folding a value only containing ASCII characters.
+fn ical_fold_required_ascii_space(name: &str, value: &str) -> usize {
+    name.len() + value.len() + (((name.len() + value.len()) / 74) + 1) * 3
+}
+
 // RFC 5545 §3.1: fold at 75 octets
 fn ical_fold_line(out: &mut String, name: &str, value: &str) {
-    out.reserve(name.len() + value.len() + (name.len() + value.len()) / 74 + 2);
+    out.reserve(ical_fold_required_ascii_space(name, value));
     out.push_str(name);
     out.push(':');
 
@@ -605,6 +610,23 @@ mod tests {
                 assert!(line.len() <= 75);
                 assert!(line.starts_with(' '));
             }
+        }
+    }
+
+    #[test]
+    fn test_fold_required_ascii_space() {
+        let test_cases = [
+            (1, "This is a short description, that should fit on one line"),
+            (2, "This is a very long description that should be folded properly according to RFC 5545 section 3.1 guidelines for iCalendar format"),
+            (3, "This is another very long description that should be folded twice to properly fit the iCalendar format according to RFC 5545 section 3.1 guidelines"),
+        ];
+        let name = "SUMMARY";
+        for (expected_lines, test_case) in test_cases {
+            let required_space = ical_fold_required_ascii_space(name, test_case);
+            let result = fold(name, test_case);
+            assert_eq!(result.len(), required_space);
+            assert_eq!(result.capacity(), required_space);
+            assert_eq!(result.lines().count(), expected_lines);
         }
     }
 }
