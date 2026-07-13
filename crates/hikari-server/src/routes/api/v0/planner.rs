@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt::Write;
 use crate::AppConfig;
 use crate::permissions::Permission;
 use crate::routes::api::v0::planner::error::PlannerError;
@@ -439,23 +440,61 @@ pub(crate) async fn planner_assistant(
     Ok(Json(entries))
 }
 
+// Macro to push an ical value to the output buffer without checking the line length
+macro_rules! push_ical_line {
+    ($out:ident, key: $key:expr, value: $($values:expr),+) => {
+        $out.push_str($key);
+        $out.push(':');
+        $( $out.push_str($values); )+
+        $out.push_str("\r\n");
+    };
+    ($out:ident, key: $key:expr, write: $write:expr, value: $($values:expr),*) => {
+        $out.push_str($key);
+        $out.push(':');
+        // We ignore the error as the Write implementation of String can't fail (only OOM Panic)
+        let _ = write!(&mut $out, "{}", $write);
+        $( $out.push_str($values); )+
+        $out.push_str("\r\n");
+    };
+    ($out:ident, key: $key:expr, date: $date:expr) => {
+        $out.push_str($key);
+        $out.push(':');
+        // We ignore the error as the Write implementation of String can't fail (only OOM Panic)
+        let _ = $date.write_to(&mut $out);
+        $out.push_str("\r\n");
+    }
+}
+
+fn ascii_ical_len<'a, I: Iterator<Item = &'a str>>(entries: I) -> usize {
+    let mut total = 81;
+    for entry in entries {
+        total += 175;
+        total += ical_fold_required_ascii_space("SUMMARY".len(), entry);
+    }
+    total += 15;
+    total
+}
+
 fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
+    // We reserve enough space to avoid reallocations in the simple case, where all entries are ASCII or contain very few special characters.
+    // We extra some space to avoid reallocations in case a special character falls into a folding point. (3 bytes overhead per extra line)
     let mut out =
-        String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
+        String::with_capacity(ascii_ical_len(entries.iter().map(|entry| entry.title.as_str())) + 3 * 2);
+    out.push_str("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
 
     for entry in entries {
-        let start = entry.date.format("%Y%m%d").to_string();
-        let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d").to_string();
+        let start = entry.date.format("%Y%m%d");
+        let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d");
         let status = if entry.completed { "CANCELLED" } else { "CONFIRMED" };
-        let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
+        let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ");
 
         out.push_str("BEGIN:VEVENT\r\n");
-        out.push_str(&format!("UID:{}@hikari\r\n", entry.id));
-        out.push_str(&format!("DTSTAMP:{}\r\n", dtstamp));
-        out.push_str(&format!("DTSTART;VALUE=DATE:{}\r\n", start));
-        out.push_str(&format!("DTEND;VALUE=DATE:{}\r\n", end));
+        push_ical_line!(out, key: "UID", write: &entry.id, value: "@hikari");
+        push_ical_line!(out, key: "DTSTAMP", date: dtstamp);
+        push_ical_line!(out, key: "DTSTART;VALUE=DATE", date: start);
+        push_ical_line!(out, key: "DTEND;VALUE=DATE", date: end);
         ical_fold_line(&mut out, "SUMMARY", &ical_escape(&entry.title));
-        out.push_str(&format!("STATUS:{}\r\n", status));
+        push_ical_line!(out, key: "STATUS", value: status);
         out.push_str("END:VEVENT\r\n");
     }
 
@@ -472,13 +511,12 @@ fn ical_escape(s: &str) -> String {
 }
 
 /// Calculates the required space for folding a value only containing ASCII characters.
-fn ical_fold_required_ascii_space(name: &str, value: &str) -> usize {
-    name.len() + value.len() + (((name.len() + value.len()) / 74) + 1) * 3
+fn ical_fold_required_ascii_space(key_len: usize, value: &str) -> usize {
+    key_len + value.len() + (((key_len + value.len()) / 74) + 1) * 3
 }
 
 // RFC 5545 §3.1: fold at 75 octets
 fn ical_fold_line(out: &mut String, name: &str, value: &str) {
-    out.reserve(ical_fold_required_ascii_space(name, value));
     out.push_str(name);
     out.push(':');
 
@@ -525,6 +563,109 @@ mod tests {
         let mut out = String::new();
         ical_fold_line(&mut out, name, value);
         out
+    }
+
+    fn expected_ical_vevent(value: &str) -> String {
+        format!("\
+BEGIN:VEVENT\r\n\
+UID:00000000-0000-0000-0000-000000000000@hikari\r\n\
+DTSTAMP:19700101T000000Z\r\n\
+DTSTART;VALUE=DATE:19700101\r\n\
+DTEND;VALUE=DATE:19700102\r\n\
+SUMMARY:{value}\r\n\
+STATUS:CONFIRMED\r\n\
+END:VEVENT\r\n\
+")
+    }
+
+    fn expected_ical_output(vevent: &str) -> String {
+        format!("\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//hikari//planner//EN\r\n\
+CALSCALE:GREGORIAN\r\n\
+{}\
+END:VCALENDAR\r\n", vevent)
+    }
+
+    fn create_planner_entry(value: &str) -> hikari_entity::planner_entry::Model {
+        hikari_entity::planner_entry::Model {
+            id: Default::default(),
+            user_id: Default::default(),
+            date: Default::default(),
+            title: value.to_string(),
+            completed: false,
+            priority: 0,
+            module_id: None,
+            session_id: None,
+            created_at: Default::default(),
+            updated_at: Default::default(),
+        }
+    }
+
+    const ICAL_TEST_VALUES: [(&str, &str); 3] = [
+("", ""),
+("test", "test"),
+(
+"long test that requires adding linebreaks according to RFC 5545 section 3.1 guidelines for iCalendar format",
+"long test that requires adding linebreaks according to RFC 5545 sec\r\n tion 3.1 guidelines for iCalendar format")
+];
+
+    #[test]
+    fn test_build_ical() {
+        for (value, split_value) in ICAL_TEST_VALUES {
+            let entries = vec![
+                create_planner_entry(value)
+            ];
+            let expected = expected_ical_output(&expected_ical_vevent(split_value));
+            let res = build_ical(entries);
+            assert_eq!(res, expected);
+            // 96: Header + Footer
+            // 175: Per VEVENT Constant
+            // 10: Len of "Summary:\r\n"
+            assert_eq!(res.len(), 96 + 175 + 10 + split_value.len(), "Calculated length does not match expected length for value: {}", value);
+            assert_eq!(res.capacity(), 96 + 175 + 10 + split_value.len() + 6, "Calculated capacity does not match expected capacity for value: {}", value);
+        }
+    }
+
+
+
+    #[test]
+    fn test_build_ical_multiple_entries() {
+        let models: Vec<_> = ICAL_TEST_VALUES.iter().map(|(val, _)| create_planner_entry(val)).collect();
+        let expected_vevents = ICAL_TEST_VALUES.iter().map(
+            |(_, expected)| expected_ical_vevent(expected)
+        ).collect::<Vec<_>>();
+        let res = build_ical(models);
+
+        let expected = expected_ical_output(
+            &expected_vevents.join("")
+        );
+        let total_vevent_len = expected_vevents.iter().map(|vevent| vevent.len()).sum::<usize>();
+        assert_eq!(res, expected);
+        assert_eq!(res.len(), 96 + total_vevent_len, "Calculated length does not match expected length");
+        assert_eq!(res.capacity(), 96 + total_vevent_len + 6, "Calculated capacity does not match expected capacity");
+    }
+
+    #[test]
+    fn test_build_ical_special_chars() {
+        let value = "a".repeat(61) + "👍🏽" + "a".repeat(71).as_str();
+        let expected_value = "a".repeat(61) + "👍\r\n 🏽" + "a".repeat(70).as_str() + "\r\n a";
+        let entry = create_planner_entry(&value);
+        let expected = expected_ical_output(
+            &expected_ical_vevent(&expected_value)
+        );
+        let res = build_ical(vec![entry]);
+        assert_eq!(res, expected);
+        // The emoji without the color modifier should be on the first line
+        let expected_summary_line = String::from("SUMMARY:") + "a".repeat(61).as_str() + "👍";
+        assert_eq!(expected_summary_line.len(), 73); // Sanity check: Expected line is one shorter than possible
+        assert_eq!(res.lines().skip(9).next().unwrap(), expected_summary_line);
+        let expected_next_line = String::from(" 🏽") + "a".repeat(70).as_str();
+        // Next line should only be the color modifier
+        assert_eq!(res.lines().skip(10).next().unwrap(), expected_next_line);
+        assert_eq!(res.len(), 96 + 175 + 10 + value.len() + 3 * 2, "Calculated length does not match expected length for value: {}", value);
+        assert_eq!(res.capacity(), 96 + 175 + 10 + value.len() + 3 * 2 + 6 - 3, "Calculated capacity does not match expected capacity for value: {}", value);
     }
 
     #[test]
@@ -626,8 +767,10 @@ mod tests {
         ];
         let name = "SUMMARY";
         for (expected_lines, test_case) in test_cases {
-            let required_space = ical_fold_required_ascii_space(name, test_case);
-            let result = fold(name, test_case);
+            let required_space = ical_fold_required_ascii_space(name.len(), test_case);
+            let mut result = String::new();
+            result.reserve(required_space);
+            ical_fold_line(&mut result, name, test_case);
             assert_eq!(result.len(), required_space);
             assert_eq!(result.capacity(), required_space);
             assert_eq!(result.lines().count(), expected_lines);
