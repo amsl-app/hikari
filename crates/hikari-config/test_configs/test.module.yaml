@@ -49,9 +49,9 @@ module:
       icon: "https://img.freepik.com/free-vector/cute-astronaut-riding-dinosaur-with-space-gun-cartoon-vector-icon-illustration-science-animal-icon_138676-5942.jpg" #optional
       banner: "https://wallpaper.dog/large/20472984.jpg" #optional
       bot: "test/test-flow"
-      next-session: 
-        session-id: "the-dino-child" #optional
-        module-id: "test" #optional
+      next-session: # optional
+        session-id: "the-dino-child" 
+        module-id: "test" 
         force: true
       theme:
         id: "green"
