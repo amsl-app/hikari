@@ -1,0 +1,6 @@
+CREATE TABLE planner_ical_token (
+    user_id BLOB PRIMARY KEY NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

@@ -21,6 +21,7 @@ DROP TABLE oidc_groups;
 DROP TABLE custom_groups;
 DROP TABLE oidc_mapping;
 DROP TABLE access_tokens;
+DROP TABLE planner_entry;
 DROP TABLE users;
 DROP TABLE llm_global_slot;
 DROP TABLE llm_slot;

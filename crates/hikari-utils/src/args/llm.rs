@@ -27,6 +27,10 @@ pub struct LlmServices {
     pub quiz_model: Option<String>,
     #[arg(long, required = false)]
     pub quiz_service: Option<String>,
+    #[arg(long, required = false)]
+    pub planner_model: Option<String>,
+    #[arg(long, required = false)]
+    pub planner_service: Option<String>,
 }
 
 #[derive(Debug, Clone, Args)]

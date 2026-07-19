@@ -180,6 +180,7 @@ pub async fn create_app(
                 .nest("/modules", routes::api::v0::modules::create_router())
                 .nest("/assessments", routes::api::v0::assessment::create_router())
                 .nest("/journal", routes::api::v0::journal::create_router())
+                .nest("/planner", routes::api::v0::planner::create_router())
                 .nest("/llm", routes::api::v0::llm::create_router())
                 .nest("/quizzes", routes::api::v0::quiz::create_router())
                 .nest("/ws", routes::api::v0::ws::create_router())
