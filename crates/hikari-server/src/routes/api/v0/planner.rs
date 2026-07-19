@@ -20,6 +20,8 @@ use http::{HeaderValue, StatusCode, header};
 use protect_axum::protect;
 use sea_orm::ActiveValue;
 use serde::Deserialize;
+use std::cmp::Ordering;
+use std::fmt::Write;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -438,23 +440,60 @@ pub(crate) async fn planner_assistant(
     Ok(Json(entries))
 }
 
+// Macro to push an ical value to the output buffer without checking the line length
+macro_rules! push_ical_line {
+    ($out:ident, key: $key:expr, value: $($values:expr),+) => {
+        $out.push_str($key);
+        $out.push(':');
+        $( $out.push_str($values); )+
+        $out.push_str("\r\n");
+    };
+    ($out:ident, key: $key:expr, write: $write:expr, value: $($values:expr),*) => {
+        $out.push_str($key);
+        $out.push(':');
+        // We ignore the error as the Write implementation of String can't fail (only OOM Panic)
+        let _ = write!(&mut $out, "{}", $write);
+        $( $out.push_str($values); )+
+        $out.push_str("\r\n");
+    };
+    ($out:ident, key: $key:expr, date: $date:expr) => {
+        $out.push_str($key);
+        $out.push(':');
+        // We ignore the error as the Write implementation of String can't fail (only OOM Panic)
+        let _ = $date.write_to(&mut $out);
+        $out.push_str("\r\n");
+    }
+}
+
+fn ascii_ical_len<'a, I: Iterator<Item = &'a str>>(entries: I) -> usize {
+    let mut total = 81;
+    for entry in entries {
+        total += 175;
+        total += ical_fold_required_ascii_space("SUMMARY".len(), entry);
+    }
+    total += 15;
+    total
+}
+
 fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
-    let mut out =
-        String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
+    // We reserve enough space to avoid reallocations in the simple case, where all entries are ASCII or contain very few special characters.
+    // We extra some space to avoid reallocations in case a special character falls into a folding point. (3 bytes overhead per extra line)
+    let mut out = String::with_capacity(ascii_ical_len(entries.iter().map(|entry| entry.title.as_str())) + 3 * 2);
+    out.push_str("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
 
     for entry in entries {
-        let start = entry.date.format("%Y%m%d").to_string();
-        let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d").to_string();
+        let start = entry.date.format("%Y%m%d");
+        let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d");
         let status = if entry.completed { "CANCELLED" } else { "CONFIRMED" };
-        let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ").to_string();
+        let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ");
 
         out.push_str("BEGIN:VEVENT\r\n");
-        out.push_str(&format!("UID:{}@hikari\r\n", entry.id));
-        out.push_str(&format!("DTSTAMP:{}\r\n", dtstamp));
-        out.push_str(&format!("DTSTART;VALUE=DATE:{}\r\n", start));
-        out.push_str(&format!("DTEND;VALUE=DATE:{}\r\n", end));
+        push_ical_line!(out, key: "UID", write: &entry.id, value: "@hikari");
+        push_ical_line!(out, key: "DTSTAMP", date: dtstamp);
+        push_ical_line!(out, key: "DTSTART;VALUE=DATE", date: start);
+        push_ical_line!(out, key: "DTEND;VALUE=DATE", date: end);
         ical_fold_line(&mut out, "SUMMARY", &ical_escape(&entry.title));
-        out.push_str(&format!("STATUS:{}\r\n", status));
+        push_ical_line!(out, key: "STATUS", value: status);
         out.push_str("END:VEVENT\r\n");
     }
 
@@ -470,41 +509,47 @@ fn ical_escape(s: &str) -> String {
         .replace(['\r', '\n'], "\\n")
 }
 
+/// Calculates the required space for folding a value only containing ASCII characters.
+fn ical_fold_required_ascii_space(key_len: usize, value: &str) -> usize {
+    key_len + value.len() + (((key_len + value.len()) / 74) + 1) * 3
+}
+
 // RFC 5545 §3.1: fold at 75 octets
 fn ical_fold_line(out: &mut String, name: &str, value: &str) {
-    out.reserve(name.len() + value.len() + (name.len() + value.len()) / 74 + 2);
     out.push_str(name);
     out.push(':');
 
     let bytes = value.as_bytes();
-    if bytes.is_empty() {
-        out.push_str("\r\n");
-        return;
-    }
 
     let mut pos = 0;
     // First line: name + ":" + value_part must be <= 75
     // Continuation lines: " " + value_part must be <= 75
     let mut limit = 75 - name.len() - 1;
 
-    while pos < bytes.len() {
-        let mut end = (pos + limit).min(bytes.len());
-        if end != bytes.len() {
-            // Walk back to find UTF-8 char boundary
-            end = (pos..end).rev().find(|&i| value.is_char_boundary(i)).unwrap_or(pos);
-            if end == pos {
-                // Must advance at least one byte
-                end = (pos + 1).min(bytes.len());
+    loop {
+        let mut new_pos = pos + limit;
+        match new_pos.cmp(&bytes.len()) {
+            Ordering::Greater => {
+                new_pos = bytes.len();
+            }
+            Ordering::Equal => {
+                // Already at the end of the line, do nothing
+            }
+            Ordering::Less => {
+                // pos might point into the middle of a UTF-8 char, Walk back to find UTF-8 char boundary
+                new_pos = value.floor_char_boundary(new_pos);
+                // This should never fail: value is valid utf-8, and an utf-8 char cannot be longer than 6 bytes, so we should always find a valid boundary
+                debug_assert!(new_pos > pos);
             }
         }
-        out.push_str(&value[pos..end]);
-        if end != bytes.len() {
-            out.push_str("\r\n ");
-            limit = 74;
-        } else {
+        out.push_str(&value[pos..new_pos]);
+        pos = new_pos;
+        if new_pos == bytes.len() {
             out.push_str("\r\n");
+            break;
         }
-        pos = end;
+        out.push_str("\r\n ");
+        limit = 74;
     }
 }
 
@@ -516,6 +561,139 @@ mod tests {
         let mut out = String::new();
         ical_fold_line(&mut out, name, value);
         out
+    }
+
+    fn expected_ical_vevent(value: &str) -> String {
+        format!(
+            "\
+BEGIN:VEVENT\r\n\
+UID:00000000-0000-0000-0000-000000000000@hikari\r\n\
+DTSTAMP:19700101T000000Z\r\n\
+DTSTART;VALUE=DATE:19700101\r\n\
+DTEND;VALUE=DATE:19700102\r\n\
+SUMMARY:{value}\r\n\
+STATUS:CONFIRMED\r\n\
+END:VEVENT\r\n\
+"
+        )
+    }
+
+    fn expected_ical_output(vevent: &str) -> String {
+        format!(
+            "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//hikari//planner//EN\r\n\
+CALSCALE:GREGORIAN\r\n\
+{}\
+END:VCALENDAR\r\n",
+            vevent
+        )
+    }
+
+    fn create_planner_entry(value: &str) -> hikari_entity::planner_entry::Model {
+        hikari_entity::planner_entry::Model {
+            id: Default::default(),
+            user_id: Default::default(),
+            date: Default::default(),
+            title: value.to_string(),
+            completed: false,
+            priority: 0,
+            module_id: None,
+            session_id: None,
+            created_at: Default::default(),
+            updated_at: Default::default(),
+        }
+    }
+
+    const ICAL_TEST_VALUES: [(&str, &str); 3] = [
+        ("", ""),
+        ("test", "test"),
+        (
+            "long test that requires adding linebreaks according to RFC 5545 section 3.1 guidelines for iCalendar format",
+            "long test that requires adding linebreaks according to RFC 5545 sec\r\n tion 3.1 guidelines for iCalendar format",
+        ),
+    ];
+
+    #[test]
+    fn test_build_ical() {
+        for (value, split_value) in ICAL_TEST_VALUES {
+            let entries = vec![create_planner_entry(value)];
+            let expected = expected_ical_output(&expected_ical_vevent(split_value));
+            let res = build_ical(entries);
+            assert_eq!(res, expected);
+            // 96: Header + Footer
+            // 175: Per VEVENT Constant
+            // 10: Len of "Summary:\r\n"
+            assert_eq!(
+                res.len(),
+                96 + 175 + 10 + split_value.len(),
+                "Calculated length does not match expected length for value: {}",
+                value
+            );
+            assert_eq!(
+                res.capacity(),
+                96 + 175 + 10 + split_value.len() + 6,
+                "Calculated capacity does not match expected capacity for value: {}",
+                value
+            );
+        }
+    }
+
+    #[test]
+    fn test_build_ical_multiple_entries() {
+        let models: Vec<_> = ICAL_TEST_VALUES
+            .iter()
+            .map(|(val, _)| create_planner_entry(val))
+            .collect();
+        let expected_vevents = ICAL_TEST_VALUES
+            .iter()
+            .map(|(_, expected)| expected_ical_vevent(expected))
+            .collect::<Vec<_>>();
+        let res = build_ical(models);
+
+        let expected = expected_ical_output(&expected_vevents.join(""));
+        let total_vevent_len = expected_vevents.iter().map(|vevent| vevent.len()).sum::<usize>();
+        assert_eq!(res, expected);
+        assert_eq!(
+            res.len(),
+            96 + total_vevent_len,
+            "Calculated length does not match expected length"
+        );
+        assert_eq!(
+            res.capacity(),
+            96 + total_vevent_len + 6,
+            "Calculated capacity does not match expected capacity"
+        );
+    }
+
+    #[test]
+    fn test_build_ical_special_chars() {
+        let value = "a".repeat(61) + "👍🏽" + "a".repeat(71).as_str();
+        let expected_value = "a".repeat(61) + "👍\r\n 🏽" + "a".repeat(70).as_str() + "\r\n a";
+        let entry = create_planner_entry(&value);
+        let expected = expected_ical_output(&expected_ical_vevent(&expected_value));
+        let res = build_ical(vec![entry]);
+        assert_eq!(res, expected);
+        // The emoji without the color modifier should be on the first line
+        let expected_summary_line = String::from("SUMMARY:") + "a".repeat(61).as_str() + "👍";
+        assert_eq!(expected_summary_line.len(), 73); // Sanity check: Expected line is one shorter than possible
+        assert_eq!(res.lines().skip(9).next().unwrap(), expected_summary_line);
+        let expected_next_line = String::from(" 🏽") + "a".repeat(70).as_str();
+        // Next line should only be the color modifier
+        assert_eq!(res.lines().skip(10).next().unwrap(), expected_next_line);
+        assert_eq!(
+            res.len(),
+            96 + 175 + 10 + value.len() + 3 * 2,
+            "Calculated length does not match expected length for value: {}",
+            value
+        );
+        assert_eq!(
+            res.capacity(),
+            96 + 175 + 10 + value.len() + 3 * 2 + 6 - 3,
+            "Calculated capacity does not match expected capacity for value: {}",
+            value
+        );
     }
 
     #[test]
@@ -605,6 +783,49 @@ mod tests {
                 assert!(line.len() <= 75);
                 assert!(line.starts_with(' '));
             }
+        }
+    }
+
+    #[test]
+    fn test_fold_required_ascii_space() {
+        let test_cases = [
+            (1, "This is a short description, that should fit on one line"),
+            (
+                2,
+                "This is a very long description that should be folded properly according to RFC 5545 section 3.1 guidelines for iCalendar format",
+            ),
+            (
+                3,
+                "This is another very long description that should be folded twice to properly fit the iCalendar format according to RFC 5545 section 3.1 guidelines",
+            ),
+        ];
+        let name = "SUMMARY";
+        for (expected_lines, test_case) in test_cases {
+            let required_space = ical_fold_required_ascii_space(name.len(), test_case);
+            let mut result = String::new();
+            result.reserve(required_space);
+            ical_fold_line(&mut result, name, test_case);
+            assert_eq!(result.len(), required_space);
+            assert_eq!(result.capacity(), required_space);
+            assert_eq!(result.lines().count(), expected_lines);
+        }
+    }
+
+    #[test]
+    fn test_ical_escape() {
+        let test_cases = [
+            ("", ""),
+            ("a", "a"),
+            ("a,b", "a\\,b"),
+            ("a;", "a\\;"),
+            ("a\\", "a\\\\"),
+            ("a\\;", "a\\\\\\;"),
+            ("a\r\nb", "a\\nb"),
+            ("a\r\n\nb", "a\\n\\nb"),
+        ];
+        for (input, expected) in test_cases {
+            let result = ical_escape(input);
+            assert_eq!(result, expected);
         }
     }
 }
