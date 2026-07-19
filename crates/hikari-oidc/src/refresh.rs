@@ -1,5 +1,6 @@
+use arc_swap::{ArcSwap, Guard};
 use std::error::Error;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::task;
@@ -34,7 +35,7 @@ pub struct RefreshableValue<T, R, E>
 where
     R: Refresher<Output = T, Error = E> + Send + Sync,
 {
-    value: Arc<RwLock<Arc<Refresh<T>>>>,
+    value: Arc<ArcSwap<Refresh<T>>>,
     refresher: R,
     active_refresh: Arc<Semaphore>,
 }
@@ -45,19 +46,18 @@ where
 {
     pub fn should_refresh(&self) -> bool {
         let now = Instant::now();
-        let value = self.value.read().expect("poisoned lock");
+        let value = self.value.load();
         value.not_before <= now
     }
 
     pub fn valid(&self) -> bool {
         let now = Instant::now();
-        let value = self.value.read().expect("poisoned lock");
+        let value = self.value.load();
         value.valid_until <= now
     }
 
-    pub fn get_unchecked(&self) -> Arc<Refresh<T>> {
-        let value = self.value.read().expect("poisoned lock");
-        Arc::clone(&value)
+    pub fn load(&self) -> Guard<Arc<Refresh<T>>> {
+        self.value.load()
     }
 }
 
@@ -69,7 +69,7 @@ where
 {
     pub async fn new(refresher: R) -> Result<Self, E> {
         refresher.refresh().await.map(|value| Self {
-            value: Arc::new(RwLock::new(Arc::new(value))),
+            value: Arc::new(ArcSwap::from_pointee(value)),
             refresher,
             active_refresh: Arc::new(Semaphore::new(1)),
         })
@@ -89,11 +89,9 @@ where
         let Ok(permit) = Arc::clone(&self.active_refresh).try_acquire_owned() else {
             return false;
         };
-        let value = self.value.read().expect("poisoned lock");
-        if Instant::now() > value.not_before {
+        if !self.should_refresh() {
             return false;
         }
-        drop(value);
         let value = Arc::clone(&self.value);
         let refresh_future = self.refresher.refresh();
         let update_future = async move {
@@ -104,8 +102,7 @@ where
                     return;
                 }
             };
-            let mut value = value.write().expect("poisoned lock");
-            *value = Arc::new(refresh);
+            value.store(Arc::new(refresh));
             // explicitly drop the permit so it is moved into the future and not dropped at the
             // end of the surrounding function
             drop(permit);

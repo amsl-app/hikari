@@ -121,7 +121,7 @@ where
         token: impl AsRef<[u8]>,
         options: ValidationOptions,
     ) -> Result<TokenData<T>, JwkError> {
-        let keys = &self.keys.get_unchecked().value;
+        let keys = &self.keys.load().value;
         let token = token.as_ref();
         let header = jsonwebtoken::decode_header(token).map_err(JwkError::Jwk)?;
         let Some(kid) = header.kid else {
