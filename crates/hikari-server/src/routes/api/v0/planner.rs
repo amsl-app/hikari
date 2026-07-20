@@ -10,10 +10,11 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use chrono::NaiveDate;
 use hikari_db::planner;
+use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_model::planner::{
-    NewPlannerEntry, PlannerAssistantExistingEntry, PlannerAssistantModule, PlannerAssistantRequest,
-    PlannerAssistantSession, PlannerEntry, PlannerIcalToken,
+    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantExistingEntry, PlannerAssistantModule,
+    PlannerAssistantRequest, PlannerAssistantSession, PlannerEntry, PlannerIcalToken, PlannerMilestone,
 };
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
@@ -41,6 +42,15 @@ pub(crate) struct PlannerEntryChanges {
     pub session_id: Option<Option<String>>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub(crate) struct PlannerMilestoneChanges {
+    pub title: Option<String>,
+    pub date: Option<NaiveDate>,
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    #[allow(clippy::option_option)]
+    pub description: Option<Option<String>>,
+}
+
 pub(crate) fn create_router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -56,6 +66,11 @@ where
         .route("/ical-token", get(get_ical_token).delete(delete_ical_token))
         .route("/ical/{token}", get(get_planner_ical))
         .route("/assistant", post(planner_assistant))
+        .route("/milestones", get(get_milestones).post(create_milestone))
+        .route(
+            "/milestones/{id}",
+            get(get_milestone).patch(update_milestone).delete(delete_milestone),
+        )
         .with_state(())
 }
 
@@ -120,7 +135,6 @@ pub(crate) async fn get_planner_entry(
         .ok_or(PlannerError::NotFound)?;
     Ok(Json(PlannerEntry::from_db_model(entry)))
 }
-
 
 #[utoipa::path(
     patch,
@@ -337,6 +351,153 @@ fn validate_new_entry(
         module_id: entry.module_id,
         session_id: entry.session_id,
     })
+}
+
+fn validate_milestone_title(title: &str) -> Result<String, PlannerError> {
+    let title = title.trim().to_owned();
+    if title.is_empty() {
+        return Err(PlannerError::ValidationError("title must not be empty".to_owned()));
+    }
+    if title.len() > 500 {
+        return Err(PlannerError::ValidationError("title exceeds 500 characters".to_owned()));
+    }
+    Ok(title)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/planner/milestones",
+    responses((status = OK, description = "List milestones for current user", body = [PlannerMilestone])),
+    tag = "v0/planner",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_milestones(
+    ExtractUserId(user): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user).await?;
+    let milestones = milestones
+        .into_iter()
+        .map(FromDbModel::from_db_model)
+        .collect::<Vec<PlannerMilestone>>();
+    Ok(Json(milestones))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/planner/milestones",
+    request_body = NewPlannerMilestone,
+    responses((status = CREATED, description = "Create a milestone", body = PlannerMilestone)),
+    tag = "v0/planner",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn create_milestone(
+    ExtractUserId(user): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Json(body): Json<NewPlannerMilestone>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let title = validate_milestone_title(&body.title)?;
+    let input = MilestoneInput {
+        title,
+        date: body.date,
+        description: body.description,
+        module_id: None,
+        origin_id: None,
+    };
+    let created = planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?;
+    Ok((StatusCode::CREATED, Json(PlannerMilestone::from_db_model(created))))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/planner/milestones/{id}",
+    responses(
+        (status = OK, description = "Get a milestone", body = PlannerMilestone),
+        (status = NOT_FOUND, description = "Milestone not found"),
+    ),
+    params(("id" = Uuid, Path, description = "The milestone id")),
+    tag = "v0/planner",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_milestone(
+    ExtractUserId(user): ExtractUserId,
+    Path(id): Path<Uuid>,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let milestone = planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
+        .await?
+        .ok_or(PlannerError::NotFound)?;
+    Ok(Json(PlannerMilestone::from_db_model(milestone)))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/api/v0/planner/milestones/{id}",
+    request_body = PlannerMilestoneChanges,
+    responses(
+        (status = OK, description = "Update a milestone", body = PlannerMilestone),
+        (status = NOT_FOUND, description = "Milestone not found"),
+    ),
+    params(("id" = Uuid, Path, description = "The milestone id")),
+    tag = "v0/planner",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn update_milestone(
+    ExtractUserId(user): ExtractUserId,
+    Path(id): Path<Uuid>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Json(changes): Json<PlannerMilestoneChanges>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let existing = planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
+        .await?
+        .ok_or(PlannerError::NotFound)?;
+
+    let mut active_model = hikari_entity::planner_milestone::ActiveModel {
+        id: ActiveValue::Unchanged(existing.id),
+        user_id: ActiveValue::Unchanged(existing.user_id),
+        ..Default::default()
+    };
+
+    if let Some(title) = changes.title {
+        active_model.title = ActiveValue::Set(validate_milestone_title(&title)?);
+    }
+    if let Some(date) = changes.date {
+        active_model.date = ActiveValue::Set(date);
+    }
+    if let Some(description) = changes.description {
+        active_model.description = ActiveValue::Set(description);
+    }
+
+    let updated = planner::planner_milestone::Mutation::update_milestone(&conn, active_model).await?;
+    Ok(Json(PlannerMilestone::from_db_model(updated)))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v0/planner/milestones/{id}",
+    responses(
+        (status = NO_CONTENT, description = "Delete a milestone"),
+        (status = NOT_FOUND, description = "Milestone not found"),
+    ),
+    params(("id" = Uuid, Path, description = "The milestone id")),
+    tag = "v0/planner",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn delete_milestone(
+    ExtractUserId(user): ExtractUserId,
+    Path(id): Path<Uuid>,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    let rows = planner::planner_milestone::Mutation::delete_milestone(&conn, user, id).await?;
+    if rows == 0 {
+        return Err(PlannerError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(
