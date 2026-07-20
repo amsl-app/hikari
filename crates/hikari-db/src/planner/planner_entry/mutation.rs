@@ -55,7 +55,7 @@ impl Mutation {
         })
     }
 
-    pub async fn create_planner_entries_bulk<C: ConnectionTrait>(
+    pub async fn create_planner_entries<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         entries: Vec<PlannerEntryInput>,

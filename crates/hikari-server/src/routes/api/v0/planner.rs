@@ -46,8 +46,7 @@ where
     S: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .route("/entries", get(get_planner_entries).post(create_planner_entry))
-        .route("/entries/bulk", post(create_planner_entries_bulk))
+        .route("/entries", get(get_planner_entries).post(create_planner_entries))
         .route(
             "/entries/{id}",
             get(get_planner_entry)
@@ -122,36 +121,6 @@ pub(crate) async fn get_planner_entry(
     Ok(Json(PlannerEntry::from_db_model(entry)))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v0/planner/entries",
-    request_body = NewPlannerEntry,
-    responses(
-        (status = CREATED, description = "Create a planner entry", body = PlannerEntry),
-    ),
-    tag = "v0/planner",
-    security(
-        ("token" = [])
-    )
-)]
-#[protect("Permission::Basic", ty = "Permission")]
-pub(crate) async fn create_planner_entry(
-    ExtractUserId(user): ExtractUserId,
-    Extension(conn): Extension<DatabaseConnection>,
-    Json(body): Json<NewPlannerEntry>,
-) -> Result<impl IntoResponse, PlannerError> {
-    let entry = planner::planner_entry::Mutation::create_planner_entry(
-        &conn,
-        user,
-        body.date,
-        body.title,
-        body.priority,
-        body.module_id,
-        body.session_id,
-    )
-    .await?;
-    Ok((StatusCode::CREATED, Json(PlannerEntry::from_db_model(entry))))
-}
 
 #[utoipa::path(
     patch,
@@ -323,7 +292,7 @@ pub(crate) async fn get_planner_ical(
     )
 )]
 #[protect("Permission::Basic", ty = "Permission")]
-pub(crate) async fn create_planner_entries_bulk(
+pub(crate) async fn create_planner_entries(
     ExtractUserId(user): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
     Json(body): Json<Vec<NewPlannerEntry>>,
@@ -333,7 +302,7 @@ pub(crate) async fn create_planner_entries_bulk(
         .enumerate()
         .map(|(i, e)| validate_new_entry(i, e))
         .collect::<Result<Vec<_>, _>>()?;
-    let created = planner::planner_entry::Mutation::create_planner_entries_bulk(&conn, user, inputs).await?;
+    let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;
     let entries = created
         .into_iter()
         .map(FromDbModel::from_db_model)
