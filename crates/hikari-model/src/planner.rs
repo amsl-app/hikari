@@ -4,18 +4,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantModule {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantSession {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlannerAssistantExistingEntry {
     pub date: NaiveDate,
     pub title: String,
@@ -39,9 +27,7 @@ pub struct PlannerEntry {
     pub completed: bool,
     pub priority: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub module_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
+    pub milestone_id: Option<Uuid>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -57,7 +43,48 @@ pub struct NewPlannerEntry {
     pub title: String,
     pub priority: i32,
     #[serde(default)]
+    pub milestone_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerMilestone {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub module_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_id: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NewPlannerMilestone {
+    pub title: String,
+    pub date: NaiveDate,
     #[serde(default)]
-    pub session_id: Option<String>,
+    pub description: Option<String>,
+}
+
+/// A module-defined milestone the user may import, annotated with whether it is already present.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ImportableMilestone {
+    pub id: String,
+    pub title: String,
+    pub date: NaiveDate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub already_imported: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerAssistantMilestone {
+    pub id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
 }
