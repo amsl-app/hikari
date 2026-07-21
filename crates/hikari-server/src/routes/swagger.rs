@@ -41,6 +41,8 @@ struct SecurityAddon;
         api::v0::modules::list_modules,
         api::v0::modules::list_groups,
         api::v0::modules::get_module,
+        api::v0::modules::get_module_milestones,
+        api::v0::modules::import_module_milestones,
         api::v0::modules::get_session_data,
         api::v0::modules::history,
         api::v0::modules::abort_all_sessions,
