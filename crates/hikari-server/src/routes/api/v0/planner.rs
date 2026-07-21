@@ -145,7 +145,7 @@ pub(crate) async fn get_planner_entry(
     path = "/api/v0/planner/entries/{id}",
     request_body = PlannerEntryChanges,
     responses(
-        (status = OK, description = "Update a planner entry", body = PlannerEntry),
+        (status = OK, description = "Update a planner entry", body = PlannerEntryFull),
         (status = NOT_FOUND, description = "Planner entry not found"),
     ),
     params(
@@ -163,9 +163,11 @@ pub(crate) async fn update_planner_entry(
     Extension(conn): Extension<DatabaseConnection>,
     Json(changes): Json<PlannerEntryChanges>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let existing = planner::planner_entry::Query::get_user_planner_entry(&conn, user, id)
-        .await?
-        .ok_or(PlannerError::NotFound)?;
+    let (existing, existing_milestone) = planner::planner_entry::Query::get_user_planner_entry_with_milestone(
+        &conn, user, id,
+    )
+    .await?
+    .ok_or(PlannerError::NotFound)?;
 
     let mut active_model = hikari_entity::planner_entry::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),
@@ -186,16 +188,24 @@ pub(crate) async fn update_planner_entry(
         active_model.priority = ActiveValue::Set(priority);
     }
 
-    if let Some(inner) = changes.milestone_id {
-        if let Some(milestone_id) = inner {
-            // Check if the milestone exist and belongs to the user
-            planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, vec![milestone_id]).await?;
-        }
+    let milestone = if let Some(inner) = changes.milestone_id {
         active_model.milestone_id = ActiveValue::Set(inner);
-    }
+        match inner {
+            Some(milestone_id) => {
+                // Check if the milestone exists and belongs to the user
+                let milestones =
+                    planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, vec![milestone_id])
+                        .await?;
+                milestones.into_iter().next().map(PlannerMilestone::from_db_model)
+            }
+            None => None,
+        }
+    } else {
+        existing_milestone.map(PlannerMilestone::from_db_model)
+    };
 
     let updated = planner::planner_entry::Mutation::update_planner_entry(&conn, active_model).await?;
-    Ok(Json(PlannerEntry::from_db_model(updated)))
+    Ok(Json(PlannerEntry::from_db_model(updated).as_entry_full(milestone)))
 }
 
 #[utoipa::path(
@@ -303,7 +313,7 @@ pub(crate) async fn get_planner_ical(
     path = "/api/v0/planner/entries",
     request_body = Vec<NewPlannerEntry>,
     responses(
-        (status = CREATED, description = "Create multiple planner entries", body = [PlannerEntry]),
+        (status = CREATED, description = "Create multiple planner entries", body = [PlannerEntryFull]),
     ),
     tag = "v0/planner",
     security(
@@ -323,7 +333,9 @@ pub(crate) async fn create_planner_entries(
         .collect::<Result<Vec<_>, _>>()?;
 
     let milestone_ids: Vec<Uuid> = inputs.iter().filter_map(|i| i.milestone_id).collect();
-    if !milestone_ids.is_empty() {
+    let milestones_by_id: HashMap<Uuid, PlannerMilestone> = if milestone_ids.is_empty() {
+        HashMap::new()
+    } else {
         let unique: Vec<Uuid> = {
             let mut v = milestone_ids.clone();
             v.sort();
@@ -331,14 +343,21 @@ pub(crate) async fn create_planner_entries(
             v
         };
         // Check if all milestone_ids exist and belong to the user
-        planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, unique).await?;
-    }
+        let milestones = planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, unique).await?;
+        milestones
+            .into_iter()
+            .map(|m| (m.id, PlannerMilestone::from_db_model(m)))
+            .collect()
+    };
 
     let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;
     let entries = created
         .into_iter()
-        .map(FromDbModel::from_db_model)
-        .collect::<Vec<PlannerEntry>>();
+        .map(|entry| {
+            let milestone = entry.milestone_id.and_then(|id| milestones_by_id.get(&id).cloned());
+            PlannerEntry::from_db_model(entry).as_entry_full(milestone)
+        })
+        .collect::<Vec<PlannerEntryFull>>();
     Ok((StatusCode::CREATED, Json(entries)))
 }
 

@@ -56,22 +56,7 @@ impl Query {
         })
     }
 
-    pub async fn get_user_planner_entry<C: ConnectionTrait>(
-        db: &C,
-        user_id: Uuid,
-        id: Uuid,
-    ) -> Result<Option<PlannerEntryModel>, DbErr> {
-        let entry = PlannerEntry::find_by_id(id)
-            .filter(hikari_entity::planner_entry::Column::UserId.eq(user_id))
-            .one(db)
-            .await;
-
-        entry.inspect_err(|error| {
-            tracing::error!(error = %error, "failed to load user planner entry");
-        })
-    }
-
-    /// Same as `get_user_planner_entry`, but also loads the entry's milestone in the same query (LEFT JOIN).
+    /// Loads a user's planner entry along with its milestone in the same query (LEFT JOIN).
     pub async fn get_user_planner_entry_with_milestone<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
