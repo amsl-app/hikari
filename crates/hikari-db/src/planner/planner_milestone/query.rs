@@ -44,19 +44,26 @@ impl Query {
         Ok(rows.into_iter().filter_map(|m| m.origin_id).collect())
     }
 
-    pub async fn count_owned_milestones<C: ConnectionTrait>(
+    pub async fn get_milestones_by_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         ids: Vec<Uuid>,
-    ) -> Result<u64, DbErr> {
+    ) -> Result<Vec<PlannerMilestoneModel>, DbErr> {
+        let len = ids.len();
         if ids.is_empty() {
-            return Ok(0);
+            return Ok(vec![]);
         }
-        PlannerMilestone::find()
+        let res = PlannerMilestone::find()
             .filter(Column::UserId.eq(user_id))
             .filter(Column::Id.is_in(ids))
-            .count(db)
+            .all(db)
             .await
-            .inspect_err(|error| tracing::error!(%error, "failed to count owned milestones"))
+            .inspect_err(|error| tracing::error!(%error, "failed to load milestones by ids"))?;
+
+        if res.len() != len {
+            Err(DbErr::RecordNotFound("one or more milestone ids do not exist".to_owned(),))
+        } else {
+            Ok(res)
+        }
     }
 }

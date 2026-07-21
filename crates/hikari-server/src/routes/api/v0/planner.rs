@@ -181,21 +181,14 @@ pub(crate) async fn update_planner_entry(
 
     if let Some(inner) = changes.milestone_id {
         if let Some(milestone_id) = inner {
-            verify_milestone_owned(&conn, user, milestone_id).await?;
+            // Check if the milestone exist and belongs to the user
+            planner::planner_milestone::Query::get_milestones_by_ids(&conn, user, vec![milestone_id]).await?;
         }
         active_model.milestone_id = ActiveValue::Set(inner);
     }
 
     let updated = planner::planner_entry::Mutation::update_planner_entry(&conn, active_model).await?;
     Ok(Json(PlannerEntry::from_db_model(updated)))
-}
-
-async fn verify_milestone_owned(conn: &DatabaseConnection, user: Uuid, milestone_id: Uuid) -> Result<(), PlannerError> {
-    let owned = planner::planner_milestone::Query::count_owned_milestones(conn, user, vec![milestone_id]).await?;
-    if owned == 0 {
-        return Err(PlannerError::ValidationError("milestone does not exist".to_owned()));
-    }
-    Ok(())
 }
 
 #[utoipa::path(
@@ -330,12 +323,8 @@ pub(crate) async fn create_planner_entries(
             v.dedup();
             v
         };
-        let owned = planner::planner_milestone::Query::count_owned_milestones(&conn, user, unique.clone()).await?;
-        if owned as usize != unique.len() {
-            return Err(PlannerError::ValidationError(
-                "one or more milestone ids do not exist".to_owned(),
-            ));
-        }
+        // Check if all milestone_ids exist and belong to the user
+        planner::planner_milestone::Query::get_milestones_by_ids(&conn, user, unique).await?;
     }
 
     let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;
