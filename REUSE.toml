@@ -108,3 +108,17 @@ SPDX-FileCopyrightText = [
     "Amsl Contributors",
 ]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = [
+    ".agents/**",
+    ".claude/**",
+    "AGENTS.md",
+    "CLAUDE.md"
+]
+precedence = "override"
+SPDX-FileCopyrightText = [
+    "2026 Linus Bierhoff",
+    "Amsl Contributors",
+]
+SPDX-License-Identifier = "MIT OR Apache-2.0"
