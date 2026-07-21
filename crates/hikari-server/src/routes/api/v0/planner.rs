@@ -13,8 +13,8 @@ use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_model::planner::{
-    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantExistingEntry, PlannerAssistantModule,
-    PlannerAssistantRequest, PlannerAssistantSession, PlannerEntry, PlannerIcalToken, PlannerMilestone,
+    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantExistingEntry, PlannerAssistantRequest, PlannerEntry,
+    PlannerIcalToken, PlannerMilestone,
 };
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
@@ -542,25 +542,13 @@ pub(crate) async fn planner_assistant(
 ) -> Result<impl IntoResponse, PlannerError> {
     let today = body.today.unwrap_or_else(|| chrono::Utc::now().date_naive());
 
-    let module_config = app_config.module_config();
-    let filtered = module_config.modules_filtered(&user.groups);
-
-    let modules: Vec<PlannerAssistantModule> = filtered
-        .iter()
-        .filter(|m| !m.hidden)
-        .map(|m| PlannerAssistantModule {
-            id: m.id.clone(),
-            name: m.title.clone(),
-        })
-        .collect();
-
-    let sessions: Vec<PlannerAssistantSession> = filtered
-        .iter()
-        .filter(|m| !m.hidden)
-        .flat_map(|m| m.sessions.values().filter(|s| !s.hidden))
-        .map(|s| PlannerAssistantSession {
-            id: s.id.clone(),
-            name: s.title.clone(),
+    let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user.id).await?;
+    let milestones: Vec<hikari_model::planner::PlannerAssistantMilestone> = milestones
+        .into_iter()
+        .map(|m| hikari_model::planner::PlannerAssistantMilestone {
+            id: m.id,
+            title: m.title,
+            date: m.date,
         })
         .collect();
 
@@ -578,8 +566,7 @@ pub(crate) async fn planner_assistant(
         &user.id,
         body.text,
         today,
-        modules,
-        sessions,
+        milestones,
         existing_entries,
         app_config.llm_config(),
         &conn,
