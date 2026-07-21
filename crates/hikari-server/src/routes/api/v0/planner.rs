@@ -13,8 +13,7 @@ use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_model::planner::{
-    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantExistingEntry, PlannerAssistantRequest, PlannerEntry,
-    PlannerIcalToken, PlannerMilestone,
+    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerIcalToken, PlannerMilestone,
 };
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
@@ -532,9 +531,9 @@ pub(crate) async fn planner_assistant(
     let today = body.today.unwrap_or_else(|| chrono::Utc::now().date_naive());
 
     let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user.id).await?;
-    let milestones: Vec<hikari_model::planner::PlannerAssistantMilestone> = milestones
+    let milestones: Vec<hikari_core::planner::PlannerAssistantMilestone> = milestones
         .into_iter()
-        .map(|m| hikari_model::planner::PlannerAssistantMilestone {
+        .map(|m| hikari_core::planner::PlannerAssistantMilestone {
             id: m.id,
             title: m.title,
             date: m.date,
@@ -543,9 +542,9 @@ pub(crate) async fn planner_assistant(
 
     let existing_db =
         planner::planner_entry::Query::get_user_planner_entries(&conn, user.id, Some(today), None).await?;
-    let existing_entries: Vec<PlannerAssistantExistingEntry> = existing_db
+    let existing_entries: Vec<hikari_core::planner::PlannerAssistantExistingEntry> = existing_db
         .into_iter()
-        .map(|e| PlannerAssistantExistingEntry {
+        .map(|e| hikari_core::planner::PlannerAssistantExistingEntry {
             date: e.date,
             title: e.title,
         })

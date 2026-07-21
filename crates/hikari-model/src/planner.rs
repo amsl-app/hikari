@@ -4,12 +4,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantExistingEntry {
-    pub date: NaiveDate,
-    pub title: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlannerAssistantRequest {
     pub text: String,
     /// Client's local date for resolving relative expressions like "tomorrow". Falls back to UTC if absent.
@@ -80,11 +74,4 @@ pub struct ImportableMilestone {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub already_imported: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantMilestone {
-    pub id: Uuid,
-    pub title: String,
-    pub date: NaiveDate,
 }

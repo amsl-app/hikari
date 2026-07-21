@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::time::Duration;
 
 use chrono::NaiveDate;
-use hikari_model::planner::{NewPlannerEntry, PlannerAssistantExistingEntry, PlannerAssistantMilestone};
+use hikari_model::planner::NewPlannerEntry;
 use schemars::JsonSchema;
 use sea_orm::{DatabaseConnection, prelude::Uuid};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,19 @@ struct PlannerEntryResponse {
     priority: i32,
     /// ID (UUID) of the matching milestone from the provided list, or null if none fits
     milestone_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannerAssistantExistingEntry {
+    pub date: NaiveDate,
+    pub title: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannerAssistantMilestone {
+    pub id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
 }
 
 #[allow(clippy::too_many_arguments)]
