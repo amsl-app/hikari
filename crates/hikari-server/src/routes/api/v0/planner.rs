@@ -13,7 +13,8 @@ use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_model::planner::{
-    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerIcalToken, PlannerMilestone,
+    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerEntryFull, PlannerIcalToken,
+    PlannerMilestone,
 };
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
@@ -85,7 +86,7 @@ pub(crate) struct DateRangeFilter {
         ("to" = Option<NaiveDate>, Query, description = "Filter entries on or before this date (inclusive)"),
     ),
     responses(
-        (status = OK, description = "List planner entries for current user", body = [PlannerEntry]),
+        (status = OK, description = "List planner entries for current user", body = [PlannerEntryFull]),
     ),
     tag = "v0/planner",
     security(
@@ -98,11 +99,15 @@ pub(crate) async fn get_planner_entries(
     Extension(conn): Extension<DatabaseConnection>,
     Query(filter): Query<DateRangeFilter>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user, filter.from, filter.to).await?;
+    let entries =
+        planner::planner_entry::Query::get_user_planner_entries_with_milestone(&conn, user, filter.from, filter.to)
+            .await?;
     let entries = entries
         .into_iter()
-        .map(FromDbModel::from_db_model)
-        .collect::<Vec<PlannerEntry>>();
+        .map(|(entry, milestone)| {
+            PlannerEntry::from_db_model(entry).as_entry_full(milestone.map(PlannerMilestone::from_db_model))
+        })
+        .collect::<Vec<PlannerEntryFull>>();
     Ok(Json(entries))
 }
 
@@ -110,7 +115,7 @@ pub(crate) async fn get_planner_entries(
     get,
     path = "/api/v0/planner/entries/{id}",
     responses(
-        (status = OK, description = "Get a specific planner entry", body = PlannerEntry),
+        (status = OK, description = "Get a specific planner entry", body = PlannerEntryFull),
         (status = NOT_FOUND, description = "Planner entry not found"),
     ),
     params(
@@ -127,10 +132,12 @@ pub(crate) async fn get_planner_entry(
     Path(id): Path<Uuid>,
     Extension(conn): Extension<DatabaseConnection>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let entry = planner::planner_entry::Query::get_user_planner_entry(&conn, user, id)
+    let (entry, milestone) = planner::planner_entry::Query::get_user_planner_entry_with_milestone(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
-    Ok(Json(PlannerEntry::from_db_model(entry)))
+    Ok(Json(
+        PlannerEntry::from_db_model(entry).as_entry_full(milestone.map(PlannerMilestone::from_db_model)),
+    ))
 }
 
 #[utoipa::path(
@@ -514,7 +521,7 @@ pub(crate) async fn delete_milestone(
     get,
     path = "/api/v0/planner/milestones/{id}/entries",
     responses(
-        (status = OK, description = "List entries for a milestone", body = [PlannerEntry]),
+        (status = OK, description = "List entries for a milestone", body = [PlannerEntryFull]),
         (status = NOT_FOUND, description = "Milestone not found"),
     ),
     params(("id" = Uuid, Path, description = "The milestone id")),
@@ -527,15 +534,16 @@ pub(crate) async fn get_milestone_entries(
     Path(id): Path<Uuid>,
     Extension(conn): Extension<DatabaseConnection>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
+    let milestone = planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
+    let milestone = PlannerMilestone::from_db_model(milestone);
 
     let entries = planner::planner_entry::Query::get_milestone_entries(&conn, user, id).await?;
     let entries = entries
         .into_iter()
-        .map(FromDbModel::from_db_model)
-        .collect::<Vec<PlannerEntry>>();
+        .map(|entry| PlannerEntry::from_db_model(entry).as_entry_full(Some(milestone.clone())))
+        .collect::<Vec<PlannerEntryFull>>();
     Ok(Json(entries))
 }
 

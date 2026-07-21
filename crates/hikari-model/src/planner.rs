@@ -26,6 +26,39 @@ pub struct PlannerEntry {
     pub updated_at: NaiveDateTime,
 }
 
+/// A planner entry with its milestone embedded (instead of just the milestone id) to save extra lookups.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerEntryFull {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub date: NaiveDate,
+    pub title: String,
+    pub completed: bool,
+    pub priority: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<PlannerMilestone>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+impl PlannerEntry {
+    #[must_use]
+    pub fn as_entry_full(&self, milestone: Option<PlannerMilestone>) -> PlannerEntryFull {
+        PlannerEntryFull {
+            id: self.id,
+            user_id: self.user_id,
+            date: self.date,
+            title: self.title.clone(),
+            completed: self.completed,
+            priority: self.priority,
+            milestone,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlannerIcalToken {
     pub token: String,
