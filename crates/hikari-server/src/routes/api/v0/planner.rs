@@ -300,7 +300,7 @@ pub(crate) async fn get_planner_ical(
 
 #[utoipa::path(
     post,
-    path = "/api/v0/planner/entries/bulk",
+    path = "/api/v0/planner/entries",
     request_body = Vec<NewPlannerEntry>,
     responses(
         (status = CREATED, description = "Create multiple planner entries", body = [PlannerEntry]),
