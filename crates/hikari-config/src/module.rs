@@ -6,6 +6,7 @@ use crate::module::assessment::ModuleAssessment;
 use crate::module::content::Content;
 use crate::module::error::ModuleError;
 use crate::module::llm_agent::{LlmAgent, LlmService};
+use crate::module::milestone::ModuleMilestone;
 use crate::module::session::Session;
 use futures::StreamExt;
 use hikari_utils::loader::{Filter, Loader, LoaderTrait};
@@ -19,6 +20,7 @@ pub mod assessment;
 pub mod content;
 pub mod error;
 pub mod llm_agent;
+pub mod milestone;
 pub mod next_session;
 pub mod session;
 pub mod unlock;
@@ -42,14 +44,6 @@ pub enum ModuleCategory {
     Course,
     Journal,
     Sleep,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ModuleMilestone {
-    pub id: String,
-    pub title: String,
-    pub date: chrono::NaiveDate,
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
