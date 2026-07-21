@@ -36,10 +36,7 @@ pub(crate) struct PlannerEntryChanges {
     pub priority: Option<i32>,
     #[serde(default, with = "::serde_with::rust::double_option")]
     #[allow(clippy::option_option)]
-    pub module_id: Option<Option<String>>,
-    #[serde(default, with = "::serde_with::rust::double_option")]
-    #[allow(clippy::option_option)]
-    pub session_id: Option<Option<String>>,
+    pub milestone_id: Option<Option<Uuid>>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -182,15 +179,23 @@ pub(crate) async fn update_planner_entry(
         active_model.priority = ActiveValue::Set(priority);
     }
 
-    if let Some(inner) = changes.module_id {
-        active_model.module_id = ActiveValue::Set(inner);
-    }
-    if let Some(inner) = changes.session_id {
-        active_model.session_id = ActiveValue::Set(inner);
+    if let Some(inner) = changes.milestone_id {
+        if let Some(milestone_id) = inner {
+            verify_milestone_owned(&conn, user, milestone_id).await?;
+        }
+        active_model.milestone_id = ActiveValue::Set(inner);
     }
 
     let updated = planner::planner_entry::Mutation::update_planner_entry(&conn, active_model).await?;
     Ok(Json(PlannerEntry::from_db_model(updated)))
+}
+
+async fn verify_milestone_owned(conn: &DatabaseConnection, user: Uuid, milestone_id: Uuid) -> Result<(), PlannerError> {
+    let owned = planner::planner_milestone::Query::count_owned_milestones(conn, user, vec![milestone_id]).await?;
+    if owned == 0 {
+        return Err(PlannerError::ValidationError("milestone does not exist".to_owned()));
+    }
+    Ok(())
 }
 
 #[utoipa::path(
@@ -316,6 +321,23 @@ pub(crate) async fn create_planner_entries(
         .enumerate()
         .map(|(i, e)| validate_new_entry(i, e))
         .collect::<Result<Vec<_>, _>>()?;
+
+    let milestone_ids: Vec<Uuid> = inputs.iter().filter_map(|i| i.milestone_id).collect();
+    if !milestone_ids.is_empty() {
+        let unique: Vec<Uuid> = {
+            let mut v = milestone_ids.clone();
+            v.sort();
+            v.dedup();
+            v
+        };
+        let owned = planner::planner_milestone::Query::count_owned_milestones(&conn, user, unique.clone()).await?;
+        if owned as usize != unique.len() {
+            return Err(PlannerError::ValidationError(
+                "one or more milestone ids do not exist".to_owned(),
+            ));
+        }
+    }
+
     let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;
     let entries = created
         .into_iter()
@@ -348,8 +370,7 @@ fn validate_new_entry(
         date: entry.date,
         title,
         priority: entry.priority,
-        module_id: entry.module_id,
-        session_id: entry.session_id,
+        milestone_id: entry.milestone_id,
     })
 }
 
@@ -729,8 +750,7 @@ END:VCALENDAR\r\n",
             title: value.to_string(),
             completed: false,
             priority: 0,
-            module_id: None,
-            session_id: None,
+            milestone_id: None,
             created_at: Default::default(),
             updated_at: Default::default(),
         }
