@@ -67,6 +67,7 @@ where
             "/milestones/{id}",
             get(get_milestone).patch(update_milestone).delete(delete_milestone),
         )
+        .route("/milestones/{id}/entries", get(get_milestone_entries))
         .with_state(())
 }
 
@@ -507,6 +508,35 @@ pub(crate) async fn delete_milestone(
         return Err(PlannerError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/planner/milestones/{id}/entries",
+    responses(
+        (status = OK, description = "List entries for a milestone", body = [PlannerEntry]),
+        (status = NOT_FOUND, description = "Milestone not found"),
+    ),
+    params(("id" = Uuid, Path, description = "The milestone id")),
+    tag = "v0/planner",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_milestone_entries(
+    ExtractUserId(user): ExtractUserId,
+    Path(id): Path<Uuid>,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, PlannerError> {
+    planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
+        .await?
+        .ok_or(PlannerError::NotFound)?;
+
+    let entries = planner::planner_entry::Query::get_milestone_entries(&conn, user, id).await?;
+    let entries = entries
+        .into_iter()
+        .map(FromDbModel::from_db_model)
+        .collect::<Vec<PlannerEntry>>();
+    Ok(Json(entries))
 }
 
 #[utoipa::path(

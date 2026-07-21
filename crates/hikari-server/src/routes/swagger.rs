@@ -94,6 +94,7 @@ struct SecurityAddon;
         api::v0::planner::get_milestone,
         api::v0::planner::update_milestone,
         api::v0::planner::delete_milestone,
+        api::v0::planner::get_milestone_entries,
         api::v0::journal::journal_entry::get_journal_entry,
         api::v0::journal::journal_entry::list_journal_entry_contents,
         api::v0::journal::journal_entry::add_journal_entry_content,

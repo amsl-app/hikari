@@ -44,4 +44,21 @@ impl Query {
             tracing::error!(error = %error, "failed to load user planner entry");
         })
     }
+
+    pub async fn get_milestone_entries<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        milestone_id: Uuid,
+    ) -> Result<Vec<PlannerEntryModel>, DbErr> {
+        let entries = PlannerEntry::find()
+            .filter(hikari_entity::planner_entry::Column::UserId.eq(user_id))
+            .filter(hikari_entity::planner_entry::Column::MilestoneId.eq(milestone_id))
+            .order_by_desc(hikari_entity::planner_entry::Column::Date)
+            .all(db)
+            .await;
+
+        entries.inspect_err(|error| {
+            tracing::error!(error = %error, "failed to load milestone entries");
+        })
+    }
 }
