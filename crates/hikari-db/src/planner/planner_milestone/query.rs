@@ -1,5 +1,5 @@
 use hikari_entity::planner_milestone::{Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
 use uuid::Uuid;
 
 pub struct Query;

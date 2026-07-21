@@ -3121,11 +3121,9 @@ dependencies = [
  "hikari-model",
  "hikari-utils",
  "num-traits",
- "sea-orm",
  "serde_json",
  "thiserror 2.0.18",
  "tracing",
- "uuid",
  "yaml_serde",
 ]
 
