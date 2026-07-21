@@ -14,7 +14,7 @@ use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_model::planner::{
     NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerEntryFull, PlannerIcalToken,
-    PlannerMilestone,
+    PlannerMilestone, PlannerMilestoneFull,
 };
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
@@ -22,6 +22,7 @@ use protect_axum::protect;
 use sea_orm::ActiveValue;
 use serde::Deserialize;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt::Write;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -68,7 +69,6 @@ where
             "/milestones/{id}",
             get(get_milestone).patch(update_milestone).delete(delete_milestone),
         )
-        .route("/milestones/{id}/entries", get(get_milestone_entries))
         .with_state(())
 }
 
@@ -381,10 +381,18 @@ fn validate_milestone_title(title: &str) -> Result<String, PlannerError> {
     Ok(title)
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct MilestoneFlags {
+    pub deep: Option<String>,
+}
+
 #[utoipa::path(
     get,
     path = "/api/v0/planner/milestones",
-    responses((status = OK, description = "List milestones for current user", body = [PlannerMilestone])),
+    params(
+        ("deep" = Option<String>, Query, description = "if set all milestones are listed with their entries"),
+    ),
+    responses((status = OK, description = "List milestones for current user", body = [PlannerMilestoneFull])),
     tag = "v0/planner",
     security(("token" = []))
 )]
@@ -392,12 +400,32 @@ fn validate_milestone_title(title: &str) -> Result<String, PlannerError> {
 pub(crate) async fn get_milestones(
     ExtractUserId(user): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
+    Query(flags): Query<MilestoneFlags>,
 ) -> Result<impl IntoResponse, PlannerError> {
+    let deep = flags.deep.is_some();
     let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user).await?;
+
+    let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
+    if deep {
+        let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user, None, None).await?;
+        for entry in entries {
+            if let Some(milestone_id) = entry.milestone_id {
+                entries_by_milestone
+                    .entry(milestone_id)
+                    .or_default()
+                    .push(PlannerEntry::from_db_model(entry));
+            }
+        }
+    }
+
     let milestones = milestones
         .into_iter()
-        .map(FromDbModel::from_db_model)
-        .collect::<Vec<PlannerMilestone>>();
+        .map(|m| {
+            let milestone = PlannerMilestone::from_db_model(m);
+            let entries = entries_by_milestone.remove(&milestone.id).unwrap_or_default();
+            milestone.as_milestone_full(deep, entries)
+        })
+        .collect::<Vec<PlannerMilestoneFull>>();
     Ok(Json(milestones))
 }
 
@@ -431,7 +459,7 @@ pub(crate) async fn create_milestone(
     get,
     path = "/api/v0/planner/milestones/{id}",
     responses(
-        (status = OK, description = "Get a milestone", body = PlannerMilestone),
+        (status = OK, description = "Get a milestone with its entries", body = PlannerMilestoneFull),
         (status = NOT_FOUND, description = "Milestone not found"),
     ),
     params(("id" = Uuid, Path, description = "The milestone id")),
@@ -447,7 +475,15 @@ pub(crate) async fn get_milestone(
     let milestone = planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
-    Ok(Json(PlannerMilestone::from_db_model(milestone)))
+    let milestone = PlannerMilestone::from_db_model(milestone);
+
+    let entries = planner::planner_entry::Query::get_milestone_entries(&conn, user, id).await?;
+    let entries = entries
+        .into_iter()
+        .map(PlannerEntry::from_db_model)
+        .collect::<Vec<PlannerEntry>>();
+
+    Ok(Json(milestone.as_milestone_full(true, entries)))
 }
 
 #[utoipa::path(
@@ -515,36 +551,6 @@ pub(crate) async fn delete_milestone(
         return Err(PlannerError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
-}
-
-#[utoipa::path(
-    get,
-    path = "/api/v0/planner/milestones/{id}/entries",
-    responses(
-        (status = OK, description = "List entries for a milestone", body = [PlannerEntryFull]),
-        (status = NOT_FOUND, description = "Milestone not found"),
-    ),
-    params(("id" = Uuid, Path, description = "The milestone id")),
-    tag = "v0/planner",
-    security(("token" = []))
-)]
-#[protect("Permission::Basic", ty = "Permission")]
-pub(crate) async fn get_milestone_entries(
-    ExtractUserId(user): ExtractUserId,
-    Path(id): Path<Uuid>,
-    Extension(conn): Extension<DatabaseConnection>,
-) -> Result<impl IntoResponse, PlannerError> {
-    let milestone = planner::planner_milestone::Query::get_user_milestone(&conn, user, id)
-        .await?
-        .ok_or(PlannerError::NotFound)?;
-    let milestone = PlannerMilestone::from_db_model(milestone);
-
-    let entries = planner::planner_entry::Query::get_milestone_entries(&conn, user, id).await?;
-    let entries = entries
-        .into_iter()
-        .map(|entry| PlannerEntry::from_db_model(entry).as_entry_full(Some(milestone.clone())))
-        .collect::<Vec<PlannerEntryFull>>();
-    Ok(Json(entries))
 }
 
 #[utoipa::path(

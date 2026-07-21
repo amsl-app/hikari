@@ -90,6 +90,44 @@ pub struct PlannerMilestone {
     pub updated_at: NaiveDateTime,
 }
 
+/// A milestone with its planner entries embedded, requested via the `deep` query param.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerMilestoneFull {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_id: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<PlannerEntry>,
+}
+
+impl PlannerMilestone {
+    #[must_use]
+    pub fn as_milestone_full(&self, deep: bool, entries: Vec<PlannerEntry>) -> PlannerMilestoneFull {
+        PlannerMilestoneFull {
+            id: self.id,
+            user_id: self.user_id,
+            title: self.title.clone(),
+            date: self.date,
+            description: self.description.clone(),
+            module_id: self.module_id.clone(),
+            origin_id: self.origin_id.clone(),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            entries: if deep { entries } else { Vec::new() },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NewPlannerMilestone {
     pub title: String,
