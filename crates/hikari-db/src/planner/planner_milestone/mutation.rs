@@ -2,7 +2,9 @@ use chrono::NaiveDate;
 use hikari_entity::planner_milestone::{
     ActiveModel, Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel,
 };
-use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, NotSet, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, NotSet, QueryFilter, sea_query,
+};
 use uuid::Uuid;
 
 pub struct MilestoneInput {
@@ -80,6 +82,11 @@ impl Mutation {
             updated_at: NotSet,
         });
         PlannerMilestone::insert_many(models)
+            .on_conflict(
+                sea_query::OnConflict::columns([Column::UserId, Column::ModuleId, Column::OriginId])
+                    .do_nothing()
+                    .to_owned(),
+            )
             .exec(db)
             .await
             .inspect_err(|error| tracing::error!(%error, "failed to import milestones"))?;

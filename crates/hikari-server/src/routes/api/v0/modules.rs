@@ -283,14 +283,17 @@ pub(crate) async fn get_module_milestones(
         .ok_or(modules::error::ModuleError::ModuleNotFound)?
         .clone();
 
-    let imported =
-        hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id).await?;
+    let imported: HashSet<String> =
+        hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id)
+            .await?
+            .into_iter()
+            .collect();
 
     let result: Vec<ImportableMilestone> = module
         .milestones
         .into_iter()
         .map(|m| ImportableMilestone {
-            already_imported: imported.iter().any(|o| o == &m.id),
+            already_imported: imported.contains(&m.id),
             id: m.id,
             title: m.title,
             date: m.date,
@@ -325,13 +328,16 @@ pub(crate) async fn import_module_milestones(
         .ok_or(modules::error::ModuleError::ModuleNotFound)?
         .clone();
 
-    let already: Vec<String> =
-        hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id).await?;
+    let already: HashSet<String> =
+        hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id)
+            .await?
+            .into_iter()
+            .collect();
 
     let inputs: Vec<MilestoneInput> = module
         .milestones
         .into_iter()
-        .filter(|m| !already.iter().any(|o| o == &m.id))
+        .filter(|m| !already.contains(&m.id))
         .map(|m| MilestoneInput {
             title: m.title,
             date: m.date,

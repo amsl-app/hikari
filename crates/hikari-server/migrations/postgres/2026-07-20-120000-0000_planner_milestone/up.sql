@@ -8,7 +8,8 @@ CREATE TABLE planner_milestone (
     origin_id   VARCHAR(255)              DEFAULT NULL,
     created_at  TIMESTAMP        NOT NULL DEFAULT now(),
     updated_at  TIMESTAMP        NOT NULL DEFAULT now(),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (user_id, module_id, origin_id)
 );
 CREATE INDEX idx_planner_milestone_user_id ON planner_milestone(user_id);
 
