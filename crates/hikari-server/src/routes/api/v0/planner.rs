@@ -181,7 +181,7 @@ pub(crate) async fn update_planner_entry(
     if let Some(inner) = changes.milestone_id {
         if let Some(milestone_id) = inner {
             // Check if the milestone exist and belongs to the user
-            planner::planner_milestone::Query::get_milestones_by_ids(&conn, user, vec![milestone_id]).await?;
+            planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, vec![milestone_id]).await?;
         }
         active_model.milestone_id = ActiveValue::Set(inner);
     }
@@ -323,7 +323,7 @@ pub(crate) async fn create_planner_entries(
             v
         };
         // Check if all milestone_ids exist and belong to the user
-        planner::planner_milestone::Query::get_milestones_by_ids(&conn, user, unique).await?;
+        planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, unique).await?;
     }
 
     let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;

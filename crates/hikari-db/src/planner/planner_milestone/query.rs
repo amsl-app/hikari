@@ -29,22 +29,7 @@ impl Query {
             .inspect_err(|error| tracing::error!(%error, "failed to load user milestone"))
     }
 
-    pub async fn get_imported_origin_ids<C: ConnectionTrait>(
-        db: &C,
-        user_id: Uuid,
-        module_id: &str,
-    ) -> Result<Vec<String>, DbErr> {
-        let rows = PlannerMilestone::find()
-            .filter(Column::UserId.eq(user_id))
-            .filter(Column::ModuleId.eq(module_id))
-            .filter(Column::OriginId.is_not_null())
-            .all(db)
-            .await
-            .inspect_err(|error| tracing::error!(%error, "failed to load imported origin ids"))?;
-        Ok(rows.into_iter().filter_map(|m| m.origin_id).collect())
-    }
-
-    pub async fn get_milestones_by_ids<C: ConnectionTrait>(
+    pub async fn get_user_milestones_by_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         ids: Vec<Uuid>,
@@ -61,9 +46,26 @@ impl Query {
             .inspect_err(|error| tracing::error!(%error, "failed to load milestones by ids"))?;
 
         if res.len() != len {
-            Err(DbErr::RecordNotFound("one or more milestone ids do not exist".to_owned(),))
+            Err(DbErr::RecordNotFound(
+                "one or more milestone ids do not exist".to_owned(),
+            ))
         } else {
             Ok(res)
         }
+    }
+
+    pub async fn get_imported_origin_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        module_id: &str,
+    ) -> Result<Vec<String>, DbErr> {
+        let rows = PlannerMilestone::find()
+            .filter(Column::UserId.eq(user_id))
+            .filter(Column::ModuleId.eq(module_id))
+            .filter(Column::OriginId.is_not_null())
+            .all(db)
+            .await
+            .inspect_err(|error| tracing::error!(%error, "failed to load imported origin ids"))?;
+        Ok(rows.into_iter().filter_map(|m| m.origin_id).collect())
     }
 }
