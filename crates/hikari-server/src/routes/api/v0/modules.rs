@@ -13,13 +13,15 @@ use futures::future::try_join_all;
 use futures::future::try_join3;
 use hikari_config::module::next_session::Next;
 use hikari_db::module::session::status;
+use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::util::{FlattenTransactionResultExt, InspectTransactionError};
 use hikari_model::history::{HistoryEntry, HistoryEntryType};
 use hikari_model::module::ModuleFull;
 use hikari_model::module::group::ModuleGroupeFull;
 use hikari_model::module::session::SessionFull;
 use hikari_model::module::session::instance::SessionInstance;
-use hikari_model_tools::convert::IntoModel;
+use hikari_model::planner::{ImportableMilestone, PlannerMilestone};
+use hikari_model_tools::convert::{FromDbModel, IntoModel};
 use hikari_utils::loader::LoaderTrait;
 use http::{HeaderValue, StatusCode, header};
 use protect_axum::protect;
@@ -59,6 +61,8 @@ where
             "/{module}",
             Router::new()
                 .route("/", get(get_module))
+                .route("/milestones", get(get_module_milestones))
+                .route("/milestones/import", post(import_module_milestones))
                 .nest("/assessments/{pre_post}", assessment::create_router())
                 .nest("/quizzes", quiz::create_router())
                 .nest(
@@ -253,6 +257,103 @@ pub(crate) async fn get_module(
         module_status.and_then(|status| status.completion).map(|c| c.and_utc()),
     );
     Ok(Json(res).into_response())
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/modules/{module}/milestones",
+    responses(
+        (status = OK, description = "Module-defined milestones with import state", body = [ImportableMilestone]),
+        (status = NOT_FOUND, description = "Module not found"),
+    ),
+    params(("module" = String, Path, description = "module id")),
+    tag = "v0/modules",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_module_milestones(
+    ExtractUser(user): ExtractUser,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(module_id): Path<String>,
+) -> Result<impl IntoResponse, ModuleError> {
+    let module = app_config
+        .module_config()
+        .get_for_group(&module_id, &user.groups)
+        .ok_or(modules::error::ModuleError::ModuleNotFound)?
+        .clone();
+
+    let imported: HashSet<String> =
+        hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id)
+            .await?
+            .into_iter()
+            .collect();
+
+    let result: Vec<ImportableMilestone> = module
+        .milestones
+        .into_iter()
+        .map(|m| ImportableMilestone {
+            already_imported: imported.contains(&m.id),
+            id: m.id,
+            title: m.title,
+            date: m.date,
+            description: m.description,
+        })
+        .collect();
+
+    Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/modules/{module}/milestones/import",
+    responses(
+        (status = CREATED, description = "Imported milestones", body = [PlannerMilestone]),
+        (status = NOT_FOUND, description = "Module not found"),
+    ),
+    params(("module" = String, Path, description = "module id")),
+    tag = "v0/modules",
+    security(("token" = []))
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn import_module_milestones(
+    ExtractUser(user): ExtractUser,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(module_id): Path<String>,
+) -> Result<impl IntoResponse, ModuleError> {
+    let module = app_config
+        .module_config()
+        .get_for_group(&module_id, &user.groups)
+        .ok_or(modules::error::ModuleError::ModuleNotFound)?
+        .clone();
+
+    let already: HashSet<String> =
+        hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id)
+            .await?
+            .into_iter()
+            .collect();
+
+    let inputs: Vec<MilestoneInput> = module
+        .milestones
+        .into_iter()
+        .filter(|m| !already.contains(&m.id))
+        .map(|m| MilestoneInput {
+            title: m.title,
+            date: m.date,
+            description: m.description,
+            module_id: Some(module_id.clone()),
+            origin_id: Some(m.id),
+        })
+        .collect();
+
+    let created = hikari_db::planner::planner_milestone::Mutation::import_milestones(&conn, user.id, inputs).await?;
+    let created = created
+        .into_iter()
+        .map(FromDbModel::from_db_model)
+        .collect::<Vec<PlannerMilestone>>();
+
+    Ok((StatusCode::CREATED, Json(created)))
 }
 
 #[utoipa::path(

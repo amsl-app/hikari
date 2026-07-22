@@ -9,8 +9,7 @@ pub struct PlannerEntryInput {
     pub date: NaiveDate,
     pub title: String,
     pub priority: i32,
-    pub module_id: Option<String>,
-    pub session_id: Option<String>,
+    pub milestone_id: Option<Uuid>,
 }
 
 pub struct Mutation;
@@ -22,8 +21,7 @@ impl Mutation {
         date: NaiveDate,
         title: String,
         priority: i32,
-        module_id: Option<String>,
-        session_id: Option<String>,
+        milestone_id: Option<Uuid>,
     ) -> Result<PlannerEntryModel, DbErr> {
         let entry = ActiveModel {
             id: ActiveValue::Set(Uuid::new_v4()),
@@ -32,8 +30,7 @@ impl Mutation {
             title: ActiveValue::Set(title),
             completed: ActiveValue::Set(false),
             priority: ActiveValue::Set(priority),
-            module_id: ActiveValue::Set(module_id),
-            session_id: ActiveValue::Set(session_id),
+            milestone_id: ActiveValue::Set(milestone_id),
             created_at: NotSet,
             updated_at: NotSet,
         };
@@ -55,7 +52,7 @@ impl Mutation {
         })
     }
 
-    pub async fn create_planner_entries_bulk<C: ConnectionTrait>(
+    pub async fn create_planner_entries<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         entries: Vec<PlannerEntryInput>,
@@ -74,8 +71,7 @@ impl Mutation {
             title: ActiveValue::Set(input.title),
             completed: ActiveValue::Set(false),
             priority: ActiveValue::Set(input.priority),
-            module_id: ActiveValue::Set(input.module_id),
-            session_id: ActiveValue::Set(input.session_id),
+            milestone_id: ActiveValue::Set(input.milestone_id),
             created_at: NotSet,
             updated_at: NotSet,
         });

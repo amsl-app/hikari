@@ -4,7 +4,10 @@ use crate::{
     generic::{Metadata, Theme},
     module::{
         ModuleCategory,
-        v01::{assessment::ModuleAssessmentV01, content::ContentV01, feature::FeatureV01, session::SessionV01},
+        v01::{
+            assessment::ModuleAssessmentV01, content::ContentV01, feature::FeatureV01, milestone::ModuleMilestoneV01,
+            session::SessionV01,
+        },
     },
 };
 use schemars::JsonSchema;
@@ -33,6 +36,10 @@ pub struct ModuleV01 {
     /// # Sessions available in the module
     /// A session is a chatbot conversation covering a specific topic within the module
     pub(crate) sessions: Vec<SessionV01>,
+    #[serde(default)]
+    /// # Milestones defined by the module
+    /// Users can import these into their planner as dated goals
+    pub(crate) milestones: Vec<ModuleMilestoneV01>,
     #[serde(default, rename = "self-learning")]
     /// # Self-learning feature of the module
     /// Self learning is a additional session which covers every unlocked content in the module
@@ -78,4 +85,42 @@ pub struct ModuleV01 {
     pub(crate) groups_blacklist: Vec<String>,
     #[schemars(with = "Option<HashMap<String, serde_json::Value>>")]
     pub(crate) custom: Option<HashMap<String, yaml_serde::Value>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_module_milestones() {
+        let yaml = r#"
+id: mod-a
+title: Module A
+sessions: []
+module-groups: []
+milestones:
+  - id: exam-1
+    title: Midterm Exam
+    date: 2026-08-01
+    description: The midterm
+  - id: exam-2
+    title: Final Exam
+    date: 2026-09-01
+"#;
+        let module: ModuleV01 = yaml_serde::from_str(yaml).expect("module parses");
+        assert_eq!(module.milestones.len(), 2);
+        assert_eq!(module.milestones[0].id, "exam-1");
+        assert_eq!(
+            module.milestones[0].date,
+            chrono::NaiveDate::from_ymd_opt(2026, 8, 1).unwrap()
+        );
+        assert!(module.milestones[1].description.is_none());
+    }
+
+    #[test]
+    fn milestones_default_empty() {
+        let yaml = "id: mod-a\ntitle: Module A\nsessions: []\nmodule-groups: []\n";
+        let module: ModuleV01 = yaml_serde::from_str(yaml).expect("module parses");
+        assert!(module.milestones.is_empty());
+    }
 }

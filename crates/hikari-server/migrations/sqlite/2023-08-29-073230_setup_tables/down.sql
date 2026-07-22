@@ -37,3 +37,5 @@ DROP TABLE quiz_sessions;
 DROP TABLE question;
 DROP TABLE quiz_score;
 DROP TABLE user_context_logs;
+DROP TABLE planner_milestone;
+DROP TABLE planner_ical_token;

@@ -4,24 +4,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantModule {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantSession {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PlannerAssistantExistingEntry {
-    pub date: NaiveDate,
-    pub title: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlannerAssistantRequest {
     pub text: String,
     /// Client's local date for resolving relative expressions like "tomorrow". Falls back to UTC if absent.
@@ -39,11 +21,42 @@ pub struct PlannerEntry {
     pub completed: bool,
     pub priority: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub module_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
+    pub milestone_id: Option<Uuid>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+}
+
+/// A planner entry with its milestone embedded (instead of just the milestone id) to save extra lookups.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerEntryFull {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub date: NaiveDate,
+    pub title: String,
+    pub completed: bool,
+    pub priority: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<PlannerMilestone>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+impl PlannerEntry {
+    #[must_use]
+    pub fn as_entry_full(&self, milestone: Option<PlannerMilestone>) -> PlannerEntryFull {
+        PlannerEntryFull {
+            id: self.id,
+            user_id: self.user_id,
+            date: self.date,
+            title: self.title.clone(),
+            completed: self.completed,
+            priority: self.priority,
+            milestone,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -57,7 +70,79 @@ pub struct NewPlannerEntry {
     pub title: String,
     pub priority: i32,
     #[serde(default)]
+    pub milestone_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerMilestone {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub module_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_id: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+/// A milestone with its planner entries embedded, requested via the `deep` query param.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PlannerMilestoneFull {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_id: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<PlannerEntry>,
+}
+
+impl PlannerMilestone {
+    #[must_use]
+    pub fn as_milestone_full(&self, deep: bool, entries: Vec<PlannerEntry>) -> PlannerMilestoneFull {
+        PlannerMilestoneFull {
+            id: self.id,
+            user_id: self.user_id,
+            title: self.title.clone(),
+            date: self.date,
+            description: self.description.clone(),
+            module_id: self.module_id.clone(),
+            origin_id: self.origin_id.clone(),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            entries: if deep { entries } else { Vec::new() },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NewPlannerMilestone {
+    pub title: String,
+    pub date: NaiveDate,
     #[serde(default)]
-    pub session_id: Option<String>,
+    pub description: Option<String>,
+}
+
+/// A module-defined milestone the user may import, annotated with whether it is already present.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ImportableMilestone {
+    pub id: String,
+    pub title: String,
+    pub date: NaiveDate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub already_imported: bool,
 }
