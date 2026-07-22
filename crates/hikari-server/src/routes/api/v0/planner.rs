@@ -163,11 +163,10 @@ pub(crate) async fn update_planner_entry(
     Extension(conn): Extension<DatabaseConnection>,
     Json(changes): Json<PlannerEntryChanges>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let (existing, existing_milestone) = planner::planner_entry::Query::get_user_planner_entry_with_milestone(
-        &conn, user, id,
-    )
-    .await?
-    .ok_or(PlannerError::NotFound)?;
+    let (existing, existing_milestone) =
+        planner::planner_entry::Query::get_user_planner_entry_with_milestone(&conn, user, id)
+            .await?
+            .ok_or(PlannerError::NotFound)?;
 
     let mut active_model = hikari_entity::planner_entry::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),

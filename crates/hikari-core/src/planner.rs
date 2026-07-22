@@ -136,6 +136,7 @@ fn build_system_prompt(
     if !milestones.is_empty() {
         content.push_str("Available milestones (use the exact ID when assigning):\n");
         for m in milestones {
+            // Writing to a String can't fail.
             let _ = writeln!(content, "- \"{}\": {} (due {})", m.id, m.title, m.date);
         }
         content.push('\n');
@@ -144,6 +145,7 @@ fn build_system_prompt(
     if !existing_entries.is_empty() {
         content.push_str("Already planned entries (for context, avoid creating duplicates):\n");
         for e in existing_entries {
+            // Writing to a String can't fail.
             let _ = writeln!(content, "- {}: {}", e.date, e.title);
         }
         content.push('\n');
