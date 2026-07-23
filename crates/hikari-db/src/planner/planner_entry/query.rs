@@ -37,6 +37,7 @@ impl Query {
         user_id: Uuid,
         from: Option<NaiveDate>,
         to: Option<NaiveDate>,
+        unchecked: Option<bool>,
     ) -> Result<Vec<(PlannerEntryModel, Option<PlannerMilestoneModel>)>, DbErr> {
         let mut query = PlannerEntry::find()
             .filter(hikari_entity::planner_entry::Column::UserId.eq(user_id))
@@ -47,6 +48,9 @@ impl Query {
         }
         if let Some(to) = to {
             query = query.filter(hikari_entity::planner_entry::Column::Date.lte(to));
+        }
+        if unchecked == Some(true) {
+            query = query.filter(hikari_entity::planner_entry::Column::Completed.eq(false));
         }
 
         let entries = query.find_also_related(PlannerMilestone).all(db).await;
