@@ -23,10 +23,8 @@ impl Mutation {
         user_id: Uuid,
         id: Uuid,
     ) -> Result<PlannerEntryWithEffectiveDate, DbErr> {
-        Query::get_user_planner_entries_by_ids(db, user_id, vec![id])
+        Query::get_entry_by_id(db, user_id, id)
             .await?
-            .into_iter()
-            .next()
             .ok_or_else(|| DbErr::RecordNotFound(format!("planner entry {id} not found after write")))
     }
 
@@ -110,7 +108,7 @@ impl Mutation {
                 tracing::error!(error = %error, "failed to bulk create planner entries");
             })?;
 
-        let mut models = Query::get_user_planner_entries_by_ids(db, user_id, ids).await?;
+        let mut models = Query::get_entries_by_ids(db, user_id, ids).await?;
 
         models.sort_by_key(|m| order.get(&m.id).copied().unwrap_or(usize::MAX));
         Ok(models)

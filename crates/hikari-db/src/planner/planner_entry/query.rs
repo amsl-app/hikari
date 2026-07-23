@@ -24,7 +24,7 @@ fn effective_date_expr(today: NaiveDate) -> SimpleExpr {
 }
 
 impl Query {
-    pub async fn get_user_planner_entries<C: ConnectionTrait>(
+    pub async fn get_entries_by_range<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         from: Option<NaiveDate>,
@@ -51,8 +51,48 @@ impl Query {
         })
     }
 
+    pub async fn get_entries_by_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        ids: Vec<Uuid>,
+    ) -> Result<Vec<PlannerEntryWithEffectiveDate>, DbErr> {
+        let today = chrono::Local::now().date_naive();
+
+        let entries = PlannerEntry::find()
+            .filter(PlannerEntryColumn::UserId.eq(user_id))
+            .filter(PlannerEntryColumn::Id.is_in(ids))
+            .column_as(effective_date_expr(today), "effective_date")
+            .into_model::<PlannerEntryWithEffectiveDate>()
+            .all(db)
+            .await;
+
+        entries.inspect_err(|error| {
+            tracing::error!(error = %error, "failed to load user planner entries by ids");
+        })
+    }
+
+    pub async fn get_entry_by_id<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<PlannerEntryWithEffectiveDate>, DbErr> {
+        let today = chrono::Local::now().date_naive();
+
+        let entry = PlannerEntry::find()
+            .filter(PlannerEntryColumn::UserId.eq(user_id))
+            .filter(PlannerEntryColumn::Id.eq(id))
+            .column_as(effective_date_expr(today), "effective_date")
+            .into_model::<PlannerEntryWithEffectiveDate>()
+            .one(db)
+            .await;
+
+        entry.inspect_err(|error| {
+            tracing::error!(error = %error, "failed to load user planner entry with milestone");
+        })
+    }
+
     /// Same as `get_user_planner_entries`, but also loads each entry's milestone in the same query (LEFT JOIN).
-    pub async fn get_user_planner_entries_with_milestone<C: ConnectionTrait>(
+    pub async fn get_entries_with_milestone_by_range<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         from: Option<NaiveDate>,
@@ -87,8 +127,7 @@ impl Query {
         })
     }
 
-    /// Loads a user's planner entry along with its milestone in the same query (LEFT JOIN).
-    pub async fn get_user_planner_entry_with_milestone<C: ConnectionTrait>(
+    pub async fn get_entry_with_milestone_by_id<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
         id: Uuid,
@@ -105,27 +144,6 @@ impl Query {
 
         entry.inspect_err(|error| {
             tracing::error!(error = %error, "failed to load user planner entry with milestone");
-        })
-    }
-
-    /// Loads a user's planner entries by id, with `effective_date` computed in SQL.
-    pub async fn get_user_planner_entries_by_ids<C: ConnectionTrait>(
-        db: &C,
-        user_id: Uuid,
-        ids: Vec<Uuid>,
-    ) -> Result<Vec<PlannerEntryWithEffectiveDate>, DbErr> {
-        let today = chrono::Local::now().date_naive();
-
-        let entries = PlannerEntry::find()
-            .filter(PlannerEntryColumn::UserId.eq(user_id))
-            .filter(PlannerEntryColumn::Id.is_in(ids))
-            .column_as(effective_date_expr(today), "effective_date")
-            .into_model::<PlannerEntryWithEffectiveDate>()
-            .all(db)
-            .await;
-
-        entries.inspect_err(|error| {
-            tracing::error!(error = %error, "failed to load user planner entries by ids");
         })
     }
 

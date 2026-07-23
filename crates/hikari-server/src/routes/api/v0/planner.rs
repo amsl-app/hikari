@@ -102,7 +102,7 @@ pub(crate) async fn get_planner_entries(
     Extension(conn): Extension<DatabaseConnection>,
     Query(filter): Query<DateRangeFilter>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let entries = planner::planner_entry::Query::get_user_planner_entries_with_milestone(
+    let entries = planner::planner_entry::Query::get_entries_with_milestone_by_range(
         &conn,
         user,
         filter.from,
@@ -140,7 +140,7 @@ pub(crate) async fn get_planner_entry(
     Path(id): Path<Uuid>,
     Extension(conn): Extension<DatabaseConnection>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let (entry, milestone) = planner::planner_entry::Query::get_user_planner_entry_with_milestone(&conn, user, id)
+    let (entry, milestone) = planner::planner_entry::Query::get_entry_with_milestone_by_id(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
 
@@ -173,7 +173,7 @@ pub(crate) async fn update_planner_entry(
     Json(changes): Json<PlannerEntryChanges>,
 ) -> Result<impl IntoResponse, PlannerError> {
     let (existing, existing_milestone) =
-        planner::planner_entry::Query::get_user_planner_entry_with_milestone(&conn, user, id)
+        planner::planner_entry::Query::get_entry_with_milestone_by_id(&conn, user, id)
             .await?
             .ok_or(PlannerError::NotFound)?;
 
@@ -306,7 +306,7 @@ pub(crate) async fn get_planner_ical(
         .ok_or(PlannerError::NotFound)?;
 
     let entries =
-        planner::planner_entry::Query::get_user_planner_entries_with_milestone(&conn, user_id, None, None, None)
+        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, None)
             .await?;
 
     let body = build_ical(entries);
@@ -438,7 +438,7 @@ pub(crate) async fn get_milestones(
 
     let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
     if deep {
-        let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user, None, None).await?;
+        let entries = planner::planner_entry::Query::get_entries_by_range(&conn, user, None, None).await?;
         for entry in entries {
             if let Some(milestone_id) = entry.milestone_id {
                 entries_by_milestone
@@ -617,7 +617,7 @@ pub(crate) async fn planner_assistant(
         .collect();
 
     let existing_db =
-        planner::planner_entry::Query::get_user_planner_entries(&conn, user.id, Some(today), None).await?;
+        planner::planner_entry::Query::get_entries_by_range(&conn, user.id, Some(today), None).await?;
     let existing_entries: Vec<hikari_core::planner::PlannerAssistantExistingEntry> = existing_db
         .into_iter()
         .map(|e| hikari_core::planner::PlannerAssistantExistingEntry {
@@ -693,7 +693,7 @@ fn build_ical(
         .map(|(entry, milestone)| {
             let overdue = entry.effective_date != entry.date;
             let summary = if overdue {
-                format!("OVERDUE: {}", entry.title)
+                format!("ÜBERFÄLLIG: {}", entry.title)
             } else {
                 entry.title.clone()
             };
@@ -703,7 +703,7 @@ fn build_ical(
                 description_lines.push(format!("Milestone: {}", milestone.title));
             }
             if overdue {
-                description_lines.push(format!("Originally due: {}", entry.date.format("%Y-%m-%d")));
+                description_lines.push(format!("Ursprünglich fällig: {}", entry.date.format("%Y-%m-%d")));
             }
             let description = (!description_lines.is_empty()).then(|| description_lines.join("\n"));
 
@@ -958,8 +958,8 @@ END:VCALENDAR\r\n",
 
         let res = build_ical(vec![(entry, milestone)]);
 
-        assert!(res.contains("SUMMARY:OVERDUE: Task\r\n"));
-        assert!(res.contains("DESCRIPTION:Originally due: 1970-01-01\r\n"));
+        assert!(res.contains("SUMMARY:ÜBERFÄLLIG: Task\r\n"));
+        assert!(res.contains("DESCRIPTION:Ursprünglich fällig: 1970-01-01\r\n"));
         assert!(res.contains("DTSTART;VALUE=DATE:19700105\r\n"));
     }
 
@@ -1003,8 +1003,8 @@ END:VCALENDAR\r\n",
 
         let res = build_ical(vec![(entry, Some(milestone))]);
 
-        assert!(res.contains("SUMMARY:OVERDUE: Task\r\n"));
-        assert!(res.contains("DESCRIPTION:Milestone: Launch\\nOriginally due: 1970-01-01\r\n"));
+        assert!(res.contains("SUMMARY:ÜBERFÄLLIG: Task\r\n"));
+        assert!(res.contains("DESCRIPTION:Milestone: Launch\\nUrsprünglich fällig: 1970-01-01\r\n"));
     }
 
     #[test]
