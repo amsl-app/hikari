@@ -12,6 +12,7 @@ use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
+use hikari_entity::planner_milestone::Model as PlannerMilestoneModel;
 use hikari_model::planner::{
     NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerEntryFull, PlannerIcalToken,
     PlannerMilestone, PlannerMilestoneFull,
@@ -101,7 +102,6 @@ pub(crate) async fn get_planner_entries(
     Extension(conn): Extension<DatabaseConnection>,
     Query(filter): Query<DateRangeFilter>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let today = chrono::Utc::now().date_naive();
     let entries = planner::planner_entry::Query::get_user_planner_entries_with_milestone(
         &conn,
         user,
@@ -113,9 +113,7 @@ pub(crate) async fn get_planner_entries(
     let entries = entries
         .into_iter()
         .map(|(entry, milestone)| {
-            PlannerEntry::from_db_model(entry)
-                .with_effective_date(today)
-                .as_entry_full(milestone.map(PlannerMilestone::from_db_model))
+            PlannerEntry::from_db_model(entry).as_entry_full(milestone.map(PlannerMilestone::from_db_model))
         })
         .collect::<Vec<PlannerEntryFull>>();
     Ok(Json(entries))
@@ -145,11 +143,9 @@ pub(crate) async fn get_planner_entry(
     let (entry, milestone) = planner::planner_entry::Query::get_user_planner_entry_with_milestone(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
-    let today = chrono::Utc::now().date_naive();
+
     Ok(Json(
-        PlannerEntry::from_db_model(entry)
-            .with_effective_date(today)
-            .as_entry_full(milestone.map(PlannerMilestone::from_db_model)),
+        PlannerEntry::from_db_model(entry).as_entry_full(milestone.map(PlannerMilestone::from_db_model)),
     ))
 }
 
@@ -217,12 +213,8 @@ pub(crate) async fn update_planner_entry(
     };
 
     let updated = planner::planner_entry::Mutation::update_planner_entry(&conn, active_model).await?;
-    let today = chrono::Utc::now().date_naive();
-    Ok(Json(
-        PlannerEntry::from_db_model(updated)
-            .with_effective_date(today)
-            .as_entry_full(milestone),
-    ))
+
+    Ok(Json(PlannerEntry::from_db_model(updated).as_entry_full(milestone)))
 }
 
 #[utoipa::path(
@@ -313,7 +305,9 @@ pub(crate) async fn get_planner_ical(
         .await?
         .ok_or(PlannerError::NotFound)?;
 
-    let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user_id, None, None).await?;
+    let entries =
+        planner::planner_entry::Query::get_user_planner_entries_with_milestone(&conn, user_id, None, None, None)
+            .await?;
 
     let body = build_ical(entries);
     Ok((
@@ -368,14 +362,12 @@ pub(crate) async fn create_planner_entries(
     };
 
     let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;
-    let today = chrono::Utc::now().date_naive();
+
     let entries = created
         .into_iter()
         .map(|entry| {
             let milestone = entry.milestone_id.and_then(|id| milestones_by_id.get(&id).cloned());
-            PlannerEntry::from_db_model(entry)
-                .with_effective_date(today)
-                .as_entry_full(milestone)
+            PlannerEntry::from_db_model(entry).as_entry_full(milestone)
         })
         .collect::<Vec<PlannerEntryFull>>();
     Ok((StatusCode::CREATED, Json(entries)))
@@ -446,14 +438,13 @@ pub(crate) async fn get_milestones(
 
     let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
     if deep {
-        let today = chrono::Utc::now().date_naive();
         let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user, None, None).await?;
         for entry in entries {
             if let Some(milestone_id) = entry.milestone_id {
                 entries_by_milestone
                     .entry(milestone_id)
                     .or_default()
-                    .push(PlannerEntry::from_db_model(entry).with_effective_date(today));
+                    .push(PlannerEntry::from_db_model(entry));
             }
         }
     }
@@ -518,10 +509,10 @@ pub(crate) async fn get_milestone(
     let milestone = PlannerMilestone::from_db_model(milestone);
 
     let entries = planner::planner_entry::Query::get_milestone_entries(&conn, user, id).await?;
-    let today = chrono::Utc::now().date_naive();
+
     let entries = entries
         .into_iter()
-        .map(|entry| PlannerEntry::from_db_model(entry).with_effective_date(today))
+        .map(PlannerEntry::from_db_model)
         .collect::<Vec<PlannerEntry>>();
 
     Ok(Json(milestone.as_milestone_full(true, entries)))
@@ -676,25 +667,68 @@ macro_rules! push_ical_line {
     }
 }
 
-fn ascii_ical_len<'a, I: Iterator<Item = &'a str>>(entries: I) -> usize {
+fn ascii_ical_len<'a, I: Iterator<Item = (&'a str, Option<&'a str>)>>(entries: I) -> usize {
     let mut total = 81;
-    for entry in entries {
+    for (summary, description) in entries {
         total += 175;
-        total += ical_fold_required_ascii_space("SUMMARY".len(), entry);
+        total += ical_fold_required_ascii_space("SUMMARY".len(), summary);
+        if let Some(description) = description {
+            total += ical_fold_required_ascii_space("DESCRIPTION".len(), description);
+        }
     }
     total += 15;
     total
 }
 
-fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
+/// An entry is overdue when its effective date (pulled forward to today because it's unchecked
+/// and past due) differs from its original date.
+fn build_ical(
+    entries: Vec<(
+        hikari_entity::planner_entry::PlannerEntryWithEffectiveDate,
+        Option<PlannerMilestoneModel>,
+    )>,
+) -> String {
+    let events: Vec<_> = entries
+        .into_iter()
+        .map(|(entry, milestone)| {
+            let overdue = entry.effective_date != entry.date;
+            let summary = if overdue {
+                format!("OVERDUE: {}", entry.title)
+            } else {
+                entry.title.clone()
+            };
+
+            let mut description_lines = Vec::new();
+            if let Some(milestone) = milestone {
+                description_lines.push(format!("Milestone: {}", milestone.title));
+            }
+            if overdue {
+                description_lines.push(format!("Originally due: {}", entry.date.format("%Y-%m-%d")));
+            }
+            let description = (!description_lines.is_empty()).then(|| description_lines.join("\n"));
+
+            (entry, summary, description)
+        })
+        .collect();
+
     // We reserve enough space to avoid reallocations in the simple case, where all entries are ASCII or contain very few special characters.
     // We extra some space to avoid reallocations in case a special character falls into a folding point. (3 bytes overhead per extra line)
-    let mut out = String::with_capacity(ascii_ical_len(entries.iter().map(|entry| entry.title.as_str())) + 3 * 2);
+    let mut out = String::with_capacity(
+        ascii_ical_len(
+            events
+                .iter()
+                .map(|(_, summary, description)| (summary.as_str(), description.as_deref())),
+        ) + 3 * 2,
+    );
     out.push_str("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
 
-    for entry in entries {
-        let start = entry.date.format("%Y%m%d");
-        let end = entry.date.succ_opt().unwrap_or(entry.date).format("%Y%m%d");
+    for (entry, summary, description) in events {
+        let start = entry.effective_date.format("%Y%m%d");
+        let end = entry
+            .effective_date
+            .succ_opt()
+            .unwrap_or(entry.effective_date)
+            .format("%Y%m%d");
         let status = if entry.completed { "CANCELLED" } else { "CONFIRMED" };
         let dtstamp = entry.updated_at.format("%Y%m%dT%H%M%SZ");
 
@@ -703,7 +737,10 @@ fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
         push_ical_line!(out, key: "DTSTAMP", date: dtstamp);
         push_ical_line!(out, key: "DTSTART;VALUE=DATE", date: start);
         push_ical_line!(out, key: "DTEND;VALUE=DATE", date: end);
-        ical_fold_line(&mut out, "SUMMARY", &ical_escape(&entry.title));
+        ical_fold_line(&mut out, "SUMMARY", &ical_escape(&summary));
+        if let Some(description) = description {
+            ical_fold_line(&mut out, "DESCRIPTION", &ical_escape(&description));
+        }
         push_ical_line!(out, key: "STATUS", value: status);
         out.push_str("END:VEVENT\r\n");
     }
@@ -802,18 +839,25 @@ END:VCALENDAR\r\n",
         )
     }
 
-    fn create_planner_entry(value: &str) -> hikari_entity::planner_entry::Model {
-        hikari_entity::planner_entry::Model {
+    fn create_planner_entry(
+        value: &str,
+    ) -> (
+        hikari_entity::planner_entry::PlannerEntryWithEffectiveDate,
+        Option<PlannerMilestoneModel>,
+    ) {
+        let entry = hikari_entity::planner_entry::PlannerEntryWithEffectiveDate {
             id: Default::default(),
             user_id: Default::default(),
             date: Default::default(),
+            effective_date: Default::default(),
             title: value.to_string(),
             completed: false,
             priority: 0,
             milestone_id: None,
             created_at: Default::default(),
             updated_at: Default::default(),
-        }
+        };
+        (entry, None)
     }
 
     const ICAL_TEST_VALUES: [(&str, &str); 3] = [
@@ -904,6 +948,63 @@ END:VCALENDAR\r\n",
             "Calculated capacity does not match expected capacity for value: {}",
             value
         );
+    }
+
+    #[test]
+    fn test_build_ical_overdue_entry() {
+        let (mut entry, milestone) = create_planner_entry("Task");
+        entry.date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+        entry.effective_date = NaiveDate::from_ymd_opt(1970, 1, 5).unwrap();
+
+        let res = build_ical(vec![(entry, milestone)]);
+
+        assert!(res.contains("SUMMARY:OVERDUE: Task\r\n"));
+        assert!(res.contains("DESCRIPTION:Originally due: 1970-01-01\r\n"));
+        assert!(res.contains("DTSTART;VALUE=DATE:19700105\r\n"));
+    }
+
+    #[test]
+    fn test_build_ical_with_milestone() {
+        let (entry, _) = create_planner_entry("Task");
+        let milestone = PlannerMilestoneModel {
+            id: Default::default(),
+            user_id: Default::default(),
+            title: "Launch".to_string(),
+            date: Default::default(),
+            description: None,
+            module_id: None,
+            origin_id: None,
+            created_at: Default::default(),
+            updated_at: Default::default(),
+        };
+
+        let res = build_ical(vec![(entry, Some(milestone))]);
+
+        assert!(res.contains("SUMMARY:Task\r\n"));
+        assert!(res.contains("DESCRIPTION:Milestone: Launch\r\n"));
+    }
+
+    #[test]
+    fn test_build_ical_overdue_entry_with_milestone() {
+        let (mut entry, _) = create_planner_entry("Task");
+        entry.date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+        entry.effective_date = NaiveDate::from_ymd_opt(1970, 1, 5).unwrap();
+        let milestone = PlannerMilestoneModel {
+            id: Default::default(),
+            user_id: Default::default(),
+            title: "Launch".to_string(),
+            date: Default::default(),
+            description: None,
+            module_id: None,
+            origin_id: None,
+            created_at: Default::default(),
+            updated_at: Default::default(),
+        };
+
+        let res = build_ical(vec![(entry, Some(milestone))]);
+
+        assert!(res.contains("SUMMARY:OVERDUE: Task\r\n"));
+        assert!(res.contains("DESCRIPTION:Milestone: Launch\\nOriginally due: 1970-01-01\r\n"));
     }
 
     #[test]

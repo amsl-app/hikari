@@ -1,15 +1,15 @@
 use crate::convert::FromDbModel;
-use hikari_entity::planner_entry::Model as PlannerEntryModel;
+use hikari_entity::planner_entry::PlannerEntryWithEffectiveDate;
 use hikari_entity::planner_milestone::Model as PlannerMilestoneModel;
 use hikari_model::planner::{PlannerEntry, PlannerMilestone};
 
-impl FromDbModel<PlannerEntryModel> for PlannerEntry {
-    fn from_db_model(model: PlannerEntryModel) -> Self {
+impl FromDbModel<PlannerEntryWithEffectiveDate> for PlannerEntry {
+    fn from_db_model(model: PlannerEntryWithEffectiveDate) -> Self {
         Self {
             id: model.id,
             user_id: model.user_id,
             date: model.date,
-            effective_date: model.date,
+            effective_date: model.effective_date,
             title: model.title,
             completed: model.completed,
             priority: model.priority,

@@ -60,18 +60,6 @@ impl PlannerEntry {
             updated_at: self.updated_at,
         }
     }
-
-    /// Computes the date clients should treat this entry as due: `date`, unless the entry
-    /// is unchecked and `date` is in the past, in which case it's `today`.
-    #[must_use]
-    pub fn with_effective_date(mut self, today: NaiveDate) -> Self {
-        self.effective_date = if !self.completed && self.date < today {
-            today
-        } else {
-            self.date
-        };
-        self
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -160,56 +148,4 @@ pub struct ImportableMilestone {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub already_imported: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Duration;
-
-    fn make_entry(date: NaiveDate, completed: bool) -> PlannerEntry {
-        PlannerEntry {
-            id: Uuid::new_v4(),
-            user_id: Uuid::new_v4(),
-            date,
-            effective_date: date,
-            title: "test".to_string(),
-            completed,
-            priority: 0,
-            milestone_id: None,
-            created_at: NaiveDateTime::default(),
-            updated_at: NaiveDateTime::default(),
-        }
-    }
-
-    #[test]
-    fn test_effective_date_unchecked_past_becomes_today() {
-        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
-        let past = today - Duration::days(3);
-        let entry = make_entry(past, false).with_effective_date(today);
-        assert_eq!(entry.effective_date, today);
-    }
-
-    #[test]
-    fn test_effective_date_checked_past_stays_date() {
-        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
-        let past = today - Duration::days(3);
-        let entry = make_entry(past, true).with_effective_date(today);
-        assert_eq!(entry.effective_date, past);
-    }
-
-    #[test]
-    fn test_effective_date_future_stays_date() {
-        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
-        let future = today + Duration::days(3);
-        let entry = make_entry(future, false).with_effective_date(today);
-        assert_eq!(entry.effective_date, future);
-    }
-
-    #[test]
-    fn test_effective_date_today_stays_date() {
-        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
-        let entry = make_entry(today, false).with_effective_date(today);
-        assert_eq!(entry.effective_date, today);
-    }
 }
