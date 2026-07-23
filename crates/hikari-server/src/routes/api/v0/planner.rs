@@ -172,10 +172,9 @@ pub(crate) async fn update_planner_entry(
     Extension(conn): Extension<DatabaseConnection>,
     Json(changes): Json<PlannerEntryChanges>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let (existing, existing_milestone) =
-        planner::planner_entry::Query::get_entry_with_milestone_by_id(&conn, user, id)
-            .await?
-            .ok_or(PlannerError::NotFound)?;
+    let (existing, existing_milestone) = planner::planner_entry::Query::get_entry_with_milestone_by_id(&conn, user, id)
+        .await?
+        .ok_or(PlannerError::NotFound)?;
 
     let mut active_model = hikari_entity::planner_entry::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),
@@ -306,8 +305,7 @@ pub(crate) async fn get_planner_ical(
         .ok_or(PlannerError::NotFound)?;
 
     let entries =
-        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, None)
-            .await?;
+        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, None).await?;
 
     let body = build_ical(entries);
     Ok((
@@ -616,8 +614,7 @@ pub(crate) async fn planner_assistant(
         })
         .collect();
 
-    let existing_db =
-        planner::planner_entry::Query::get_entries_by_range(&conn, user.id, Some(today), None).await?;
+    let existing_db = planner::planner_entry::Query::get_entries_by_range(&conn, user.id, Some(today), None).await?;
     let existing_entries: Vec<hikari_core::planner::PlannerAssistantExistingEntry> = existing_db
         .into_iter()
         .map(|e| hikari_core::planner::PlannerAssistantExistingEntry {
