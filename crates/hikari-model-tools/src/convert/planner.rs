@@ -9,6 +9,7 @@ impl FromDbModel<PlannerEntryModel> for PlannerEntry {
             id: model.id,
             user_id: model.user_id,
             date: model.date,
+            effective_date: model.date,
             title: model.title,
             completed: model.completed,
             priority: model.priority,

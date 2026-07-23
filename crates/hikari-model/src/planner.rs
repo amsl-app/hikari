@@ -17,6 +17,7 @@ pub struct PlannerEntry {
     #[serde(skip_serializing)]
     pub user_id: Uuid,
     pub date: NaiveDate,
+    pub effective_date: NaiveDate,
     pub title: String,
     pub completed: bool,
     pub priority: i32,
@@ -33,6 +34,7 @@ pub struct PlannerEntryFull {
     #[serde(skip_serializing)]
     pub user_id: Uuid,
     pub date: NaiveDate,
+    pub effective_date: NaiveDate,
     pub title: String,
     pub completed: bool,
     pub priority: i32,
@@ -49,6 +51,7 @@ impl PlannerEntry {
             id: self.id,
             user_id: self.user_id,
             date: self.date,
+            effective_date: self.effective_date,
             title: self.title.clone(),
             completed: self.completed,
             priority: self.priority,
@@ -56,6 +59,18 @@ impl PlannerEntry {
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
+    }
+
+    /// Computes the date clients should treat this entry as due: `date`, unless the entry
+    /// is unchecked and `date` is in the past, in which case it's `today`.
+    #[must_use]
+    pub fn with_effective_date(mut self, today: NaiveDate) -> Self {
+        self.effective_date = if !self.completed && self.date < today {
+            today
+        } else {
+            self.date
+        };
+        self
     }
 }
 
@@ -145,4 +160,56 @@ pub struct ImportableMilestone {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub already_imported: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    fn make_entry(date: NaiveDate, completed: bool) -> PlannerEntry {
+        PlannerEntry {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            date,
+            effective_date: date,
+            title: "test".to_string(),
+            completed,
+            priority: 0,
+            milestone_id: None,
+            created_at: NaiveDateTime::default(),
+            updated_at: NaiveDateTime::default(),
+        }
+    }
+
+    #[test]
+    fn test_effective_date_unchecked_past_becomes_today() {
+        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
+        let past = today - Duration::days(3);
+        let entry = make_entry(past, false).with_effective_date(today);
+        assert_eq!(entry.effective_date, today);
+    }
+
+    #[test]
+    fn test_effective_date_checked_past_stays_date() {
+        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
+        let past = today - Duration::days(3);
+        let entry = make_entry(past, true).with_effective_date(today);
+        assert_eq!(entry.effective_date, past);
+    }
+
+    #[test]
+    fn test_effective_date_future_stays_date() {
+        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
+        let future = today + Duration::days(3);
+        let entry = make_entry(future, false).with_effective_date(today);
+        assert_eq!(entry.effective_date, future);
+    }
+
+    #[test]
+    fn test_effective_date_today_stays_date() {
+        let today = NaiveDate::from_ymd_opt(2026, 7, 23).unwrap();
+        let entry = make_entry(today, false).with_effective_date(today);
+        assert_eq!(entry.effective_date, today);
+    }
 }
