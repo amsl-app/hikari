@@ -76,6 +76,7 @@ where
 pub(crate) struct DateRangeFilter {
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
+    pub unchecked: Option<bool>,
 }
 
 #[utoipa::path(
@@ -84,6 +85,7 @@ pub(crate) struct DateRangeFilter {
     params(
         ("from" = Option<NaiveDate>, Query, description = "Filter entries on or after this date (inclusive)"),
         ("to" = Option<NaiveDate>, Query, description = "Filter entries on or before this date (inclusive)"),
+        ("unchecked" = Option<bool>, Query, description = "If true, only return entries that are not completed"),
     ),
     responses(
         (status = OK, description = "List planner entries for current user", body = [PlannerEntryFull]),
@@ -99,13 +101,21 @@ pub(crate) async fn get_planner_entries(
     Extension(conn): Extension<DatabaseConnection>,
     Query(filter): Query<DateRangeFilter>,
 ) -> Result<impl IntoResponse, PlannerError> {
-    let entries =
-        planner::planner_entry::Query::get_user_planner_entries_with_milestone(&conn, user, filter.from, filter.to)
-            .await?;
+    let today = chrono::Utc::now().date_naive();
+    let entries = planner::planner_entry::Query::get_user_planner_entries_with_milestone(
+        &conn,
+        user,
+        filter.from,
+        filter.to,
+        filter.unchecked,
+    )
+    .await?;
     let entries = entries
         .into_iter()
         .map(|(entry, milestone)| {
-            PlannerEntry::from_db_model(entry).as_entry_full(milestone.map(PlannerMilestone::from_db_model))
+            PlannerEntry::from_db_model(entry)
+                .with_effective_date(today)
+                .as_entry_full(milestone.map(PlannerMilestone::from_db_model))
         })
         .collect::<Vec<PlannerEntryFull>>();
     Ok(Json(entries))
@@ -135,8 +145,11 @@ pub(crate) async fn get_planner_entry(
     let (entry, milestone) = planner::planner_entry::Query::get_user_planner_entry_with_milestone(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
+    let today = chrono::Utc::now().date_naive();
     Ok(Json(
-        PlannerEntry::from_db_model(entry).as_entry_full(milestone.map(PlannerMilestone::from_db_model)),
+        PlannerEntry::from_db_model(entry)
+            .with_effective_date(today)
+            .as_entry_full(milestone.map(PlannerMilestone::from_db_model)),
     ))
 }
 
@@ -204,7 +217,12 @@ pub(crate) async fn update_planner_entry(
     };
 
     let updated = planner::planner_entry::Mutation::update_planner_entry(&conn, active_model).await?;
-    Ok(Json(PlannerEntry::from_db_model(updated).as_entry_full(milestone)))
+    let today = chrono::Utc::now().date_naive();
+    Ok(Json(
+        PlannerEntry::from_db_model(updated)
+            .with_effective_date(today)
+            .as_entry_full(milestone),
+    ))
 }
 
 #[utoipa::path(
@@ -350,11 +368,14 @@ pub(crate) async fn create_planner_entries(
     };
 
     let created = planner::planner_entry::Mutation::create_planner_entries(&conn, user, inputs).await?;
+    let today = chrono::Utc::now().date_naive();
     let entries = created
         .into_iter()
         .map(|entry| {
             let milestone = entry.milestone_id.and_then(|id| milestones_by_id.get(&id).cloned());
-            PlannerEntry::from_db_model(entry).as_entry_full(milestone)
+            PlannerEntry::from_db_model(entry)
+                .with_effective_date(today)
+                .as_entry_full(milestone)
         })
         .collect::<Vec<PlannerEntryFull>>();
     Ok((StatusCode::CREATED, Json(entries)))
@@ -425,13 +446,14 @@ pub(crate) async fn get_milestones(
 
     let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
     if deep {
+        let today = chrono::Utc::now().date_naive();
         let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user, None, None).await?;
         for entry in entries {
             if let Some(milestone_id) = entry.milestone_id {
                 entries_by_milestone
                     .entry(milestone_id)
                     .or_default()
-                    .push(PlannerEntry::from_db_model(entry));
+                    .push(PlannerEntry::from_db_model(entry).with_effective_date(today));
             }
         }
     }
@@ -496,9 +518,10 @@ pub(crate) async fn get_milestone(
     let milestone = PlannerMilestone::from_db_model(milestone);
 
     let entries = planner::planner_entry::Query::get_milestone_entries(&conn, user, id).await?;
+    let today = chrono::Utc::now().date_naive();
     let entries = entries
         .into_iter()
-        .map(PlannerEntry::from_db_model)
+        .map(|entry| PlannerEntry::from_db_model(entry).with_effective_date(today))
         .collect::<Vec<PlannerEntry>>();
 
     Ok(Json(milestone.as_milestone_full(true, entries)))
