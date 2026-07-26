@@ -442,7 +442,7 @@ pub(crate) async fn get_milestones(
         .map(|m| {
             let milestone = PlannerMilestone::from_db_model(m);
             let entries = entries_by_milestone.remove(&milestone.id).unwrap_or_default();
-            milestone.as_milestone_full(deep, entries)
+            milestone.as_milestone_full(entries)
         })
         .collect::<Vec<PlannerMilestoneFull>>();
     Ok(Json(milestones))
@@ -502,7 +502,7 @@ pub(crate) async fn get_milestone(
         .map(PlannerEntry::from_db_model)
         .collect::<Vec<PlannerEntry>>();
 
-    Ok(Json(milestone.as_milestone_full(true, entries)))
+    Ok(Json(milestone.as_milestone_full(entries)))
 }
 
 #[utoipa::path(
