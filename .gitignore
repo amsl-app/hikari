@@ -35,3 +35,6 @@ CSML
 run-local.sh
 /schemas/
 /tools
+
+docs/superpowers
+.superpowers
