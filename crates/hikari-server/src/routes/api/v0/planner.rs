@@ -296,8 +296,9 @@ pub(crate) async fn get_planner_ical(
         .ok_or(PlannerError::NotFound)?;
 
     let entries = planner::planner_entry::Query::get_user_planner_entries(&conn, user_id, None, None).await?;
+    let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user_id).await?;
 
-    let body = build_ical(entries);
+    let body = build_ical(entries, milestones);
     Ok((
         [(
             header::CONTENT_TYPE,
@@ -653,6 +654,8 @@ macro_rules! push_ical_line {
     }
 }
 
+const MILESTONE_SUMMARY_PREFIX: &str = "Milestone: ";
+
 fn ascii_ical_len<'a, I: Iterator<Item = &'a str>>(entries: I) -> usize {
     let mut total = 81;
     for entry in entries {
@@ -663,10 +666,32 @@ fn ascii_ical_len<'a, I: Iterator<Item = &'a str>>(entries: I) -> usize {
     total
 }
 
-fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
+fn milestone_ascii_ical_len<'a, I: Iterator<Item = (&'a str, Option<&'a str>)>>(milestones: I) -> usize {
+    let mut total = 0;
+    for (title, description) in milestones {
+        total += 167;
+        total += ical_fold_required_ascii_space("SUMMARY".len(), &format!("{MILESTONE_SUMMARY_PREFIX}{title}"));
+        if let Some(description) = description {
+            total += ical_fold_required_ascii_space("DESCRIPTION".len(), description);
+        }
+    }
+    total
+}
+
+fn build_ical(
+    entries: Vec<hikari_entity::planner_entry::Model>,
+    milestones: Vec<hikari_entity::planner_milestone::Model>,
+) -> String {
     // We reserve enough space to avoid reallocations in the simple case, where all entries are ASCII or contain very few special characters.
     // We extra some space to avoid reallocations in case a special character falls into a folding point. (3 bytes overhead per extra line)
-    let mut out = String::with_capacity(ascii_ical_len(entries.iter().map(|entry| entry.title.as_str())) + 3 * 2);
+    let capacity = ascii_ical_len(entries.iter().map(|entry| entry.title.as_str()))
+        + milestone_ascii_ical_len(
+            milestones
+                .iter()
+                .map(|milestone| (milestone.title.as_str(), milestone.description.as_deref())),
+        )
+        + 3 * 2;
+    let mut out = String::with_capacity(capacity);
     out.push_str("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//hikari//planner//EN\r\nCALSCALE:GREGORIAN\r\n");
 
     for entry in entries {
@@ -682,6 +707,24 @@ fn build_ical(entries: Vec<hikari_entity::planner_entry::Model>) -> String {
         push_ical_line!(out, key: "DTEND;VALUE=DATE", date: end);
         ical_fold_line(&mut out, "SUMMARY", &ical_escape(&entry.title));
         push_ical_line!(out, key: "STATUS", value: status);
+        out.push_str("END:VEVENT\r\n");
+    }
+
+    for milestone in milestones {
+        let start = milestone.date.format("%Y%m%d");
+        let end = milestone.date.succ_opt().unwrap_or(milestone.date).format("%Y%m%d");
+        let dtstamp = milestone.updated_at.format("%Y%m%dT%H%M%SZ");
+        let summary = format!("{MILESTONE_SUMMARY_PREFIX}{}", ical_escape(&milestone.title));
+
+        out.push_str("BEGIN:VEVENT\r\n");
+        push_ical_line!(out, key: "UID", write: &milestone.id, value: "@hikari-milestone");
+        push_ical_line!(out, key: "DTSTAMP", date: dtstamp);
+        push_ical_line!(out, key: "DTSTART;VALUE=DATE", date: start);
+        push_ical_line!(out, key: "DTEND;VALUE=DATE", date: end);
+        ical_fold_line(&mut out, "SUMMARY", &summary);
+        if let Some(description) = milestone.description {
+            ical_fold_line(&mut out, "DESCRIPTION", &ical_escape(&description));
+        }
         out.push_str("END:VEVENT\r\n");
     }
 
@@ -793,6 +836,36 @@ END:VCALENDAR\r\n",
         }
     }
 
+    fn create_planner_milestone(title: &str, description: Option<&str>) -> hikari_entity::planner_milestone::Model {
+        hikari_entity::planner_milestone::Model {
+            id: Default::default(),
+            user_id: Default::default(),
+            title: title.to_string(),
+            date: Default::default(),
+            description: description.map(str::to_string),
+            module_id: None,
+            origin_id: None,
+            created_at: Default::default(),
+            updated_at: Default::default(),
+        }
+    }
+
+    fn expected_ical_milestone_vevent(summary_value: &str, description: Option<&str>) -> String {
+        let description_line = description.map(|d| format!("DESCRIPTION:{d}\r\n")).unwrap_or_default();
+        format!(
+            "\
+BEGIN:VEVENT\r\n\
+UID:00000000-0000-0000-0000-000000000000@hikari-milestone\r\n\
+DTSTAMP:19700101T000000Z\r\n\
+DTSTART;VALUE=DATE:19700101\r\n\
+DTEND;VALUE=DATE:19700102\r\n\
+SUMMARY:{summary_value}\r\n\
+{description_line}\
+END:VEVENT\r\n\
+"
+        )
+    }
+
     const ICAL_TEST_VALUES: [(&str, &str); 3] = [
         ("", ""),
         ("test", "test"),
@@ -807,7 +880,7 @@ END:VCALENDAR\r\n",
         for (value, split_value) in ICAL_TEST_VALUES {
             let entries = vec![create_planner_entry(value)];
             let expected = expected_ical_output(&expected_ical_vevent(split_value));
-            let res = build_ical(entries);
+            let res = build_ical(entries, vec![]);
             assert_eq!(res, expected);
             // 96: Header + Footer
             // 175: Per VEVENT Constant
@@ -837,7 +910,7 @@ END:VCALENDAR\r\n",
             .iter()
             .map(|(_, expected)| expected_ical_vevent(expected))
             .collect::<Vec<_>>();
-        let res = build_ical(models);
+        let res = build_ical(models, vec![]);
 
         let expected = expected_ical_output(&expected_vevents.join(""));
         let total_vevent_len = expected_vevents.iter().map(|vevent| vevent.len()).sum::<usize>();
@@ -860,7 +933,7 @@ END:VCALENDAR\r\n",
         let expected_value = "a".repeat(61) + "👍\r\n 🏽" + "a".repeat(70).as_str() + "\r\n a";
         let entry = create_planner_entry(&value);
         let expected = expected_ical_output(&expected_ical_vevent(&expected_value));
-        let res = build_ical(vec![entry]);
+        let res = build_ical(vec![entry], vec![]);
         assert_eq!(res, expected);
         // The emoji without the color modifier should be on the first line
         let expected_summary_line = String::from("SUMMARY:") + "a".repeat(61).as_str() + "👍";
@@ -881,6 +954,72 @@ END:VCALENDAR\r\n",
             "Calculated capacity does not match expected capacity for value: {}",
             value
         );
+    }
+
+    #[test]
+    fn test_build_ical_milestone_only() {
+        let milestone = create_planner_milestone("Launch day", None);
+        let expected = expected_ical_output(&expected_ical_milestone_vevent("Milestone: Launch day", None));
+        let res = build_ical(vec![], vec![milestone]);
+        assert_eq!(res, expected);
+        assert_eq!(
+            res.len(),
+            96 + milestone_ascii_ical_len(std::iter::once(("Launch day", None))),
+            "Calculated length does not match expected length"
+        );
+        assert_eq!(
+            res.capacity(),
+            96 + milestone_ascii_ical_len(std::iter::once(("Launch day", None))) + 3 * 2,
+            "Calculated capacity does not match expected capacity"
+        );
+    }
+
+    #[test]
+    fn test_build_ical_milestone_with_description() {
+        let milestone = create_planner_milestone("Launch day", Some("Ship it"));
+        let expected = expected_ical_output(&expected_ical_milestone_vevent(
+            "Milestone: Launch day",
+            Some("Ship it"),
+        ));
+        let res = build_ical(vec![], vec![milestone]);
+        assert_eq!(res, expected);
+        assert_eq!(
+            res.len(),
+            96 + milestone_ascii_ical_len(std::iter::once(("Launch day", Some("Ship it")))),
+            "Calculated length does not match expected length"
+        );
+        assert_eq!(
+            res.capacity(),
+            96 + milestone_ascii_ical_len(std::iter::once(("Launch day", Some("Ship it")))) + 3 * 2,
+            "Calculated capacity does not match expected capacity"
+        );
+    }
+
+    #[test]
+    fn test_build_ical_entries_and_milestones() {
+        let entry = create_planner_entry("An entry");
+        let milestone = create_planner_milestone("Launch day", Some("Ship it"));
+        let expected = expected_ical_output(&format!(
+            "{}{}",
+            expected_ical_vevent("An entry"),
+            expected_ical_milestone_vevent("Milestone: Launch day", Some("Ship it"))
+        ));
+        let res = build_ical(vec![entry], vec![milestone]);
+        assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_build_ical_milestone_folds_long_title() {
+        let title = "long test that requires adding linebreaks according to RFC 5545 section 3.1 guidelines for iCalendar format";
+        let milestone = create_planner_milestone(title, None);
+        let folded_summary_line = fold("SUMMARY", &format!("Milestone: {title}"));
+        let summary_value = folded_summary_line
+            .strip_prefix("SUMMARY:")
+            .and_then(|s| s.strip_suffix("\r\n"))
+            .unwrap();
+        let expected = expected_ical_output(&expected_ical_milestone_vevent(summary_value, None));
+        let res = build_ical(vec![], vec![milestone]);
+        assert_eq!(res, expected);
     }
 
     #[test]
