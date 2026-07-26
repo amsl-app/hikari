@@ -123,7 +123,7 @@ impl PlannerMilestone {
             origin_id: self.origin_id.clone(),
             created_at: self.created_at,
             updated_at: self.updated_at,
-            entries: entries,
+            entries,
         }
     }
 }
