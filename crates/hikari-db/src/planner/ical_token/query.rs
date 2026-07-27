@@ -1,4 +1,4 @@
-use hikari_entity::planner_ical_token::{Column, Entity as IcalToken};
+use hikari_entity::planner::planner_ical_token::{Column, Entity as IcalToken};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter};
 use uuid::Uuid;
 

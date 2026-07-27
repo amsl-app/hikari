@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use hikari_entity::planner_milestone::{
+use hikari_entity::planner::planner_milestone::{
     ActiveModel, Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel,
 };
 use sea_orm::{

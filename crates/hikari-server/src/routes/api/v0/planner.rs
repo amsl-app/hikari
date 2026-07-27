@@ -12,7 +12,7 @@ use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
-use hikari_entity::planner_milestone::Model as PlannerMilestoneModel;
+use hikari_entity::planner::planner_milestone::Model as PlannerMilestoneModel;
 use hikari_model::planner::{
     NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerEntryFull, PlannerIcalToken,
     PlannerMilestone, PlannerMilestoneFull,
@@ -29,6 +29,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 mod error;
+pub(crate) mod goals;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub(crate) struct PlannerEntryChanges {
@@ -70,6 +71,7 @@ where
             "/milestones/{id}",
             get(get_milestone).patch(update_milestone).delete(delete_milestone),
         )
+        .nest("/goals", goals::create_router())
         .with_state(())
 }
 
@@ -177,7 +179,7 @@ pub(crate) async fn update_planner_entry(
         .await?
         .ok_or(PlannerError::NotFound)?;
 
-    let mut active_model = hikari_entity::planner_entry::ActiveModel {
+    let mut active_model = hikari_entity::planner::planner_entry::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),
         user_id: ActiveValue::Unchanged(existing.user_id),
         ..Default::default()
@@ -384,11 +386,7 @@ fn validate_new_entry(
             "entry {index}: title must not be empty"
         )));
     }
-    if title.len() > 500 {
-        return Err(PlannerError::ValidationError(format!(
-            "entry {index}: title exceeds 500 characters"
-        )));
-    }
+
     if !(0..=3).contains(&entry.priority) {
         return Err(PlannerError::ValidationError(format!(
             "entry {index}: priority must be between 0 and 3"
@@ -542,7 +540,7 @@ pub(crate) async fn update_milestone(
         .await?
         .ok_or(PlannerError::NotFound)?;
 
-    let mut active_model = hikari_entity::planner_milestone::ActiveModel {
+    let mut active_model = hikari_entity::planner::planner_milestone::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),
         user_id: ActiveValue::Unchanged(existing.user_id),
         ..Default::default()
@@ -698,7 +696,7 @@ fn milestone_ascii_ical_len<'a, I: Iterator<Item = (&'a str, Option<&'a str>)>>(
 /// and past due) differs from its original date.
 fn build_ical(
     entries: Vec<(
-        hikari_entity::planner_entry::PlannerEntryWithEffectiveDate,
+        hikari_entity::planner::planner_entry::PlannerEntryWithEffectiveDate,
         Option<PlannerMilestoneModel>,
     )>,
     milestones: Vec<PlannerMilestoneModel>,
@@ -880,10 +878,10 @@ END:VCALENDAR\r\n",
     fn create_planner_entry(
         value: &str,
     ) -> (
-        hikari_entity::planner_entry::PlannerEntryWithEffectiveDate,
+        hikari_entity::planner::planner_entry::PlannerEntryWithEffectiveDate,
         Option<PlannerMilestoneModel>,
     ) {
-        let entry = hikari_entity::planner_entry::PlannerEntryWithEffectiveDate {
+        let entry = hikari_entity::planner::planner_entry::PlannerEntryWithEffectiveDate {
             id: Default::default(),
             user_id: Default::default(),
             date: Default::default(),
@@ -898,8 +896,8 @@ END:VCALENDAR\r\n",
         (entry, None)
     }
 
-    fn create_planner_milestone(title: &str, description: Option<&str>) -> hikari_entity::planner_milestone::Model {
-        hikari_entity::planner_milestone::Model {
+    fn create_planner_milestone(title: &str, description: Option<&str>) -> hikari_entity::planner::planner_milestone::Model {
+        hikari_entity::planner::planner_milestone::Model {
             id: Default::default(),
             user_id: Default::default(),
             title: title.to_string(),
