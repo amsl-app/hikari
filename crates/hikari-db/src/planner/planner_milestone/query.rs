@@ -34,10 +34,10 @@ impl Query {
         user_id: Uuid,
         ids: Vec<Uuid>,
     ) -> Result<Vec<PlannerMilestoneModel>, DbErr> {
-        let len = ids.len();
         if ids.is_empty() {
             return Ok(vec![]);
         }
+        let len = ids.len();
         let res = PlannerMilestone::find()
             .filter(Column::UserId.eq(user_id))
             .filter(Column::Id.is_in(ids))
@@ -46,12 +46,12 @@ impl Query {
             .inspect_err(|error| tracing::error!(%error, "failed to load milestones by ids"))?;
 
         if res.len() != len {
-            Err(DbErr::RecordNotFound(
+            return Err(DbErr::RecordNotFound(
                 "one or more milestone ids do not exist".to_owned(),
-            ))
-        } else {
-            Ok(res)
+            ));
         }
+
+        Ok(res)
     }
 
     pub async fn get_imported_origin_ids<C: ConnectionTrait>(

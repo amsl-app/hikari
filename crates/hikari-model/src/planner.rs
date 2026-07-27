@@ -115,7 +115,7 @@ pub struct PlannerMilestoneFull {
 
 impl PlannerMilestone {
     #[must_use]
-    pub fn as_milestone_full(&self, deep: bool, entries: Vec<PlannerEntry>) -> PlannerMilestoneFull {
+    pub fn as_milestone_full(&self, entries: Vec<PlannerEntry>) -> PlannerMilestoneFull {
         PlannerMilestoneFull {
             id: self.id,
             user_id: self.user_id,
@@ -126,7 +126,7 @@ impl PlannerMilestone {
             origin_id: self.origin_id.clone(),
             created_at: self.created_at,
             updated_at: self.updated_at,
-            entries: if deep { entries } else { Vec::new() },
+            entries,
         }
     }
 }
