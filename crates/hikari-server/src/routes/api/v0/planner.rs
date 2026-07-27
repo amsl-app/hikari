@@ -77,7 +77,8 @@ where
 pub(crate) struct DateRangeFilter {
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
-    pub unchecked: Option<bool>,
+    #[serde(default)]
+    pub unchecked: bool,
 }
 
 #[utoipa::path(
@@ -86,7 +87,7 @@ pub(crate) struct DateRangeFilter {
     params(
         ("from" = Option<NaiveDate>, Query, description = "Filter entries on or after this date (inclusive)"),
         ("to" = Option<NaiveDate>, Query, description = "Filter entries on or before this date (inclusive)"),
-        ("unchecked" = Option<bool>, Query, description = "If true, only return entries that are not completed"),
+        ("unchecked" = bool, Query, description = "If true, only return entries that are not completed"),
     ),
     responses(
         (status = OK, description = "List planner entries for current user", body = [PlannerEntryFull]),
@@ -305,7 +306,7 @@ pub(crate) async fn get_planner_ical(
         .ok_or(PlannerError::NotFound)?;
 
     let entries =
-        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, None).await?;
+        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, false).await?;
     let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user_id).await?;
 
     let body = build_ical(entries, milestones);
@@ -1123,6 +1124,19 @@ END:VEVENT\r\n\
         ));
         let res = build_ical(vec![entry], vec![milestone]);
         assert_eq!(res, expected);
+
+        let expected_len = ascii_ical_len(std::iter::once(("An entry", None)))
+            + milestone_ascii_ical_len(std::iter::once(("Launch day", Some("Ship it"))));
+        assert_eq!(
+            res.len(),
+            expected_len,
+            "Calculated length does not match expected length"
+        );
+        assert_eq!(
+            res.capacity(),
+            expected_len + 3 * 2,
+            "Calculated capacity does not match expected capacity"
+        );
     }
 
     #[test]
@@ -1137,6 +1151,36 @@ END:VEVENT\r\n\
         let expected = expected_ical_output(&expected_ical_milestone_vevent(summary_value, None));
         let res = build_ical(vec![], vec![milestone]);
         assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_build_ical_milestone_folds_long_description() {
+        let description = "long test that requires adding linebreaks according to RFC 5545 section 3.1 guidelines for iCalendar format";
+        let milestone = create_planner_milestone("Launch day", Some(description));
+        let folded_description_line = fold("DESCRIPTION", description);
+        let description_value = folded_description_line
+            .strip_prefix("DESCRIPTION:")
+            .and_then(|s| s.strip_suffix("\r\n"))
+            .unwrap();
+        let expected =
+            expected_ical_output(&expected_ical_milestone_vevent("Milestone: Launch day", Some(description_value)));
+        let res = build_ical(vec![], vec![milestone]);
+        assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_build_ical_milestone_description_escaping() {
+        let description = "Fix; this, item\\ now\r\nplease";
+        let milestone = create_planner_milestone("Launch day", Some(description));
+        let res = build_ical(vec![], vec![milestone]);
+        assert!(res.contains("DESCRIPTION:Fix\\; this\\, item\\\\ now\\nplease\r\n"));
+    }
+
+    #[test]
+    fn test_build_ical_entry_summary_escaping() {
+        let entry = create_planner_entry("Fix; this, item\\ now");
+        let res = build_ical(vec![entry], vec![]);
+        assert!(res.contains("SUMMARY:Fix\\; this\\, item\\\\ now\r\n"));
     }
 
     #[test]

@@ -63,12 +63,12 @@ impl Mutation {
         active_model.updated_at = ActiveValue::Set(chrono::Utc::now().naive_utc());
         let id = *active_model
             .id
-            .try_as_ref()
-            .expect("id must be set to update a planner entry");
+            .try_as_ref().ok_or(DbErr::RecordNotFound("planner entry ID not found".into()))?;
+        
         let user_id = *active_model
             .user_id
             .try_as_ref()
-            .expect("user_id must be set to update a planner entry");
+            .ok_or(DbErr::RecordNotFound("planner entry user ID not found".into()))?;
 
         active_model.update(db).await.inspect_err(|error| {
             tracing::error!(error = %error, "failed to update planner entry");

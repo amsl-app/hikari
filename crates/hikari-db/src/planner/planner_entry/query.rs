@@ -97,7 +97,7 @@ impl Query {
         user_id: Uuid,
         from: Option<NaiveDate>,
         to: Option<NaiveDate>,
-        unchecked: Option<bool>,
+        unchecked: bool,
     ) -> Result<Vec<(PlannerEntryWithEffectiveDate, Option<PlannerMilestoneModel>)>, DbErr> {
         let today = chrono::Local::now().date_naive();
 
@@ -112,7 +112,7 @@ impl Query {
         if let Some(to) = to {
             query = query.filter(effective_date_expr(today).lte(to));
         }
-        if unchecked == Some(true) {
+        if unchecked {
             query = query.filter(PlannerEntryColumn::Completed.eq(false));
         }
 
