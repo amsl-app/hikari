@@ -12,7 +12,7 @@ use hikari_config::assessment::Assessment;
 use hikari_config::assessment::AssessmentConfig;
 use hikari_config::assessment::question::Answer;
 use hikari_config::assessment::question::AnswerValue;
-use hikari_config::assessment::question::Question;
+use hikari_config::assessment::question::AssessmentQuestion;
 use hikari_config::assessment::question::QuestionBody;
 use hikari_config::assessment::question::QuestionExt;
 use hikari_config::assessment::scale::Mode;
@@ -59,7 +59,7 @@ trait HasSeaOrmAnswerType {
     fn sea_orm_answer_type(&self) -> hikari_entity::assessment::answer::AnswerType;
 }
 
-impl HasSeaOrmAnswerType for Question {
+impl HasSeaOrmAnswerType for AssessmentQuestion {
     fn sea_orm_answer_type(&self) -> hikari_entity::assessment::answer::AnswerType {
         match self.body {
             QuestionBody::Scale(_) => hikari_entity::assessment::answer::AnswerType::Int,
@@ -608,7 +608,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use hikari_config::assessment::{
-        question::{LikertScaleBody, Question, SelectBody},
+        question::{LikertScaleBody, AssessmentQuestion, SelectBody},
         scale::{Item, Scale, ScaleBody},
     };
     use hikari_entity::assessment::answer::{AnswerType, Model as Answer};
@@ -629,7 +629,7 @@ mod tests {
                 questions: IndexMap::from([
                     (
                         QUESTION_ID_1.to_owned(),
-                        Question {
+                        AssessmentQuestion {
                             id: QUESTION_ID_1.to_owned(),
                             title: "Test One".to_owned(),
                             body: QuestionBody::Scale(LikertScaleBody {
@@ -643,7 +643,7 @@ mod tests {
                     ),
                     (
                         QUESTION_ID_2.to_owned(),
-                        Question {
+                        AssessmentQuestion {
                             id: QUESTION_ID_2.to_owned(),
                             title: "Test Two".to_owned(),
                             body: QuestionBody::Scale(LikertScaleBody {
@@ -657,7 +657,7 @@ mod tests {
                     ),
                     (
                         QUESTION_ID_3.to_owned(),
-                        Question {
+                        AssessmentQuestion {
                             id: QUESTION_ID_3.to_owned(),
                             title: "Test Two".to_owned(),
                             body: QuestionBody::Select(SelectBody { yes: None, no: None }),

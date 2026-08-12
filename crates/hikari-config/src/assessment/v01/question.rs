@@ -1,3 +1,3 @@
-use crate::assessment::question::Question;
+use crate::assessment::question::AssessmentQuestion;
 
-pub(crate) type QuestionV01 = Question;
+pub(crate) type AssessmentQuestionV01 = AssessmentQuestion;

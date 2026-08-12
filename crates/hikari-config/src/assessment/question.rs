@@ -16,7 +16,7 @@ pub enum Answer {
 
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Question {
+pub struct AssessmentQuestion {
     /// # Unique identifier for the question
     /// This ID is used to reference the question within the assessment.
     pub id: String,
@@ -31,7 +31,7 @@ pub struct Question {
     pub answer: Option<Answer>,
 }
 
-impl ItemId for Question {
+impl ItemId for AssessmentQuestion {
     type IdType = String;
 
     fn id(&self) -> Self::IdType {
@@ -58,7 +58,7 @@ macro_rules! get_answer_value {
     }};
 }
 
-impl QuestionExt for Question {
+impl QuestionExt for AssessmentQuestion {
     fn validate(&self, value: &AnswerValue) -> Result<(), ValidationError> {
         match &self.body {
             QuestionBody::Scale(q) => {
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_expected_type() {
-        let q = Question {
+        let q = AssessmentQuestion {
             id: String::new(),
             title: String::new(),
             body: QuestionBody::Scale(LikertScaleBody {

@@ -1,4 +1,4 @@
-use crate::assessment::{question::Question, scale::Scale, v01::assessment::AssessmentV01};
+use crate::assessment::{question::AssessmentQuestion, scale::Scale, v01::assessment::AssessmentV01};
 use futures::StreamExt;
 use hikari_utils::id_map::id_map;
 use hikari_utils::loader::{Filter, Loader, LoaderTrait, error::LoadingError};
@@ -29,7 +29,7 @@ pub struct Assessment {
     pub title: String,
     #[serde(default)]
     #[serde(with = "id_map")]
-    pub questions: IndexMap<String, Question>,
+    pub questions: IndexMap<String, AssessmentQuestion>,
     #[serde(default)]
     #[serde(with = "id_map")]
     pub scales: IndexMap<String, Scale>,
