@@ -1,0 +1,1 @@
+ALTER table history_assessment DROP COLUMN type_id;

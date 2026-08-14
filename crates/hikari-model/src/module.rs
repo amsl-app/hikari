@@ -1,4 +1,3 @@
-use crate::module::assessment::instance::ModuleAssessmentInstance;
 use crate::module::session::SessionFull;
 use crate::module::{assessment::ModuleAssessmentFull, session::instance::SessionInstance};
 use chrono::{DateTime, TimeZone, Utc};
@@ -15,6 +14,7 @@ use hikari_config::{
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub mod assessment;
 pub mod group;
@@ -85,7 +85,8 @@ impl<'a> ModuleFull<'a> {
         module: &'a Module,
         deep: bool,
         module_entries: &'a [SessionInstance],
-        assessment: Option<&'a ModuleAssessmentInstance>,
+        last_pre_assessment: Option<Uuid>, // Essentioally the first assessment instance of the pre-assessment, if it exists
+        last_post_assessment: Option<Uuid>, // The latest assessment instance of the post-assessment after module completed, if it exists
         completion: Option<DateTime<Utc>>,
     ) -> Self {
         let sessions = deep.then(|| {
@@ -106,10 +107,9 @@ impl<'a> ModuleFull<'a> {
             default_session: module.default_session.as_deref(),
             hidden: module.hidden,
             category: module.category,
-            assessment: module
-                .assessment
-                .as_ref()
-                .map(|assessment_config| new_module_assessment(&assessment_config.borrowed(), assessment)),
+            assessment: module.assessment.as_ref().map(|config| {
+                new_module_assessment(config, last_pre_assessment.as_ref(), last_post_assessment.as_ref())
+            }),
             weight: module.weight.unwrap_or(1),
             sessions,
             completion,
@@ -124,17 +124,14 @@ impl<'a> ModuleFull<'a> {
 
 pub(crate) fn new_module_assessment<'a>(
     config: &ModuleAssessment<'a>,
-    assessment: Option<&ModuleAssessmentInstance>,
+    last_pre_assessment: Option<&Uuid>,
+    last_post_assessment: Option<&Uuid>,
 ) -> ModuleAssessmentFull<'a> {
-    let (last_pre, last_post) = match assessment {
-        None => (None, None),
-        Some(assessment) => (assessment.last_pre, assessment.last_post),
-    };
     ModuleAssessmentFull {
         pre: config.pre.clone(),
         post: config.post.clone(),
-        last_pre,
-        last_post,
+        last_pre: last_pre_assessment.copied(),
+        last_post: last_post_assessment.copied(),
     }
 }
 

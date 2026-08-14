@@ -124,7 +124,6 @@ CREATE TABLE history_session (
 CREATE TABLE history_assessment (
     history_id BLOB PRIMARY KEY NOT NULL,
     assessment_session_id BLOB NOT NULL,
-    type_id smallint NOT NULL,
     module varchar(255) NOT NULL,
     FOREIGN KEY (history_id) REFERENCES history (id) ON DELETE CASCADE,
     FOREIGN KEY (assessment_session_id) REFERENCES assessment_session (id) ON DELETE CASCADE

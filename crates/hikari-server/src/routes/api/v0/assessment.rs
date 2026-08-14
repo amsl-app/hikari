@@ -608,7 +608,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use hikari_config::assessment::{
-        question::{LikertScaleBody, AssessmentQuestion, SelectBody},
+        question::{AssessmentQuestion, LikertScaleBody, SelectBody},
         scale::{Item, Scale, ScaleBody},
     };
     use hikari_entity::assessment::answer::{AnswerType, Model as Answer};
