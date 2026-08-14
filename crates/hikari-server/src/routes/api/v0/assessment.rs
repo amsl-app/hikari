@@ -101,14 +101,17 @@ where
         .route("/sessions", get(list_user_assessments))
         .nest(
             "/{assessment}",
-            Router::new().route("/start", post(start)).nest(
-                "/sessions/{session}",
-                Router::new()
-                    .route("/load", get(load))
-                    .route("/scales", get(get_scales))
-                    .route("/submit", post(submit))
-                    .route("/update/{question}", put(update)),
-            ),
+            Router::new()
+                .route("/start", post(start))
+                .route("/scales", get(get_assessment_scales))
+                .nest(
+                    "/sessions/{session}",
+                    Router::new()
+                        .route("/load", get(load))
+                        .route("/scales", get(get_scales))
+                        .route("/submit", post(submit))
+                        .route("/update/{question}", put(update)),
+                ),
         )
         .with_state(())
 }
@@ -407,6 +410,59 @@ pub(crate) async fn get_scales(
 ) -> Result<impl IntoResponse, Error> {
     let result = get_scale_values(user, app_config.assessments(), &conn, assessment_id, session).await?;
     Ok(Json(result))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/assessments/{assessment_id}/scales",
+    responses(
+        (status = OK, body = HashMap<NaiveDateTime, Vec<ItemValue>>, description = "Returns all scales"),
+    ),
+    params(
+        ("assessment_id" = String, Path, description = "the assessment id of the assessment, which should be processed"),
+    ),
+    tag = "v0/assessment",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_assessment_scales(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(assessment): Path<String>,
+) -> Result<impl IntoResponse, Error> {
+    tracing::trace!(
+        user_id = %user_id.as_hyphenated(),
+        assessment = %assessment,
+        "getting scale values for whole assessment"
+    );
+    let assessment = app_config
+        .assessments()
+        .get(&assessment)
+        .ok_or(Error::AssessmentConfigNotFound)?;
+
+    let session =
+        hikari_db::assessment::answer::Query::load_answes_for_assessment(&conn, &assessment.assessment_id, user_id)
+            .await?;
+
+    let scales: HashMap<NaiveDateTime, Vec<ItemValue>> = session
+        .into_iter()
+        .map(|(session, answeres)| {
+            if let Some(completed) = session.completed {
+                let scale = build_scale_answers(assessment, &answeres)?;
+                Ok(Some((completed, scale)))
+            } else {
+                Ok(None)
+            }
+        })
+        .collect::<Result<Vec<Option<(NaiveDateTime, Vec<ItemValue>)>>, Error>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+
+    return Ok(Json(scales));
 }
 
 async fn get_scale_values(

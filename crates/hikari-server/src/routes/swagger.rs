@@ -23,6 +23,7 @@ struct SecurityAddon;
         api::v0::assessment::load,
         api::v0::assessment::update,
         api::v0::assessment::submit,
+        api::v0::assessment::get_assessment_scales,
         api::v0::quiz::get_quizzes,
         api::v0::quiz::get_scores,
         api::v0::quiz::get_quiz,

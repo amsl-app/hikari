@@ -27,6 +27,23 @@ impl Query {
             .inspect_err(|error| tracing::error!(error = error as &dyn Error, %user_id, "failed to load sessions"))
     }
 
+    pub async fn load_completed_assessment_sessions<C: ConnectionTrait>(
+        conn: &C,
+        assessment: &str,
+        user_id: Uuid,
+    ) -> Result<Vec<Session>, DbErr> {
+        SessionEntity::find()
+            .filter(session::Column::UserId.eq(user_id))
+            .filter(session::Column::Assessment.eq(assessment))
+            .filter(session::Column::Completed.is_not_null())
+            .order_by(session::Column::Completed, sea_orm::Order::Desc)
+            .all(conn)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(error = error as &dyn Error, %user_id, %assessment, "failed to load completed sessions")
+            })
+    }
+
     pub async fn load_first_session<C: ConnectionTrait>(
         conn: &C,
         assessment: &str,
