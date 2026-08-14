@@ -1,9 +1,9 @@
 use crate::AppConfig;
-use crate::data::modules;
+use crate::data::assessment::{AnswerRequest, get_or_start_session, require_running_session, submit_session};
+use crate::data::modules::assessment::get_module_assessment;
 use crate::permissions::Permission;
 use crate::routes::api::v0::assessment::SessionResponse;
 use crate::routes::api::v0::assessment::error::Error;
-use crate::routes::api::v0::assessment::{AnswerRequest, build_assessment_answers_sea_orm};
 use crate::routes::api::v0::modules::error::ModuleError;
 use crate::user::ExtractUser;
 use axum::extract::Path;
@@ -12,11 +12,10 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use chrono::NaiveDateTime;
 use hikari_config::module::assessment::ModuleAssessment;
-use hikari_db::util::FlattenTransactionResultExt;
 use hikari_entity::assessment::session::Model as AssessmentSession;
 use http::StatusCode;
 use protect_axum::protect;
-use sea_orm::{DatabaseConnection, TransactionTrait};
+use sea_orm::DatabaseConnection;
 use serde_derive::{Deserialize, Serialize};
 use strum::IntoStaticStr;
 use utoipa::ToSchema;
@@ -116,26 +115,14 @@ pub(crate) async fn start_module_assessment(
     Extension(app_config): Extension<AppConfig>,
     Path((module_id, pre_post)): Path<(String, PrePost)>,
 ) -> Result<impl IntoResponse, ModuleError> {
-    let module = app_config
-        .module_config()
-        .get_for_group(&module_id, &user.groups)
-        .ok_or(modules::error::ModuleError::ModuleNotFound)?;
-    let assessment = module.assessment().ok_or(ModuleError::AssessmentNotConfigured)?;
-
+    let (_, assessment) = get_module_assessment(app_config.module_config(), &module_id, &user.groups)?;
     let assessment_id = pre_post.get_assessment_id(assessment);
     app_config
         .assessments()
         .get(assessment_id)
         .ok_or(Error::AssessmentConfigNotFound)?;
 
-    let session = match hikari_db::assessment::session::Query::load_running_session(&conn, assessment_id, user.id)
-        .await?
-    {
-        Some(session) => session,
-        None => {
-            hikari_db::assessment::session::Mutation::new_assessment(&conn, user.id, assessment_id.to_owned()).await?
-        }
-    };
+    let session = get_or_start_session(&conn, user.id, assessment_id).await?;
 
     let res = StartModuleAssessmentResponse {
         session: SessionResponse { session_id: session.id },
@@ -180,32 +167,11 @@ pub(crate) async fn submit_module_assessment(
         "got module assessment submission"
     );
 
-    let module = app_config
-        .module_config()
-        .get_for_group(&module_id, &user.groups)
-        .ok_or(modules::error::ModuleError::ModuleNotFound)?;
-    let assessment = module.assessment().ok_or(ModuleError::AssessmentNotConfigured)?;
+    let (_, assessment) = get_module_assessment(app_config.module_config(), &module_id, &user.groups)?;
     let assessment_id = pre_post.get_assessment_id(assessment);
 
-    let session = hikari_db::assessment::session::Query::load_running_session(&conn, assessment_id, user.id)
-        .await?
-        .ok_or_else(|| {
-            tracing::debug!(user_id = %user.id, module_id, assessment = assessment_id, "no running module assessment session found");
-            Error::NotFound
-        })?;
-
-    let new_entries = build_assessment_answers_sea_orm(&session.assessment, app_config.assessments(), answers)?;
-
-    conn.transaction(|txn| {
-        Box::pin(async move {
-            hikari_db::assessment::session::Mutation::finish_assessment(txn, session.id, new_entries).await?;
-            hikari_db::history::history_assessment::Mutation::create(txn, user.id, module_id, session.id)
-                .await
-                .map(|_| ())
-        })
-    })
-    .await
-    .flatten_res()?;
+    let session = require_running_session(&conn, user.id, assessment_id).await?;
+    submit_session(&conn, user.id, module_id, session, app_config.assessments(), answers).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }
@@ -237,24 +203,31 @@ pub(crate) async fn pre_post_assessment(
     Extension(app_config): Extension<AppConfig>,
     Path((module_id, pre_post)): Path<(String, PrePost)>,
 ) -> Result<impl IntoResponse, ModuleError> {
-    let module = app_config
-        .module_config()
-        .get_for_group(&module_id, &user.groups)
-        .ok_or(modules::error::ModuleError::ModuleNotFound)?;
-    let assessment = module.assessment().ok_or(ModuleError::AssessmentNotConfigured)?;
+    let (_, assessment) = get_module_assessment(app_config.module_config(), &module_id, &user.groups)?;
     let assessment_id = pre_post.get_assessment_id(assessment);
 
     // Mirrors the `last_pre`/`last_post` shown on the module itself: first completed session for pre,
     // latest completed session (after module completion) for post.
     let session = match pre_post {
         PrePost::Pre => {
-            hikari_db::assessment::session::Query::load_first_session(&conn, assessment_id, user.id).await?
+            hikari_db::assessment::session::Query::load_first_or_running_session(&conn, assessment_id, user.id).await?
         }
         PrePost::Post => {
             let completion = hikari_db::module::status::Query::get_for_user(&conn, user.id, &module_id)
                 .await?
                 .and_then(|status| status.completion);
-            hikari_db::assessment::session::Query::load_last_session(&conn, assessment_id, completion, user.id).await?
+
+            if completion.is_none() {
+                return Ok(Json(ModuleAssessmentResponse::default()));
+            }
+
+            hikari_db::assessment::session::Query::load_last_or_running_session(
+                &conn,
+                assessment_id,
+                completion,
+                user.id,
+            )
+            .await?
         }
     };
 

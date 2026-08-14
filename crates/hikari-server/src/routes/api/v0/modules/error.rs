@@ -24,9 +24,6 @@ pub(crate) enum ModuleError {
     #[error("Configuration Error: {0}")]
     ConfigurationError(String),
 
-    #[error("Assessment was not configured for this module")]
-    AssessmentNotConfigured,
-
     #[error("Failed to serialize result")]
     SerdeError(#[from] serde_json::Error),
 

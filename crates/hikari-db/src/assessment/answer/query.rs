@@ -18,7 +18,7 @@ impl Query {
             )
     }
 
-    pub async fn load_answes_for_assessment<C: ConnectionTrait>(
+    pub async fn load_answers_for_assessment<C: ConnectionTrait>(
         conn: &C,
         assessment_id: &str,
         user_id: Uuid,

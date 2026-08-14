@@ -1,4 +1,8 @@
 use crate::AppConfig;
+use crate::data::assessment::{
+    AnswerRequest, HasSeaOrmAnswerType, answer_value_to_string, get_or_start_session, require_running_session,
+    submit_session,
+};
 use crate::permissions::Permission;
 use crate::user::ExtractUserId;
 use axum::Extension;
@@ -12,11 +16,9 @@ use hikari_config::assessment::Assessment;
 use hikari_config::assessment::AssessmentConfig;
 use hikari_config::assessment::question::Answer;
 use hikari_config::assessment::question::AnswerValue;
-use hikari_config::assessment::question::AssessmentQuestion;
 use hikari_config::assessment::question::QuestionBody;
 use hikari_config::assessment::question::QuestionExt;
 use hikari_config::assessment::scale::Mode;
-use hikari_db::assessment::answer::QuestionAnswer;
 use hikari_model::assessment::scales::ItemValue;
 use hikari_model::assessment::session::AssessmentSession;
 use hikari_model_tools::convert::IntoModel;
@@ -52,32 +54,6 @@ impl Operation for Mode {
             }
         };
         Ok(res)
-    }
-}
-
-trait HasSeaOrmAnswerType {
-    fn sea_orm_answer_type(&self) -> hikari_entity::assessment::answer::AnswerType;
-}
-
-impl HasSeaOrmAnswerType for AssessmentQuestion {
-    fn sea_orm_answer_type(&self) -> hikari_entity::assessment::answer::AnswerType {
-        match self.body {
-            QuestionBody::Scale(_) => hikari_entity::assessment::answer::AnswerType::Int,
-            QuestionBody::Textfield(_) | QuestionBody::Textarea(_) | QuestionBody::MultiChoice(_) => {
-                hikari_entity::assessment::answer::AnswerType::Text
-            }
-            QuestionBody::Select(_) | QuestionBody::SingleChoice(_) => {
-                hikari_entity::assessment::answer::AnswerType::Bool
-            }
-        }
-    }
-}
-
-fn answer_value_to_string(val: AnswerValue) -> String {
-    match val {
-        AnswerValue::Bool { value } => value.to_string(),
-        AnswerValue::Text { value } => value,
-        AnswerValue::SmallInt { value } => value.to_string(),
     }
 }
 
@@ -196,7 +172,7 @@ pub(crate) async fn list_user_assessments(
 )]
 
 pub(crate) async fn start(
-    ExtractUserId(user): ExtractUserId,
+    ExtractUserId(user_id): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
     Extension(app_config): Extension<AppConfig>,
     Path(assessment): Path<String>,
@@ -205,13 +181,9 @@ pub(crate) async fn start(
         .assessments()
         .get(&assessment)
         .ok_or(Error::AssessmentConfigNotFound)?;
-    let session =
-        hikari_db::assessment::session::Mutation::new_assessment(&conn, user, assessment.assessment_id.clone()).await?;
-    tracing::debug!(
-        user_id = %user.as_hyphenated(),
-        session_id = %session.id.as_hyphenated(),
-        "started assessment session"
-    );
+
+    let session = get_or_start_session(&conn, user_id, &assessment.assessment_id).await?;
+
     Ok(Json(SessionResponse { session_id: session.id }))
 }
 
@@ -318,16 +290,6 @@ pub(crate) async fn update(
     Ok(StatusCode::CREATED.into_response())
 }
 
-#[derive(Debug, Clone, Deserialize, ToSchema)]
-#[serde(tag = "type")]
-#[schema(example = json!({"question_id": "some-id", "value": true}))]
-pub(crate) struct AnswerRequest {
-    pub question_id: String,
-
-    #[serde(flatten)]
-    pub answer: AnswerValue,
-}
-
 // TODO Set response code to 201 when frontend can handle it
 #[utoipa::path(
     post,
@@ -364,21 +326,17 @@ pub(crate) async fn submit(
         "submit assessment session"
     );
 
-    let entry = hikari_db::assessment::session::Query::load_session(&conn, user, session).await?;
-
-    tracing::debug!(entry.assessment, "loaded assessment");
-
-    if entry.assessment.ne(&assessment) {
+    let entry = require_running_session(&conn, user, &assessment).await?;
+    if entry.id != session {
         return Err(Error::UnrelatedSessionId);
     }
 
-    if entry.status != hikari_entity::assessment::session::AssessmentStatus::Running {
-        return Err(Error::NotRunning);
-    }
-    let question_answers = build_assessment_answers_sea_orm(&entry.assessment, app_config.assessments(), body)?;
-    hikari_db::assessment::session::Mutation::finish_assessment(&conn, entry.id, question_answers).await?;
-    // TODO remove response body when frontend can handle it
-    Ok(StatusCode::OK.into_response()) //FIXME check which code is correct
+    // Assessments started outside of a module have no module to attribute the history entry to,
+    // so the assessment id itself is recorded instead.
+    let module = entry.assessment.clone();
+    submit_session(&conn, user, module, entry, app_config.assessments(), body).await?;
+
+    Ok(StatusCode::OK.into_response())
 }
 
 #[utoipa::path(
@@ -444,7 +402,7 @@ pub(crate) async fn get_assessment_scales(
         .ok_or(Error::AssessmentConfigNotFound)?;
 
     let session =
-        hikari_db::assessment::answer::Query::load_answes_for_assessment(&conn, &assessment.assessment_id, user_id)
+        hikari_db::assessment::answer::Query::load_answers_for_assessment(&conn, &assessment.assessment_id, user_id)
             .await?;
 
     let scales: HashMap<NaiveDateTime, Vec<ItemValue>> = session
@@ -557,35 +515,6 @@ fn build_scale_answers(
         );
     }
     result
-}
-
-pub(crate) fn build_assessment_answers_sea_orm(
-    assessment: &str,
-    config: &AssessmentConfig,
-    answers: Vec<AnswerRequest>,
-) -> Result<Vec<QuestionAnswer>, Error> {
-    let assessment = config.get(assessment).ok_or(Error::AssessmentConfigNotFound)?;
-
-    let mut answers = answers
-        .into_iter()
-        .map(|a| (a.question_id.clone(), a))
-        .collect::<HashMap<_, _>>();
-    assessment
-        .questions
-        .values()
-        .map(|question| {
-            Ok(QuestionAnswer {
-                question: question.id.clone(),
-                answer_type: question.sea_orm_answer_type(),
-                data: answer_value_to_string(
-                    answers
-                        .remove(question.id.as_str())
-                        .ok_or(Error::MissingAnswer(question.id.clone()))?
-                        .answer,
-                ),
-            })
-        })
-        .collect::<Result<Vec<_>, Error>>()
 }
 
 async fn load_answered_assessment(

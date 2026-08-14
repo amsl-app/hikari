@@ -27,23 +27,6 @@ impl Query {
             .inspect_err(|error| tracing::error!(error = error as &dyn Error, %user_id, "failed to load sessions"))
     }
 
-    pub async fn load_completed_assessment_sessions<C: ConnectionTrait>(
-        conn: &C,
-        assessment: &str,
-        user_id: Uuid,
-    ) -> Result<Vec<Session>, DbErr> {
-        SessionEntity::find()
-            .filter(session::Column::UserId.eq(user_id))
-            .filter(session::Column::Assessment.eq(assessment))
-            .filter(session::Column::Completed.is_not_null())
-            .order_by(session::Column::Completed, sea_orm::Order::Desc)
-            .all(conn)
-            .await
-            .inspect_err(|error| {
-                tracing::error!(error = error as &dyn Error, %user_id, %assessment, "failed to load completed sessions")
-            })
-    }
-
     pub async fn load_first_session<C: ConnectionTrait>(
         conn: &C,
         assessment: &str,
@@ -59,6 +42,18 @@ impl Query {
             .inspect_err(|error| {
                 tracing::error!(error = error as &dyn Error, %user_id, %assessment, "failed to load first session")
             })
+    }
+
+    pub async fn load_first_or_running_session<C: ConnectionTrait>(
+        conn: &C,
+        assessment: &str,
+        user_id: Uuid,
+    ) -> Result<Option<Session>, DbErr> {
+        if let Some(session) = Self::load_first_session(conn, assessment, user_id).await? {
+            return Ok(Some(session));
+        }
+
+        Self::load_running_session(conn, assessment, user_id).await
     }
 
     pub async fn load_last_session<C: ConnectionTrait>(
@@ -82,6 +77,19 @@ impl Query {
             .inspect_err(|error| {
                 tracing::error!(error = error as &dyn Error, %user_id, %assessment, "failed to load last session")
             })
+    }
+
+    pub async fn load_last_or_running_session<C: ConnectionTrait>(
+        conn: &C,
+        assessment: &str,
+        min_completed: Option<chrono::NaiveDateTime>,
+        user_id: Uuid,
+    ) -> Result<Option<Session>, DbErr> {
+        if let Some(session) = Self::load_last_session(conn, assessment, min_completed, user_id).await? {
+            return Ok(Some(session));
+        }
+
+        Self::load_running_session(conn, assessment, user_id).await
     }
 
     pub async fn load_running_session<C: ConnectionTrait>(
