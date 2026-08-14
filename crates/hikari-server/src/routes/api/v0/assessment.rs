@@ -75,9 +75,11 @@ where
     Router::new()
         .route("/", get(list_assessments))
         .route("/sessions", get(list_user_assessments))
+        .route("/sessions/{session}", get(get_session))
         .nest(
             "/{assessment}",
             Router::new()
+                .route("/", get(get_assessment))
                 .route("/start", post(start))
                 .route("/scales", get(get_assessment_scales))
                 .nest(
@@ -116,11 +118,13 @@ pub(crate) async fn list_assessments(Extension(app_config): Extension<AppConfig>
 
 #[utoipa::path(
     get,
-    path = "/api/v0/assessments/sessions",
+    path = "/api/v0/assessments/{assessment}",
     responses(
-        (status = OK, body = [AssessmentSession], description = "Returns all assessments started by the current user"),
+        (status = OK, body = Assessment, description = "Returns a single assessment"),
     ),
-    params(),
+    params(
+        ("assessment" = String, Path, description = "the assessment id of the assessment, which should be processed"),
+    ),
     tag = "v0/assessment",
     security(
         ("token" = [])
@@ -131,24 +135,16 @@ pub(crate) async fn list_assessments(Extension(app_config): Extension<AppConfig>
 ",
     ty = "Permission"
 )]
-pub(crate) async fn list_user_assessments(
-    ExtractUserId(user): ExtractUserId,
+pub(crate) async fn get_assessment(
     Extension(app_config): Extension<AppConfig>,
-    Extension(conn): Extension<DatabaseConnection>,
+    Path(assessment): Path<String>,
 ) -> Result<impl IntoResponse, Error> {
-    tracing::trace!(user = user.as_hyphenated().to_string(), "list assessment sessions");
-    let config = app_config.assessments();
-    let sessions = hikari_db::assessment::session::Query::load_sessions(&conn, user).await?;
-    tracing::debug!(
-        user = user.as_hyphenated().to_string(),
-        sessions = ?sessions,
-        "loaded assessment sessions"
-    );
-    let mut response = Vec::with_capacity(sessions.len());
-    for session in sessions {
-        response.push(load_answered_assessment(&conn, session, config).await?);
-    }
-    Ok(Json(response))
+    let assessment = app_config
+        .assessments()
+        .get(&assessment)
+        .ok_or(Error::AssessmentConfigNotFound)?;
+
+    Ok(Json(assessment).into_response())
 }
 
 #[utoipa::path(
@@ -189,6 +185,128 @@ pub(crate) async fn start(
 
 #[utoipa::path(
     get,
+    path = "/api/v0/assessments/{assessment_id}/scales",
+    responses(
+        (status = OK, body = HashMap<NaiveDateTime, Vec<ItemValue>>, description = "Returns all scales"),
+    ),
+    params(
+        ("assessment_id" = String, Path, description = "the assessment id of the assessment, which should be processed"),
+    ),
+    tag = "v0/assessment",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub(crate) async fn get_assessment_scales(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(assessment): Path<String>,
+) -> Result<impl IntoResponse, Error> {
+    tracing::trace!(
+        user_id = %user_id.as_hyphenated(),
+        assessment = %assessment,
+        "getting scale values for whole assessment"
+    );
+    let assessment = app_config
+        .assessments()
+        .get(&assessment)
+        .ok_or(Error::AssessmentConfigNotFound)?;
+
+    let session =
+        hikari_db::assessment::answer::Query::load_answers_for_assessment(&conn, &assessment.assessment_id, user_id)
+            .await?;
+
+    let scales: HashMap<NaiveDateTime, Vec<ItemValue>> = session
+        .into_iter()
+        .map(|(session, answeres)| {
+            if let Some(completed) = session.completed {
+                let scale = build_scale_answers(assessment, &answeres)?;
+                Ok(Some((completed, scale)))
+            } else {
+                Ok(None)
+            }
+        })
+        .collect::<Result<Vec<Option<(NaiveDateTime, Vec<ItemValue>)>>, Error>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+
+    return Ok(Json(scales));
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/assessments/sessions",
+    responses(
+        (status = OK, body = [AssessmentSession], description = "Returns all assessments started by the current user"),
+    ),
+    params(),
+    tag = "v0/assessment",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect(
+    "Permission::Basic
+",
+    ty = "Permission"
+)]
+pub(crate) async fn list_user_assessments(
+    ExtractUserId(user): ExtractUserId,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+) -> Result<impl IntoResponse, Error> {
+    tracing::trace!(user = user.as_hyphenated().to_string(), "list assessment sessions");
+    let config = app_config.assessments();
+    let sessions = hikari_db::assessment::session::Query::load_sessions(&conn, user).await?;
+    tracing::debug!(
+        user = user.as_hyphenated().to_string(),
+        sessions = ?sessions,
+        "loaded assessment sessions"
+    );
+    let mut response = Vec::with_capacity(sessions.len());
+    for session in sessions {
+        response.push(load_answered_assessment(&conn, session, config).await?);
+    }
+    Ok(Json(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/assessments/sessions/{session}",
+    responses(
+        (status = OK, body = AssessmentSession, description = "Returns a single assessment session started by the current user"),
+    ),
+    params(
+        ("session" = String, Path, description = "the session id of the assessment session which should be loaded"),
+    ),
+    tag = "v0/assessment",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect(
+    "Permission::Basic
+",
+    ty = "Permission"
+)]
+pub(crate) async fn get_session(
+    ExtractUserId(user): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Extension(app_config): Extension<AppConfig>,
+    Path(session): Path<Uuid>,
+) -> Result<impl IntoResponse, Error> {
+    let entry = hikari_db::assessment::session::Query::load_session(&conn, user, session).await?;
+
+    let res = load_answered_assessment(&conn, entry, app_config.assessments()).await?;
+
+    Ok(Json(res))
+}
+
+#[utoipa::path(
+    get,
     path = "/api/v0/assessments/{assessment}/sessions/{session}/load",
     responses(
         (status = OK, body = AssessmentSession, description = "Returns all questions with if answered the saved reply"),
@@ -223,71 +341,6 @@ pub(crate) async fn load(
     let res = load_answered_assessment(&conn, entry, app_config.assessments()).await?;
 
     Ok(Json(res))
-}
-
-// TODO change from 201 to 204
-#[utoipa::path(
-    put,
-    request_body = AnswerValue,
-    path = "/api/v0/assessments/{assessment}/sessions/{session}/update/{question}",
-    responses(
-        (status = CREATED, description = "Saves the changes to the selected assessment"),
-    ),
-    params(
-        ("assessment" = String, Path, description = "the assessment id of the assessment, which should be processed"),
-        ("session" = String, Path, description = "the session id of the assessment which should be updated"),
-        ("question" = String, Path, description = "the question id of the question of which the answer should be set"),
-    ),
-    tag = "v0/assessment",
-    security(
-        ("token" = [])
-    )
-)]
-#[protect(
-    "Permission::Basic
-",
-    ty = "Permission"
-)]
-
-pub(crate) async fn update(
-    ExtractUserId(user): ExtractUserId,
-    Extension(conn): Extension<DatabaseConnection>,
-    Extension(app_config): Extension<AppConfig>,
-    Path((assessment, session, question)): Path<(String, Uuid, String)>,
-    Json(body): Json<AnswerValue>,
-) -> Result<impl IntoResponse, Error> {
-    let entry = hikari_db::assessment::session::Query::load_session(&conn, user, session).await?;
-
-    if entry.assessment.ne(&assessment) {
-        return Err(Error::UnrelatedSessionId);
-    }
-
-    if entry.status != hikari_entity::assessment::session::AssessmentStatus::Running {
-        return Err(Error::NotRunning);
-    }
-    let (_, question) = app_config
-        .assessments()
-        .get(&entry.assessment)
-        .ok_or(Error::AssessmentConfigNotFound)?
-        .questions
-        .iter()
-        .find(|(_, q)| q.id.as_str() == question)
-        .ok_or(Error::AnswerNotFound)?;
-
-    question.validate(&body).map_err(|error| {
-        tracing::error!(error = &error as &dyn std::error::Error, "Failed to validate answer");
-        Error::InvalidAnswer
-    })?;
-
-    hikari_db::assessment::answer::Mutation::insert_or_update(
-        &conn,
-        session,
-        question.id.clone(),
-        question.sea_orm_answer_type(),
-        answer_value_to_string(body),
-    )
-    .await?;
-    Ok(StatusCode::CREATED.into_response())
 }
 
 // TODO Set response code to 201 when frontend can handle it
@@ -370,57 +423,69 @@ pub(crate) async fn get_scales(
     Ok(Json(result))
 }
 
+// TODO change from 201 to 204
 #[utoipa::path(
-    get,
-    path = "/api/v0/assessments/{assessment_id}/scales",
+    put,
+    request_body = AnswerValue,
+    path = "/api/v0/assessments/{assessment}/sessions/{session}/update/{question}",
     responses(
-        (status = OK, body = HashMap<NaiveDateTime, Vec<ItemValue>>, description = "Returns all scales"),
+        (status = CREATED, description = "Saves the changes to the selected assessment"),
     ),
     params(
-        ("assessment_id" = String, Path, description = "the assessment id of the assessment, which should be processed"),
+        ("assessment" = String, Path, description = "the assessment id of the assessment, which should be processed"),
+        ("session" = String, Path, description = "the session id of the assessment which should be updated"),
+        ("question" = String, Path, description = "the question id of the question of which the answer should be set"),
     ),
     tag = "v0/assessment",
     security(
         ("token" = [])
     )
 )]
-#[protect("Permission::Basic", ty = "Permission")]
-pub(crate) async fn get_assessment_scales(
-    ExtractUserId(user_id): ExtractUserId,
-    Extension(app_config): Extension<AppConfig>,
+#[protect(
+    "Permission::Basic
+",
+    ty = "Permission"
+)]
+
+pub(crate) async fn update(
+    ExtractUserId(user): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
-    Path(assessment): Path<String>,
+    Extension(app_config): Extension<AppConfig>,
+    Path((assessment, session, question)): Path<(String, Uuid, String)>,
+    Json(body): Json<AnswerValue>,
 ) -> Result<impl IntoResponse, Error> {
-    tracing::trace!(
-        user_id = %user_id.as_hyphenated(),
-        assessment = %assessment,
-        "getting scale values for whole assessment"
-    );
-    let assessment = app_config
+    let entry = hikari_db::assessment::session::Query::load_session(&conn, user, session).await?;
+
+    if entry.assessment.ne(&assessment) {
+        return Err(Error::UnrelatedSessionId);
+    }
+
+    if entry.status != hikari_entity::assessment::session::AssessmentStatus::Running {
+        return Err(Error::NotRunning);
+    }
+    let (_, question) = app_config
         .assessments()
-        .get(&assessment)
-        .ok_or(Error::AssessmentConfigNotFound)?;
+        .get(&entry.assessment)
+        .ok_or(Error::AssessmentConfigNotFound)?
+        .questions
+        .iter()
+        .find(|(_, q)| q.id.as_str() == question)
+        .ok_or(Error::AnswerNotFound)?;
 
-    let session =
-        hikari_db::assessment::answer::Query::load_answers_for_assessment(&conn, &assessment.assessment_id, user_id)
-            .await?;
+    question.validate(&body).map_err(|error| {
+        tracing::error!(error = &error as &dyn std::error::Error, "Failed to validate answer");
+        Error::InvalidAnswer
+    })?;
 
-    let scales: HashMap<NaiveDateTime, Vec<ItemValue>> = session
-        .into_iter()
-        .map(|(session, answeres)| {
-            if let Some(completed) = session.completed {
-                let scale = build_scale_answers(assessment, &answeres)?;
-                Ok(Some((completed, scale)))
-            } else {
-                Ok(None)
-            }
-        })
-        .collect::<Result<Vec<Option<(NaiveDateTime, Vec<ItemValue>)>>, Error>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
-    return Ok(Json(scales));
+    hikari_db::assessment::answer::Mutation::insert_or_update(
+        &conn,
+        session,
+        question.id.clone(),
+        question.sea_orm_answer_type(),
+        answer_value_to_string(body),
+    )
+    .await?;
+    Ok(StatusCode::CREATED.into_response())
 }
 
 async fn get_scale_values(
