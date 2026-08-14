@@ -24,4 +24,11 @@ pub struct AssessmentV01 {
     /// # Scales used in the assessment
     /// Scales are used to generate scores based on user responses.
     pub scales: IndexMap<String, ScaleV01>,
+    /// # Weight of the assessment
+    /// Optional weight used to order or prioritize the assessment.
+    pub weight: Option<i32>,
+    #[serde(default)]
+    /// # Hidden flag
+    /// Indicates whether the assessment should be hidden.
+    pub hidden: bool,
 }

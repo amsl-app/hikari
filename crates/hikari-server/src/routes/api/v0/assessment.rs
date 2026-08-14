@@ -592,6 +592,8 @@ fn generate_answered_assessment(
         title: assessment.title.clone(),
         questions,
         scales: assessment.scales.clone(),
+        weight: assessment.weight,
+        hidden: assessment.hidden,
     };
 
     Ok(AssessmentSession {
@@ -684,6 +686,8 @@ mod tests {
                         ],
                     },
                 )]),
+                weight: None,
+                hidden: false,
             },
         )]),
     });

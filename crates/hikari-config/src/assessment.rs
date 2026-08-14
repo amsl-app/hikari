@@ -33,6 +33,8 @@ pub struct Assessment {
     #[serde(default)]
     #[serde(with = "id_map")]
     pub scales: IndexMap<String, Scale>,
+    pub weight: Option<i32>,
+    pub hidden: bool,
 }
 
 impl From<AssessmentV01> for Assessment {
@@ -42,6 +44,8 @@ impl From<AssessmentV01> for Assessment {
             title: v01.title,
             questions: v01.questions,
             scales: v01.scales,
+            weight: v01.weight,
+            hidden: v01.hidden,
         }
     }
 }
