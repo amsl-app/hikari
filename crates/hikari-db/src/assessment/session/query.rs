@@ -19,14 +19,6 @@ impl Query {
             )
     }
 
-    pub async fn load_sessions<C: ConnectionTrait>(conn: &C, user_id: Uuid) -> Result<Vec<Session>, DbErr> {
-        SessionEntity::find()
-            .filter(session::Column::UserId.eq(user_id))
-            .all(conn)
-            .await
-            .inspect_err(|error| tracing::error!(error = error as &dyn Error, %user_id, "failed to load sessions"))
-    }
-
     pub async fn load_first_session<C: ConnectionTrait>(
         conn: &C,
         assessment: &str,

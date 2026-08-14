@@ -37,25 +37,71 @@ impl Query {
                     %user_id,
                     "failed to load answers for assessment"
                 )
-            })?
-            .into_iter();
+            })?;
 
-        // Aggregate based on session
+        Ok(Self::aggregate_sessions_with_answers(res))
+    }
+
+    pub async fn load_answers_for_session<C: ConnectionTrait>(
+        conn: &C,
+        session_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(Session, Vec<Answer>), DbErr> {
+        // Left join
+        let res = SessionEntity::find_by_id(session_id)
+            .filter(session::Column::UserId.eq(user_id))
+            .find_also_related(AnswerEntity)
+            .all(conn)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(
+                    error = error as &dyn std::error::Error,
+                    %session_id,
+                    %user_id,
+                    "failed to load answers for session"
+                )
+            })?;
+
+        Self::aggregate_sessions_with_answers(res)
+            .into_iter()
+            .next()
+            .ok_or_else(|| DbErr::RecordNotFound("record not found".to_string()))
+    }
+
+    pub async fn load_answers_for_sessions<C: ConnectionTrait>(
+        conn: &C,
+        user_id: Uuid,
+    ) -> Result<Vec<(Session, Vec<Answer>)>, DbErr> {
+        // Left join
+        let res = SessionEntity::find()
+            .filter(session::Column::UserId.eq(user_id))
+            .find_also_related(AnswerEntity)
+            .all(conn)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(
+                    error = error as &dyn std::error::Error,
+                    %user_id,
+                    "failed to load answers for sessions"
+                )
+            })?;
+
+        Ok(Self::aggregate_sessions_with_answers(res))
+    }
+
+    fn aggregate_sessions_with_answers(rows: Vec<(Session, Option<Answer>)>) -> Vec<(Session, Vec<Answer>)> {
         let mut sessions_with_answers: Vec<(Session, Vec<Answer>)> = Vec::new();
-        for (session, answer) in res {
+        for (session, answer) in rows {
             if let Some(answer) = answer {
                 if let Some((_, answers)) = sessions_with_answers.iter_mut().find(|(s, _)| s.id == session.id) {
                     answers.push(answer);
                 } else {
                     sessions_with_answers.push((session, vec![answer]));
                 }
-            } else {
-                if !sessions_with_answers.iter().any(|(s, _)| s.id == session.id) {
-                    sessions_with_answers.push((session, vec![]));
-                }
+            } else if !sessions_with_answers.iter().any(|(s, _)| s.id == session.id) {
+                sessions_with_answers.push((session, vec![]));
             }
         }
-
-        Ok(sessions_with_answers)
+        sessions_with_answers
     }
 }
