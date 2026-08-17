@@ -27,7 +27,7 @@ impl Query {
         let res = SessionEntity::find()
             .filter(session::Column::Assessment.eq(assessment_id))
             .filter(session::Column::UserId.eq(user_id))
-            .find_also_related(AnswerEntity)
+            .find_with_related(AnswerEntity)
             .all(conn)
             .await
             .inspect_err(|error| {
@@ -39,7 +39,7 @@ impl Query {
                 )
             })?;
 
-        Ok(Self::aggregate_sessions_with_answers(res))
+        Ok(res)
     }
 
     pub async fn load_answers_for_session<C: ConnectionTrait>(
@@ -50,7 +50,8 @@ impl Query {
         // Left join
         let res = SessionEntity::find_by_id(session_id)
             .filter(session::Column::UserId.eq(user_id))
-            .find_also_related(AnswerEntity)
+            .filter(session::Column::Id.eq(session_id))
+            .find_with_related(AnswerEntity)
             .all(conn)
             .await
             .inspect_err(|error| {
@@ -60,12 +61,15 @@ impl Query {
                     %user_id,
                     "failed to load answers for session"
                 )
-            })?;
-
-        Self::aggregate_sessions_with_answers(res)
+            })?
             .into_iter()
             .next()
-            .ok_or_else(|| DbErr::RecordNotFound("record not found".to_string()))
+            .ok_or_else(|| {
+                tracing::error!(%session_id, %user_id, "no session found for user");
+                DbErr::RecordNotFound(format!("No session found for user {user_id} and session {session_id}"))
+            })?;
+
+        Ok(res)
     }
 
     pub async fn load_answers_for_sessions<C: ConnectionTrait>(
@@ -75,7 +79,7 @@ impl Query {
         // Left join
         let res = SessionEntity::find()
             .filter(session::Column::UserId.eq(user_id))
-            .find_also_related(AnswerEntity)
+            .find_with_related(AnswerEntity)
             .all(conn)
             .await
             .inspect_err(|error| {
@@ -86,22 +90,6 @@ impl Query {
                 )
             })?;
 
-        Ok(Self::aggregate_sessions_with_answers(res))
-    }
-
-    fn aggregate_sessions_with_answers(rows: Vec<(Session, Option<Answer>)>) -> Vec<(Session, Vec<Answer>)> {
-        let mut sessions_with_answers: Vec<(Session, Vec<Answer>)> = Vec::new();
-        for (session, answer) in rows {
-            if let Some(answer) = answer {
-                if let Some((_, answers)) = sessions_with_answers.iter_mut().find(|(s, _)| s.id == session.id) {
-                    answers.push(answer);
-                } else {
-                    sessions_with_answers.push((session, vec![answer]));
-                }
-            } else if !sessions_with_answers.iter().any(|(s, _)| s.id == session.id) {
-                sessions_with_answers.push((session, vec![]));
-            }
-        }
-        sessions_with_answers
+        Ok(res)
     }
 }

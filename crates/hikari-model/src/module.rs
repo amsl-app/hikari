@@ -107,9 +107,10 @@ impl<'a> ModuleFull<'a> {
             default_session: module.default_session.as_deref(),
             hidden: module.hidden,
             category: module.category,
-            assessment: module.assessment.as_ref().map(|config| {
-                new_module_assessment(config, last_pre_assessment.as_ref(), last_post_assessment.as_ref())
-            }),
+            assessment: module
+                .assessment
+                .as_ref()
+                .map(|config| new_module_assessment(config, last_pre_assessment, last_post_assessment)),
             weight: module.weight.unwrap_or(1),
             sessions,
             completion,
@@ -124,14 +125,14 @@ impl<'a> ModuleFull<'a> {
 
 pub(crate) fn new_module_assessment<'a>(
     config: &ModuleAssessment<'a>,
-    last_pre_assessment: Option<&Uuid>,
-    last_post_assessment: Option<&Uuid>,
+    last_pre_assessment: Option<Uuid>,
+    last_post_assessment: Option<Uuid>,
 ) -> ModuleAssessmentFull<'a> {
     ModuleAssessmentFull {
         pre: config.pre.clone(),
         post: config.post.clone(),
-        last_pre: last_pre_assessment.copied(),
-        last_post: last_post_assessment.copied(),
+        last_pre: last_pre_assessment,
+        last_post: last_post_assessment,
     }
 }
 

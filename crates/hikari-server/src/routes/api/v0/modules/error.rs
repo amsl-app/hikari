@@ -9,7 +9,6 @@ use std::str::Utf8Error;
 use thiserror::Error;
 
 // TODO (LOW) Document error types
-// TODO (LOW) Document error types
 #[derive(Error, Debug)]
 pub(crate) enum ModuleError {
     #[error(transparent)]

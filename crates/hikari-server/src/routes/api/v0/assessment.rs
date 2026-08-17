@@ -487,7 +487,6 @@ async fn inner_load_session(
     Ok(res)
 }
 
-// TODO Set response code to 201 when frontend can handle it
 #[utoipa::path(
     post,
     request_body = [AnswerRequest],
@@ -567,7 +566,6 @@ pub(crate) async fn get_scales(
     Ok(Json(result))
 }
 
-// TODO change from 201 to 204
 #[utoipa::path(
     put,
     request_body = AnswerValue,
@@ -629,7 +627,7 @@ pub(crate) async fn update(
         answer_value_to_string(body),
     )
     .await?;
-    Ok(StatusCode::CREATED.into_response())
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 async fn get_scale_values(
