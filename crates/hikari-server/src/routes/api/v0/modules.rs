@@ -325,8 +325,7 @@ pub(crate) async fn import_module_milestones(
     let module = app_config
         .module_config()
         .get_for_group(&module_id, &user.groups)
-        .ok_or(modules::error::ModuleError::ModuleNotFound)?
-        .clone();
+        .ok_or(modules::error::ModuleError::ModuleNotFound)?;
 
     let already: HashSet<String> =
         hikari_db::planner::planner_milestone::Query::get_imported_origin_ids(&conn, user.id, &module_id)
@@ -336,14 +335,14 @@ pub(crate) async fn import_module_milestones(
 
     let inputs: Vec<MilestoneInput> = module
         .milestones
-        .into_iter()
+        .iter()
         .filter(|m| !already.contains(&m.id))
         .map(|m| MilestoneInput {
-            title: m.title,
+            title: m.title.clone(),
             date: m.date,
-            description: m.description,
+            description: m.description.clone(),
             module_id: Some(module_id.clone()),
-            origin_id: Some(m.id),
+            origin_id: Some(m.id.clone()),
         })
         .collect();
 
