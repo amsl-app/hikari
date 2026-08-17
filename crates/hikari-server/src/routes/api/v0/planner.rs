@@ -197,7 +197,6 @@ pub(crate) async fn update_planner_entry(
     }
 
     let milestone = if let Some(inner) = changes.milestone_id {
-        active_model.milestone_id = ActiveValue::Set(inner);
         match inner {
             Some(milestone_id) => {
                 // Check if the milestone exists and belongs to the user
@@ -211,6 +210,8 @@ pub(crate) async fn update_planner_entry(
     } else {
         existing_milestone.map(PlannerMilestone::from_db_model)
     };
+
+    active_model.milestone_id = ActiveValue::Set(milestone.as_ref().map(|m| m.id));
 
     let updated = planner::planner_entry::Mutation::update_planner_entry(&conn, active_model).await?;
 
@@ -1162,8 +1163,10 @@ END:VEVENT\r\n\
             .strip_prefix("DESCRIPTION:")
             .and_then(|s| s.strip_suffix("\r\n"))
             .unwrap();
-        let expected =
-            expected_ical_output(&expected_ical_milestone_vevent("Milestone: Launch day", Some(description_value)));
+        let expected = expected_ical_output(&expected_ical_milestone_vevent(
+            "Milestone: Launch day",
+            Some(description_value),
+        ));
         let res = build_ical(vec![], vec![milestone]);
         assert_eq!(res, expected);
     }

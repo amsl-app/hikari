@@ -1,5 +1,5 @@
 use hikari_entity::planner_milestone::{Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use uuid::Uuid;
 
 pub struct Query;
@@ -59,13 +59,16 @@ impl Query {
         user_id: Uuid,
         module_id: &str,
     ) -> Result<Vec<String>, DbErr> {
-        let rows = PlannerMilestone::find()
+        let ids: Vec<Option<String>> = PlannerMilestone::find()
+            .select_only()
+            .column(Column::OriginId)
             .filter(Column::UserId.eq(user_id))
             .filter(Column::ModuleId.eq(module_id))
             .filter(Column::OriginId.is_not_null())
+            .into_tuple()
             .all(db)
             .await
             .inspect_err(|error| tracing::error!(%error, "failed to load imported origin ids"))?;
-        Ok(rows.into_iter().filter_map(|m| m.origin_id).collect())
+        Ok(ids.into_iter().flatten().collect())
     }
 }
