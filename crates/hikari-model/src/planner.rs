@@ -17,6 +17,7 @@ pub struct PlannerEntry {
     #[serde(skip_serializing)]
     pub user_id: Uuid,
     pub date: NaiveDate,
+    pub effective_date: NaiveDate,
     pub title: String,
     pub completed: bool,
     pub priority: i32,
@@ -33,6 +34,7 @@ pub struct PlannerEntryFull {
     #[serde(skip_serializing)]
     pub user_id: Uuid,
     pub date: NaiveDate,
+    pub effective_date: NaiveDate,
     pub title: String,
     pub completed: bool,
     pub priority: i32,
@@ -49,6 +51,7 @@ impl PlannerEntry {
             id: self.id,
             user_id: self.user_id,
             date: self.date,
+            effective_date: self.effective_date,
             title: self.title.clone(),
             completed: self.completed,
             priority: self.priority,
