@@ -38,6 +38,7 @@ pub mod counter;
 pub mod extractor;
 pub mod flow;
 pub mod llm;
+pub mod media;
 pub mod message;
 pub mod retriever;
 pub mod set_slot;
@@ -208,6 +209,7 @@ impl StepBuilder {
                 create_step(counter, parent_steps, self.conditions, self.id, constants, documents)
             }
             StepType::Flow(flow) => create_step(flow, parent_steps, self.conditions, self.id, constants, documents),
+            StepType::Media(media) => create_step(media, parent_steps, self.conditions, self.id, constants, documents),
             StepType::Chain(chain) => {
                 let map = Self::create_chain(parent_step, parent_steps, constants, documents, chain)?;
                 Ok(map)
@@ -267,6 +269,9 @@ pub enum StepType {
     /// # Step that controls the flow of execution
     /// Here we can continue, repeat or goto other steps
     Flow(flow::FlowBuilder),
+    /// # Step that handles media files
+    /// Here we can handle media files images and videos
+    Media(media::MediaBuilder),
 }
 
 // Only used for take() in StepBuilder::into_llm_step

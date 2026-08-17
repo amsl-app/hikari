@@ -3,11 +3,13 @@ use crate::builder::slot::SaveTarget;
 use crate::builder::slot::SlotValuePair;
 use crate::builder::slot::paths::SlotPath;
 use crate::builder::steps::ConditionOperation;
+use crate::builder::steps::media::MediaType;
 use crate::builder::steps::{Condition, Template};
 use crate::execution::error::LlmExecutionError;
 use crate::execution::steps::api_call::ApiCall;
 use crate::execution::steps::counter::Counter;
 use crate::execution::steps::go_to::GoTo;
+use crate::execution::steps::media_fetch::MediaFetch;
 use crate::execution::steps::sse_call::SseCall;
 use crate::utils::get_slots;
 use combined_step::CombinedStep;
@@ -38,6 +40,7 @@ pub mod conversation_summarizer;
 pub mod conversation_validator;
 pub mod counter;
 pub mod go_to;
+pub mod media_fetch;
 pub mod message_generator;
 pub mod set_slot;
 pub mod sse_call;
@@ -244,6 +247,7 @@ pub enum LlmStep {
     SetSlot(SetSlot),
     Counter(Counter),
     GoTo(GoTo),
+    Media(MediaFetch),
 }
 
 impl LlmStepTrait for LlmStep {
@@ -366,6 +370,15 @@ impl LlmStepTrait for LlmStep {
                 llm_service,
                 conn,
             ),
+            LlmStep::Media(step) => step.call(
+                config,
+                conversation_id,
+                user_id,
+                module_id,
+                session_id,
+                llm_service,
+                conn,
+            ),
         }
     }
 
@@ -383,6 +396,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.add_previous_response(response),
             LlmStep::Counter(step) => step.add_previous_response(response),
             LlmStep::GoTo(step) => step.add_previous_response(response),
+            LlmStep::Media(step) => step.add_previous_response(response),
         }
     }
 
@@ -400,6 +414,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.remove_previous_response(),
             LlmStep::Counter(step) => step.remove_previous_response(),
             LlmStep::GoTo(step) => step.remove_previous_response(),
+            LlmStep::Media(step) => step.remove_previous_response(),
         }
     }
 
@@ -417,6 +432,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.set_status(status),
             LlmStep::Counter(step) => step.set_status(status),
             LlmStep::GoTo(step) => step.set_status(status),
+            LlmStep::Media(step) => step.set_status(status),
         }
     }
 
@@ -434,6 +450,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.finish(),
             LlmStep::Counter(step) => step.finish(),
             LlmStep::GoTo(step) => step.finish(),
+            LlmStep::Media(step) => step.finish(),
         }
     }
 
@@ -451,6 +468,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.status(),
             LlmStep::Counter(step) => step.status(),
             LlmStep::GoTo(step) => step.status(),
+            LlmStep::Media(step) => step.status(),
         }
     }
 
@@ -468,6 +486,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.conditions(),
             LlmStep::Counter(step) => step.conditions(),
             LlmStep::GoTo(step) => step.conditions(),
+            LlmStep::Media(step) => step.conditions(),
         }
     }
 
@@ -485,6 +504,7 @@ impl LlmStepTrait for LlmStep {
             LlmStep::SetSlot(step) => step.id(),
             LlmStep::Counter(step) => step.id(),
             LlmStep::GoTo(step) => step.id(),
+            LlmStep::Media(step) => step.id(),
         }
     }
 }
@@ -516,6 +536,10 @@ pub enum LlmStepContent {
     Message {
         message: MessageStream,
         store: Option<SaveTarget>,
+    },
+    Media {
+        url: String,
+        r#type: MediaType,
     },
     StepValue {
         values: HashMap<SaveTarget, Value>,
