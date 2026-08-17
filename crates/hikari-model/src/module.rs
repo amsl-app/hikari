@@ -19,6 +19,7 @@ use utoipa::ToSchema;
 pub mod assessment;
 pub mod group;
 pub mod instance;
+pub mod next_session;
 pub mod session;
 
 #[derive(Serialize, ToSchema)]
