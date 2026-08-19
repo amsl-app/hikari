@@ -11,13 +11,13 @@ use csml_engine::data::AsyncDatabase;
 use error::ModuleError;
 use futures::future::try_join_all;
 use futures::future::try_join3;
-use hikari_config::module::next_session::Next;
 use hikari_db::module::session::status;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::util::{FlattenTransactionResultExt, InspectTransactionError};
 use hikari_model::history::{HistoryEntry, HistoryEntryType};
 use hikari_model::module::ModuleFull;
 use hikari_model::module::group::ModuleGroupeFull;
+use hikari_model::module::next_session::Next;
 use hikari_model::module::session::SessionFull;
 use hikari_model::module::session::instance::SessionInstance;
 use hikari_model::planner::{ImportableMilestone, PlannerMilestone};
@@ -544,7 +544,7 @@ pub(crate) async fn finish_session(
     get,
     path = "/api/v0/modules/{module}/sessions/{session}/next",
     responses(
-        (status = OK, body = Next, description = "The next session", example = json ! ({ "module-id": "some-module", "session-id": "some-session", "force": false })),
+        (status = OK, body = Next, description = "The next session", example = json ! ({ "module_id": "some-module", "session_id": "some-session", "force": false })),
         (status = NOT_FOUND, description = "Module or session weren't found"),
     ),
     params(
@@ -570,9 +570,9 @@ pub(crate) async fn next_session_custom(
 
     let (_, session) = get_session(&module_id, &session_id, app_config.module_config(), &user.groups)?;
 
-    let session = session.next();
+    let next = session.next().map(Next::from_config);
 
-    Ok(Json(session).into_response())
+    Ok(Json(next).into_response())
 }
 
 #[derive(Serialize, ToSchema)]
