@@ -44,12 +44,12 @@ async fn load_module_assessment_instances(
     };
 
     let (pre, post) = try_join(
-        hikari_db::assessment::session::Query::load_first_session(conn, assessment.pre.as_ref(), user_id),
+        hikari_db::assessment::session::Query::load_first_session(conn, assessment.pre.as_ref(), &user_id),
         hikari_db::assessment::session::Query::load_last_session(
             conn,
             assessment.post.as_ref(),
             completion.map(|c| c.naive_utc()),
-            user_id,
+            &user_id,
         ),
     )
     .await?;
@@ -558,19 +558,42 @@ pub(crate) async fn history(
     Extension(conn): Extension<DatabaseConnection>,
 ) -> Result<impl IntoResponse, ModuleError> {
     let data = hikari_db::history::Query::load_history_entries(&conn, user).await?;
-    let modules = data.module.into_iter().map(|(history, module)| HistoryEntry {
-        completed: history.completed.and_utc(),
-        value: HistoryEntryType::Module(module.into_model()),
-    });
-    let sessions = data.session.into_iter().map(|(history, session)| HistoryEntry {
-        completed: history.completed.and_utc(),
-        value: HistoryEntryType::Session(session.into_model()),
-    });
-    let assessments = data.assessment.into_iter().map(|(history, assessment)| HistoryEntry {
-        completed: history.completed.and_utc(),
-        value: HistoryEntryType::Assessment(assessment.into_model()),
-    });
-    let mut res = modules.chain(sessions).chain(assessments).collect::<Vec<_>>();
+
+    let assessment_sessions = hikari_db::assessment::session::Query::load_sessions(&conn, &user).await?;
+    let _assessment_sessions_map: HashMap<_, _> = assessment_sessions
+        .into_iter()
+        .map(|session| (session.id, session))
+        .collect();
+
+    let modules = data
+        .module
+        .into_iter()
+        .map(|(history, module)| HistoryEntry {
+            completed: history.completed.and_utc(),
+            value: HistoryEntryType::Module(module.into_model()),
+        })
+        .collect::<Vec<_>>();
+    let sessions = data
+        .session
+        .into_iter()
+        .map(|(history, session)| HistoryEntry {
+            completed: history.completed.and_utc(),
+            value: HistoryEntryType::Session(session.into_model()),
+        })
+        .collect::<Vec<_>>();
+
+    let assessments = data
+        .assessment
+        .into_iter()
+        .map(|(history, assessment)| HistoryEntry {
+            completed: history.completed.and_utc(),
+            value: HistoryEntryType::Assessment(assessment.into_model()),
+        })
+        .collect::<Vec<_>>();
+
+    let mut res = modules;
+    res.extend(sessions);
+    res.extend(assessments);
     res.sort_by_key(|v| std::cmp::Reverse(v.completed));
     Ok(Json(res))
 }

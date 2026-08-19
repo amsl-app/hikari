@@ -20,6 +20,7 @@ pub enum HistoryEntryType {
 
 #[derive(Serialize, ToSchema)]
 pub struct HistoryAssessment {
+    pub assessment_type: String,
     pub session_id: Uuid,
 }
 

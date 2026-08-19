@@ -81,7 +81,7 @@ pub(crate) async fn get_or_start_session<C: ConnectionTrait>(
     assessment_id: &str,
 ) -> Result<AssessmentSession, DbErr> {
     if let Some(session) =
-        hikari_db::assessment::session::Query::load_running_session(conn, assessment_id, user_id).await?
+        hikari_db::assessment::session::Query::load_running_session(conn, assessment_id, &user_id).await?
     {
         return Ok(session);
     }
@@ -98,7 +98,7 @@ pub(crate) async fn get_or_start_session<C: ConnectionTrait>(
 
 pub(crate) async fn require_running_session<C: ConnectionTrait>(
     conn: &C,
-    user_id: Uuid,
+    user_id: &Uuid,
     assessment_id: &str,
 ) -> Result<AssessmentSession, Error> {
     hikari_db::assessment::session::Query::load_running_session(conn, assessment_id, user_id)
@@ -109,7 +109,6 @@ pub(crate) async fn require_running_session<C: ConnectionTrait>(
 pub(crate) async fn submit_session(
     conn: &DatabaseConnection,
     user_id: Uuid,
-    module: String,
     session: AssessmentSession,
     config: &AssessmentConfig,
     answers: Vec<AnswerRequest>,
@@ -120,7 +119,7 @@ pub(crate) async fn submit_session(
     conn.transaction(|txn| {
         Box::pin(async move {
             hikari_db::assessment::session::Mutation::finish_assessment(txn, session_id, question_answers).await?;
-            hikari_db::history::history_assessment::Mutation::create(txn, user_id, module, session_id).await
+            hikari_db::history::history_assessment::Mutation::create(txn, user_id, session_id).await
         })
     })
     .await
