@@ -7,7 +7,7 @@ use axum::Json;
 use axum::Router;
 use axum::extract::{Path, Query};
 use axum::response::IntoResponse;
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;

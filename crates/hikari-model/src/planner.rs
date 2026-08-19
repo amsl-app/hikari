@@ -192,7 +192,7 @@ pub struct NewPlannerMilestone {
     pub date: NaiveDate,
     #[serde(default)]
     pub description: Option<String>,
-    pub goals: Vec<Uuid>
+    pub goals: Vec<Uuid>,
 }
 
 /// A module-defined milestone the user may import, annotated with whether it is already present.
