@@ -1,7 +1,6 @@
 use chrono::NaiveDate;
 use hikari_entity::planner::{
-    planner_goal,
-    planner_goal_milestone,
+    planner_goal, planner_goal_milestone,
     planner_milestone::{ActiveModel, Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel},
 };
 use sea_orm::{
