@@ -49,6 +49,8 @@ pub(crate) struct PlannerMilestoneChanges {
     #[serde(default, with = "::serde_with::rust::double_option")]
     #[allow(clippy::option_option)]
     pub description: Option<Option<String>>,
+    #[serde(default)]
+    pub goals: Option<Vec<Uuid>>,
 }
 
 pub(crate) fn create_router<S>() -> Router<S>
@@ -71,7 +73,6 @@ where
             "/milestones/{id}",
             get(get_milestone).patch(update_milestone).delete(delete_milestone),
         )
-        .route("/milestones/{id}/goals", put(set_milestone_goals))
         .nest("/goals", goals::create_router())
         .with_state(())
 }
@@ -500,6 +501,7 @@ pub(crate) async fn create_milestone(
         description: body.description,
         module_id: None,
         origin_id: None,
+        goals: body.goals,
     };
     let created = planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?;
     Ok((StatusCode::CREATED, Json(PlannerMilestone::from_db_model(created))))
@@ -546,30 +548,6 @@ pub(crate) async fn get_milestone(
 }
 
 #[utoipa::path(
-    put,
-    path = "/api/v0/planner/milestones/{id}/goals",
-    request_body = Vec<Uuid>,
-    responses(
-        (status = OK, description = "Replace the goals linked to a milestone", body = [Goal]),
-        (status = NOT_FOUND, description = "Milestone not found, or one of the goal ids does not exist"),
-    ),
-    params(("id" = Uuid, Path, description = "The milestone id")),
-    tag = "v0/planner",
-    security(("token" = []))
-)]
-#[protect("Permission::Basic", ty = "Permission")]
-pub(crate) async fn set_milestone_goals(
-    ExtractUserId(user): ExtractUserId,
-    Path(id): Path<Uuid>,
-    Extension(conn): Extension<DatabaseConnection>,
-    Json(goal_ids): Json<Vec<Uuid>>,
-) -> Result<impl IntoResponse, PlannerError> {
-    let goals = planner::goal_milestone::Mutation::set_milestone_goals(&conn, user, id, goal_ids).await?;
-    let goals = goals.into_iter().map(Goal::from_db_model).collect::<Vec<Goal>>();
-    Ok(Json(goals))
-}
-
-#[utoipa::path(
     patch,
     path = "/api/v0/planner/milestones/{id}",
     request_body = PlannerMilestoneChanges,
@@ -608,7 +586,7 @@ pub(crate) async fn update_milestone(
         active_model.description = ActiveValue::Set(description);
     }
 
-    let updated = planner::planner_milestone::Mutation::update_milestone(&conn, active_model).await?;
+    let updated = planner::planner_milestone::Mutation::update_milestone(&conn, active_model, changes.goals).await?;
     Ok(Json(PlannerMilestone::from_db_model(updated)))
 }
 
@@ -948,7 +926,10 @@ END:VCALENDAR\r\n",
         (entry, None)
     }
 
-    fn create_planner_milestone(title: &str, description: Option<&str>) -> hikari_entity::planner::planner_milestone::Model {
+    fn create_planner_milestone(
+        title: &str,
+        description: Option<&str>,
+    ) -> hikari_entity::planner::planner_milestone::Model {
         hikari_entity::planner::planner_milestone::Model {
             id: Default::default(),
             user_id: Default::default(),
