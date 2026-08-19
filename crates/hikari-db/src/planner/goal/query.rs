@@ -31,4 +31,27 @@ impl Query {
             tracing::error!(error = %error, "failed to load user goal");
         })
     }
+
+    pub async fn get_user_goals_by_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        ids: Vec<Uuid>,
+    ) -> Result<Vec<GoalModel>, DbErr> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let len = ids.len();
+        let res = Goal::find()
+            .filter(hikari_entity::planner::planner_goal::Column::UserId.eq(user_id))
+            .filter(hikari_entity::planner::planner_goal::Column::Id.is_in(ids))
+            .all(db)
+            .await
+            .inspect_err(|error| tracing::error!(error = %error, "failed to load goals by ids"))?;
+
+        if res.len() != len {
+            return Err(DbErr::RecordNotFound("one or more goal ids do not exist".to_owned()));
+        }
+
+        Ok(res)
+    }
 }

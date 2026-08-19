@@ -4,19 +4,25 @@ use crate::user::ExtractUserId;
 use axum::Extension;
 use axum::Json;
 use axum::Router;
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use hikari_db::planner;
 use hikari_db::sea_orm::DatabaseConnection;
-use hikari_model::planner::{Goal, NewGoal};
+use hikari_model::planner::{Goal, GoalFull, NewGoal, PlannerMilestone};
 use hikari_model_tools::convert::FromDbModel;
 use http::StatusCode;
 use protect_axum::protect;
 use sea_orm::ActiveValue;
 use serde::Deserialize;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GoalFlags {
+    pub deep: Option<String>,
+}
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub(crate) struct GoalChanges {
@@ -40,8 +46,11 @@ where
 #[utoipa::path(
     get,
     path = "/api/v0/planner/goals",
+    params(
+        ("deep" = Option<String>, Query, description = "if set all goals are listed with their milestones embedded"),
+    ),
     responses(
-        (status = OK, description = "List goals for current user", body = [Goal]),
+        (status = OK, description = "List goals for current user", body = [GoalFull]),
     ),
     tag = "v0/planner",
     security(
@@ -52,21 +61,52 @@ where
 pub(crate) async fn get_goals(
     ExtractUserId(user): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
+    Query(flags): Query<GoalFlags>,
 ) -> Result<impl IntoResponse, PlannerError> {
+    let deep = flags.deep.is_some();
     let goals = planner::goal::Query::get_user_goals(&conn, user).await?;
-    let goals = goals.into_iter().map(FromDbModel::from_db_model).collect::<Vec<Goal>>();
+
+    let mut milestones_by_goal: HashMap<Uuid, Vec<PlannerMilestone>> = HashMap::new();
+    if deep {
+        let goal_ids: Vec<Uuid> = goals.iter().map(|g| g.id).collect();
+        let links = planner::goal_milestone::Query::get_links_for_goals(&conn, &goal_ids).await?;
+        let milestone_ids: Vec<Uuid> = links.iter().map(|link| link.milestone_id).collect();
+        let milestones_by_id: HashMap<Uuid, PlannerMilestone> =
+            planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, milestone_ids)
+                .await?
+                .into_iter()
+                .map(|m| (m.id, PlannerMilestone::from_db_model(m)))
+                .collect();
+        for link in links {
+            if let Some(milestone) = milestones_by_id.get(&link.milestone_id) {
+                milestones_by_goal
+                    .entry(link.goal_id)
+                    .or_default()
+                    .push(milestone.clone());
+            }
+        }
+    }
+
+    let goals = goals
+        .into_iter()
+        .map(|g| {
+            let goal = Goal::from_db_model(g);
+            let milestones = milestones_by_goal.remove(&goal.id).unwrap_or_default();
+            goal.as_goal_full(milestones)
+        })
+        .collect::<Vec<GoalFull>>();
     Ok(Json(goals))
 }
 
 #[utoipa::path(
     get,
     path = "/api/v0/planner/goals/{id}",
-    responses(
-        (status = OK, description = "Get a specific goal", body = Goal),
-        (status = NOT_FOUND, description = "Goal not found"),
-    ),
     params(
         ("id" = Uuid, Path, description = "The ID of the goal to get"),
+    ),
+    responses(
+        (status = OK, description = "Get a specific goal with its milestones", body = GoalFull),
+        (status = NOT_FOUND, description = "Goal not found"),
     ),
     tag = "v0/planner",
     security(
@@ -82,7 +122,18 @@ pub(crate) async fn get_goal(
     let goal = planner::goal::Query::get_user_goal(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
-    Ok(Json(Goal::from_db_model(goal)))
+    let goal = Goal::from_db_model(goal);
+
+    let links = planner::goal_milestone::Query::get_links_for_goals(&conn, &[goal.id]).await?;
+    let milestone_ids: Vec<Uuid> = links.iter().map(|link| link.milestone_id).collect();
+
+    let milestones = planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, milestone_ids)
+        .await?
+        .into_iter()
+        .map(PlannerMilestone::from_db_model)
+        .collect();
+
+    Ok(Json(goal.as_goal_full(milestones)))
 }
 
 #[utoipa::path(

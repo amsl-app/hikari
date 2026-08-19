@@ -87,6 +87,38 @@ pub struct NewGoal {
     pub description: Option<String>,
 }
 
+/// A goal with its milestones embedded, requested via the `deep` query param on list endpoints (always embedded for a single goal).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GoalFull {
+    pub id: Uuid,
+    #[serde(skip_serializing)]
+    pub user_id: Uuid,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub fulfilled: bool,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub milestones: Vec<PlannerMilestone>,
+}
+
+impl Goal {
+    #[must_use]
+    pub fn as_goal_full(&self, milestones: Vec<PlannerMilestone>) -> GoalFull {
+        GoalFull {
+            id: self.id,
+            user_id: self.user_id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            fulfilled: self.fulfilled,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            milestones,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NewPlannerEntry {
     pub date: NaiveDate,
@@ -113,7 +145,7 @@ pub struct PlannerMilestone {
     pub updated_at: NaiveDateTime,
 }
 
-/// A milestone with its planner entries embedded, requested via the `deep` query param.
+/// A milestone with its planner entries and goals embedded, requested via the `deep` query param.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PlannerMilestoneFull {
     pub id: Uuid,
@@ -131,11 +163,13 @@ pub struct PlannerMilestoneFull {
     pub updated_at: NaiveDateTime,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<PlannerEntry>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub goals: Vec<Goal>,
 }
 
 impl PlannerMilestone {
     #[must_use]
-    pub fn as_milestone_full(&self, entries: Vec<PlannerEntry>) -> PlannerMilestoneFull {
+    pub fn as_milestone_full(&self, entries: Vec<PlannerEntry>, goals: Vec<Goal>) -> PlannerMilestoneFull {
         PlannerMilestoneFull {
             id: self.id,
             user_id: self.user_id,
@@ -147,6 +181,7 @@ impl PlannerMilestone {
             created_at: self.created_at,
             updated_at: self.updated_at,
             entries,
+            goals,
         }
     }
 }

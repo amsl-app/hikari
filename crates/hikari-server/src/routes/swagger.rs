@@ -94,6 +94,7 @@ struct SecurityAddon;
         api::v0::planner::get_milestone,
         api::v0::planner::update_milestone,
         api::v0::planner::delete_milestone,
+        api::v0::planner::set_milestone_goals,
         api::v0::planner::goals::get_goals,
         api::v0::planner::goals::get_goal,
         api::v0::planner::goals::create_goal,
