@@ -14,6 +14,12 @@ pub(crate) enum QuizError {
     #[error("The requested quiz was not found.")]
     QuizNotFound,
 
+    #[error("failed to request recommendations: {0}")]
+    RecommendationRequest(#[from] reqwest_middleware::reqwest::Error),
+
+    #[error("recommendation service did not return recommendations")]
+    RecommendationNotReceived,
+
     #[error("The requested question was not found.")]
     QuestionNotFound,
 
@@ -75,6 +81,15 @@ impl IntoResponse for QuizError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to serialize response: {e}"),
             )
+                .into_response(),
+
+            QuizError::RecommendationRequest(e) => (
+                StatusCode::BAD_GATEWAY,
+                format!("Recommendation service request failed: {e}"),
+            )
+                .into_response(),
+            QuizError::RecommendationNotReceived =>
+                (StatusCode::INTERNAL_SERVER_ERROR, "No recommendations received")
                 .into_response(),
         }
     }

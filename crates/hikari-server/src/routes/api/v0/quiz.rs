@@ -17,13 +17,17 @@ use hikari_config::module::session::Session;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::quiz::evaluation::evaluate_answer;
 use hikari_core::quiz::question::create_question;
-use hikari_model::quiz::question::{Question, QuestionFeedback};
+use hikari_model::quiz::question::Question;
+use hikari_model::quiz::quiz_question_attempt::QuestionFeedback;
 use hikari_model::quiz::quiz::{Quiz, QuizFull};
 use hikari_model::quiz::score::Score;
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use protect_axum::protect;
 use rand::rng;
+use rand::RngExt;
 use rand::seq::IndexedRandom;
+use reqwest_middleware::reqwest;
+use reqwest::Client;
 use sea_orm::DatabaseConnection;
 use serde::Deserialize;
 use tokio::try_join;
@@ -128,7 +132,7 @@ async fn get_quizzes(
             .into_iter()
             .map(|m| {
                 let mut q: Question = m.into_model();
-                q.sanitize_for_client();
+                //q.sanitize_for_client();
                 q
             })
             .collect();
@@ -172,7 +176,7 @@ async fn get_quiz(
         .into_iter()
         .map(|m| {
             let mut q: Question = m.into_model();
-            q.sanitize_for_client();
+            //q.sanitize_for_client();
             q
         })
         .collect();
@@ -212,7 +216,7 @@ async fn get_questions(
         .into_iter()
         .map(|m| {
             let mut q: Question = m.into_model();
-            q.sanitize_for_client();
+            //q.sanitize_for_client();
             q
         })
         .collect();
@@ -243,9 +247,9 @@ async fn get_question(
         get_question_by_id(&conn, &question_id)
     )?;
 
-    if quiz_question.quiz_id != quiz_id {
-        return Err(QuizError::QuestionNotFound);
-    }
+    //if quiz_question.quiz_id != quiz_id {
+        //return Err(QuizError::QuestionNotFound);
+    //}
 
     Ok(Json(quiz_question).into_response())
 }
@@ -277,7 +281,7 @@ async fn get_next_question(
     if let Some(question) = open_question {
         tracing::debug!(?quiz_id, question_id=?question.id, "found open question for quiz", );
         let mut question_model: Question = question.into_model();
-        question_model.sanitize_for_client();
+        //question_model.sanitize_for_client();
         return Ok(Json(question_model).into_response());
     }
 
@@ -293,44 +297,104 @@ async fn get_next_question(
         .get(&selected_session_id)
         .ok_or(QuizError::SessionNotFound(selected_session_id.clone()))?;
 
-    let content: Content = pick_random_content(session).ok_or(QuizError::NoContentProvided)?;
+    let saved_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id).await?;
 
-    let topic = &content.title;
+    if(saved_recommendations.len() <= 1) {
 
-    let specific_content: &str = pick_specific_content(&content);
+        let learner_model_client = RecommendationClient::new(
+            "http://learner-model:8000".to_string()
+        );
 
-    let llm_config: &LlmConfig = app_config.llm_config();
+        let recommendations = learner_model_client
+            .get_recommendations(
+                user_id,
+                module_id.to_string(),
+            ).await?;
 
-    let contents = &session.contents;
+        let question_ids: Vec<Uuid> = recommendations
+            .recommendations
+            .iter()
+            .map(|recommendation| recommendation.question_id)
+            .collect();
 
-    let exams = contents
-        .iter()
-        .flat_map(|c| c.exams.iter().map(|e| (c.title.clone(), e.clone())))
-        .collect::<Vec<(String, ContentExam)>>();
+        hikari_db::quiz::question_recommendation::mutation::Mutation::create__multiple_recommendations(
+            &conn,
+            &quiz_id,
+            &question_ids,
+        )
+            .await?;
+    }
 
-    let sources: Vec<String> = contents
-        .iter()
-        .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
-        .collect();
-
-    tracing::debug!(selected_session_id, topic, "requesting new question");
-
-    let mut question = create_question(
-        &user_id,
-        &selected_session_id,
-        specific_content,
-        topic,
-        &exams,
-        llm_config,
+    let unused_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(
         &conn,
-        &quiz_id,
-        &sources,
+        &quiz_id)
+        .await?;
+
+    let recommendation = unused_recommendations
+        .into_iter()
+        .next()
+        .ok_or(QuizError::RecommendationNotReceived)?;
+
+    hikari_db::quiz::question_recommendation::mutation::Mutation::mark_recommendation_as_used(
+        &conn,
+        &recommendation.id)
+        .await?;
+
+    let question = hikari_db::quiz::question::Query::get_question_by_id(
+        &conn,
+        &recommendation.question_id,
     )
-    .await?;
+        .await?
+        .ok_or(QuizError::QuestionNotFound)?;
 
-    question.sanitize_for_client();
+    if rng().random_bool(0.7) {
 
-    Ok(Json(question).into_response())
+        let question_model: Question = question.into_model();
+
+        Ok(Json(question_model).into_response())
+
+    } else {
+
+        let content: Content = pick_random_content(session).ok_or(QuizError::NoContentProvided)?;
+
+        let topic = &content.title;
+
+        let specific_content: &str = pick_specific_content(&content);
+
+        let llm_config: &LlmConfig = app_config.llm_config();
+
+        let contents = &session.contents;
+
+        let exams = contents
+            .iter()
+            .flat_map(|c| c.exams.iter().map(|e| (c.title.clone(), e.clone())))
+            .collect::<Vec<(String, ContentExam)>>();
+
+        let sources: Vec<String> = contents
+            .iter()
+            .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
+            .collect();
+
+        tracing::debug!(selected_session_id, topic, "requesting new question");
+
+        let mut question = create_question(
+            &user_id,
+            &selected_session_id,
+            specific_content,
+            topic,
+            &exams,
+            llm_config,
+            &conn,
+            &quiz_id,
+            &sources,
+        )
+            .await?;
+
+
+        //question.sanitize_for_client();
+
+        Ok(Json(question).into_response())
+    }
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -340,7 +404,7 @@ struct EvaluationRequest {
 
 #[utoipa::path(
     post,
-    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/answer",
+    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/{attempt}/answer",
     responses(
         (status = OK, body = Question, description = "Evaluated question with answer and evaluation"),
     ),
@@ -355,7 +419,7 @@ async fn submit_answer(
     ExtractUserId(user_id): ExtractUserId,
     Extension(app_config): Extension<AppConfig>,
     Extension(conn): Extension<DatabaseConnection>,
-    Path((quiz_id, question_id)): Path<(Uuid, Uuid)>,
+    Path((quiz_id, question_id, attempt)): Path<(Uuid, Uuid, i32)>,
     Json(payload): Json<EvaluationRequest>,
 ) -> Result<impl IntoResponse, QuizError> {
     let (quiz, quiz_question) = try_join!(
@@ -363,17 +427,25 @@ async fn submit_answer(
         get_quiz_by_id(&conn, &user_id, &quiz_id),
         get_question_by_id(&conn, &question_id)
     )?;
+    let session_id = hikari_db::quiz::quiz_question_attempt::query::Query::get_session_id_by_attempt(
+        &conn,
+        &quiz_id,
+        &question_id,
+        &attempt
+    ).await?.ok_or(
+        QuizError::SessionNotFound("ID not found".to_owned())
+    )?;
 
     let module_id = quiz.module_id;
-    let session_id = quiz_question.session_id.as_str();
+    //let session_id = quiz_question.session_id.as_str();
 
     let session = app_config
         .module_config()
         .get(&module_id)
         .ok_or(QuizError::ModuleNotFound(module_id.clone()))?
         .sessions
-        .get(session_id)
-        .ok_or(QuizError::SessionNotFound(session_id.to_string()))?;
+        .get(&session_id)
+        .ok_or(QuizError::SessionNotFound("ID not found".to_owned()))?;
 
     let llm_config: &LlmConfig = AppConfig::llm_config(&app_config);
 
@@ -392,6 +464,9 @@ async fn submit_answer(
 
     let evaluated_question = evaluate_answer(
         &user_id,
+        &quiz_id,
+        &attempt,
+        &session_id,
         &module_id,
         &quiz_question,
         &exams,
@@ -409,7 +484,7 @@ async fn submit_answer(
 
 #[utoipa::path(
     post,
-    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/skip",
+    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/{attempt}/skip",
     responses(
         (status = OK, description = "Question skipped successfully"),
     ),
@@ -421,7 +496,7 @@ async fn submit_answer(
 async fn skip_question(
     ExtractUserId(user_id): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
-    Path((quiz_id, question_id)): Path<(Uuid, Uuid)>,
+    Path((quiz_id, question_id, attempt)): Path<(Uuid, Uuid, i32)>,
 ) -> Result<impl IntoResponse, QuizError> {
     let (_, quiz_question) = try_join!(
         // To ensure the user has access to the quiz, we first fetch the quiz
@@ -429,11 +504,11 @@ async fn skip_question(
         get_question_by_id(&conn, &question_id)
     )?;
 
-    if quiz_question.quiz_id != quiz_id {
-        return Err(QuizError::QuestionNotFound);
-    }
+    //if quiz_question.quiz_id != quiz_id {
+        //return Err(QuizError::QuestionNotFound);
+    //}
 
-    hikari_db::quiz::question::Mutation::skip_question(&conn, &quiz_question.id).await?;
+    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::skip_question(&conn, &quiz_id, &quiz_question.id, &attempt).await?;
 
     Ok(())
 }
@@ -446,7 +521,7 @@ struct FeedbackPayload {
 
 #[utoipa::path(
     post,
-    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/feedback",
+    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/{attempt}/feedback",
     request_body = FeedbackPayload,
     responses(
         (status = OK, description = "Feedback added successfully"),
@@ -459,7 +534,7 @@ struct FeedbackPayload {
 async fn add_feedback(
     ExtractUserId(user_id): ExtractUserId,
     Extension(conn): Extension<DatabaseConnection>,
-    Path((quiz_id, question_id)): Path<(Uuid, Uuid)>,
+    Path((quiz_id, question_id, attempt)): Path<(Uuid, Uuid, i32)>,
     Json(payload): Json<FeedbackPayload>,
 ) -> Result<impl IntoResponse, QuizError> {
     let (_, quiz_question) = try_join!(
@@ -468,16 +543,18 @@ async fn add_feedback(
         get_question_by_id(&conn, &question_id)
     )?;
 
-    if quiz_question.quiz_id != quiz_id {
-        return Err(QuizError::QuestionNotFound);
-    }
+    //if quiz_question.quiz_id != quiz_id {
+        //return Err(QuizError::QuestionNotFound);
+    //}
 
     let feedback = payload.feedback.into_db_model();
     let feedback_explanation = payload.feedback_explanation.clone();
 
-    hikari_db::quiz::question::Mutation::add_feedback(
+    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::add_feedback(
         &conn,
+        &quiz_id,
         &quiz_question.id,
+        &attempt,
         &feedback,
         feedback_explanation.as_deref(),
     )
@@ -495,11 +572,11 @@ async fn get_quiz_by_id(conn: &DatabaseConnection, user_id: &Uuid, quiz_id: &Uui
 }
 
 async fn get_question_by_id(conn: &DatabaseConnection, question_id: &Uuid) -> Result<Question, QuizError> {
-    let mut result: Question = hikari_db::quiz::question::Query::get_question_by_id(conn, question_id)
+    let result: Question = hikari_db::quiz::question::Query::get_question_by_id(conn, question_id)
         .await?
         .ok_or(QuizError::QuestionNotFound)?
         .into_model();
-    result.sanitize_for_client();
+    //result.sanitize_for_client();
     Ok(result)
 }
 
@@ -526,4 +603,58 @@ fn pick_specific_content(content: &Content) -> &str {
         .as_str();
     drop(rng);
     content
+}
+
+#[derive(Debug, serde_derive::Serialize)]
+struct RecommendationRequest {
+    student_id: Uuid,
+    module_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct Recommendation {
+    question_id: Uuid,
+    question_text: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RecommendationResponse {
+    recommendations: Vec<Recommendation>,
+}
+
+pub struct RecommendationClient {
+    client: Client,
+    base_url: String,
+}
+
+impl RecommendationClient {
+    pub fn new(base_url: String) -> Self {
+        Self {
+            client: Client::new(),
+            base_url,
+        }
+    }
+
+    pub async fn get_recommendations(
+        &self,
+        student_id: Uuid,
+        module_id: String,
+    ) -> Result<RecommendationResponse, reqwest::Error> {
+        let request = RecommendationRequest {
+            student_id,
+            module_id,
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/recommendations", self.base_url))
+            .json(&request)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<RecommendationResponse>()
+            .await?;
+
+        Ok(response)
+    }
 }

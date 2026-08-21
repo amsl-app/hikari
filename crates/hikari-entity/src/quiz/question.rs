@@ -1,24 +1,5 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "question_feedback_enum")]
-pub enum Feedback {
-    #[sea_orm(string_value = "good")]
-    Good,
-    #[sea_orm(string_value = "bad")]
-    Bad,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "question_status_enum")]
-pub enum Status {
-    #[sea_orm(string_value = "open")]
-    Open,
-    #[sea_orm(string_value = "finished")]
-    Finished,
-    #[sea_orm(string_value = "skipped")]
-    Skipped,
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "question_bloom_level_enum")]
@@ -51,8 +32,6 @@ pub enum QuestionType {
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: Uuid,
-    pub quiz_id: Uuid,
-    pub session_id: String,
     pub topic: String,
     pub content: String,
     pub question: String,
@@ -60,30 +39,20 @@ pub struct Model {
     pub options: Option<String>,
     pub level: BloomLevel,
     pub created_at: DateTime,
-    pub answered_at: Option<DateTime>,
-    pub answer: Option<String>,
-    pub evaluation: Option<String>,
-    #[sea_orm(column_type = "Integer")]
-    pub grade: Option<i32>,
     pub ai_solution: Option<String>,
-    pub status: Status,
-    pub feedback: Option<Feedback>,
-    pub feedback_explanation: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::quiz::Entity",
-        from = "Column::QuizId",
-        to = "super::quiz::Column::Id"
+        has_many = "super::quiz_question_attempt::Entity",
     )]
-    Quiz,
+    QuizQuestionAttempt,
 }
 
-impl Related<super::quiz::Entity> for Entity {
+impl Related<super::quiz_question_attempt::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Quiz.def()
+        Relation::QuizQuestionAttempt.def()
     }
 }
 

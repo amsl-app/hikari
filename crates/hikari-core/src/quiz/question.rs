@@ -11,7 +11,8 @@ use async_openai::types::chat::{
 };
 use hikari_config::module::content::{ContentExam, QuestionBloomLevel};
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingQueryResult;
-use hikari_model::quiz::question::{Question, QuestionFeedback};
+use hikari_model::quiz::question::{Question};
+use hikari_model::quiz::quiz_question_attempt::{QuizQuestionAttempt, QuestionFeedback};
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use rand::rng;
 use rand::seq::IndexedRandom;
@@ -108,8 +109,8 @@ pub async fn create_question(
     let mut old_questions_model: Vec<Question> = old_questions.into_iter().map(IntoModel::into_model).collect();
 
     // Only keep questions without bad feedback and with grade > 3
-    old_questions_model
-        .retain(|q| !q.feedback.eq(&Some(QuestionFeedback::Bad)) && q.grade.is_some_and(|grade| grade > 3));
+    //old_questions_model
+        //.retain(|q| !q.feedback.eq(&Some(QuestionFeedback::Bad)) && q.grade.is_some_and(|grade| grade > 3));
     old_questions_model.sort_by_key(|q| q.created_at);
     old_questions_model.reverse();
     old_questions_model.truncate(10);

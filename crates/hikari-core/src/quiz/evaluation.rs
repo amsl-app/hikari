@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::vec;
 use tracing::instrument;
+use hikari_model::quiz::quiz_question_attempt::QuizQuestionAttempt;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[schemars(
@@ -41,6 +42,9 @@ struct Evaluation {
 #[instrument(skip(question, exams, llm_config, conn), err)]
 pub async fn evaluate_answer(
     user_id: &Uuid,
+    quiz_id: &Uuid,
+    attempt: &i32,
+    session_id: &str,
     module_id: &str,
     question: &Question,
     exams: &[(String, ContentExam)],
@@ -48,12 +52,12 @@ pub async fn evaluate_answer(
     llm_config: &LlmConfig,
     conn: &DatabaseConnection,
     session_sources: Vec<String>,
-) -> Result<Question, QuizError> {
+) -> Result<QuizQuestionAttempt, QuizError> {
     let question_type = &question.r#type;
     let question_topic = question.topic.clone();
     let question_level = question.level;
     let question_content = question.content.clone();
-    let question_session_id = question.session_id.clone();
+    let question_session_id = session_id.clone();
     let question_question = question.question.clone();
     let question_solution = question.ai_solution.clone();
     let question_options = question.options.clone();
@@ -315,16 +319,18 @@ pub async fn evaluate_answer(
     )
     .await?;
 
-    let updated_question = hikari_db::quiz::question::Mutation::add_evaluation(
+    let updated_question = hikari_db::quiz::quiz_question_attempt::mutation::Mutation::add_evaluation(
         conn,
+        &quiz_id,
         &question.id,
+        &attempt,
         answer,
         &evaluation.evaluation,
         &evaluation.grade,
     )
     .await?;
 
-    let question_model: Question = updated_question.into_model();
+    let question_model: QuizQuestionAttempt = updated_question.into_model();
 
     Ok(question_model)
 }

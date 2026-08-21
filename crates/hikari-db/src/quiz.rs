@@ -4,3 +4,6 @@ pub mod quiz;
 pub mod score;
 
 pub mod quiz_sessions;
+
+pub mod quiz_question_attempt;
+pub mod question_recommendation;

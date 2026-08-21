@@ -78,7 +78,7 @@ async fn get_module_quizzes(
             .into_iter()
             .map(|m| {
                 let mut q: Question = m.into_model();
-                q.sanitize_for_client();
+                //q.sanitize_for_client();
                 q
             })
             .collect();

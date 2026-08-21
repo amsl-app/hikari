@@ -28,6 +28,12 @@ pub enum Relation {
         to = "crate::user::Column::Id"
     )]
     User,
+
+    #[sea_orm(has_many = "super::quiz_question_attempt::Entity")]
+    QuizQuestionAttempt,
+
+    #[sea_orm(has_many = "super::question_recommendation::Entity")]
+    QuestionRecommendation,
 }
 
 impl Related<crate::user::Entity> for Entity {
@@ -36,4 +42,18 @@ impl Related<crate::user::Entity> for Entity {
     }
 }
 
+impl Related<super::quiz_question_attempt::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::QuizQuestionAttempt.def()
+    }
+}
+
+impl Related<super::question_recommendation::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::QuestionRecommendation.def()
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}
+
+
