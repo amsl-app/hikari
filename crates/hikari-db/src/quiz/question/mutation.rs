@@ -7,23 +7,19 @@ impl Mutation {
     #[allow(clippy::too_many_arguments)]
     pub async fn create_text_question(
         db: &DatabaseConnection,
-        quiz_id: &Uuid,
         question: &str,
         ai_solution: &str,
         level: &BloomLevel,
-        session_id: &str,
         topic: &str,
         content: &str,
     ) -> Result<question::Model, DbErr> {
         Self::create_question(
             db,
-            quiz_id,
             question,
             Some(ai_solution),
             &question::QuestionType::Text,
             None,
             level,
-            session_id,
             topic,
             content,
         )
@@ -33,23 +29,19 @@ impl Mutation {
     #[allow(clippy::too_many_arguments)]
     pub async fn create_multiple_choice_question(
         db: &DatabaseConnection,
-        quiz_id: &Uuid,
         question: &str,
         options: &str,
         level: &BloomLevel,
-        session_id: &str,
         topic: &str,
         content: &str,
     ) -> Result<question::Model, DbErr> {
         Self::create_question(
             db,
-            quiz_id,
             question,
             None,
             &question::QuestionType::MultipleChoice,
             Some(options),
             level,
-            session_id,
             topic,
             content,
         )
@@ -59,13 +51,11 @@ impl Mutation {
     #[allow(clippy::too_many_arguments)]
     pub async fn create_question(
         db: &DatabaseConnection,
-        quiz_id: &Uuid,
         question: &str,
         ai_solution: Option<&str>,
         question_type: &question::QuestionType,
         options: Option<&str>,
         level: &BloomLevel,
-        session_id: &str,
         topic: &str,
         content: &str,
     ) -> Result<question::Model, DbErr> {

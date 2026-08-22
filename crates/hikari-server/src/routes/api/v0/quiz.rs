@@ -12,13 +12,13 @@ use axum::{
     routing::{get, post},
 };
 use futures::TryFutureExt;
-use hikari_config::module::content::{Content, ContentExam};
+use hikari_config::module::content::{Content, ContentExam, QuestionBloomLevel};
 use hikari_config::module::session::Session;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::quiz::evaluation::evaluate_answer;
 use hikari_core::quiz::question::create_question;
-use hikari_model::quiz::question::Question;
-use hikari_model::quiz::quiz_question_attempt::QuestionFeedback;
+use hikari_model::quiz::question::{Question, QuestionOption, QuestionType};
+use hikari_model::quiz::quiz_question_attempt::{QuestionFeedback, QuizQuestionAttempt};
 use hikari_model::quiz::quiz::{Quiz, QuizFull};
 use hikari_model::quiz::score::Score;
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
@@ -255,11 +255,34 @@ async fn get_question(
 }
 
 use serde::Serialize;
+use hikari_entity::quiz::question::BloomLevel;
 
 #[derive(Serialize)]
 struct QuestionResponse {
-    question: Question,
-    attempt: i32,
+    pub id: Uuid,
+    pub quiz_id: Uuid,
+    pub topic: String,
+    pub content: String,
+    pub question: String,
+    pub session_id: String,
+    pub level: QuestionBloomLevel,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grade: Option<i32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ai_solution: Option<String>,
+
+    pub r#type: QuestionType,
+    pub options: Vec<QuestionOption>,
+
+    pub attempt: i32,
 }
 
 #[utoipa::path(
@@ -287,10 +310,46 @@ async fn get_next_question(
     )?;
 
     if let Some(question) = open_question {
-        tracing::debug!(?quiz_id, question_id=?question.id, "found open question for quiz", );
-        let mut question_model: Question = question.into_model();
-        //question_model.sanitize_for_client();
-        return Ok(Json(question_model).into_response());
+        tracing::debug!(
+        ?quiz_id,
+        question_id = ?question.id,
+        "found open question for quiz",
+    );
+
+        let attempt_model =
+            hikari_db::quiz::quiz_question_attempt::query::Query::get_open_attempt(
+                &conn,
+                &quiz_id,
+                &question.id,
+            )
+                .await?
+                .ok_or(QuizError::QuestionNotFound)?;
+
+        let attempt_model: QuizQuestionAttempt = attempt_model.into_model();
+        let question_model: Question = question.into_model();
+
+        let response = QuestionResponse {
+            id: question_model.id,
+            quiz_id: quiz_id,
+            topic: question_model.topic,
+            content: question_model.content,
+            question: question_model.question,
+            session_id: attempt_model.session_id,
+            level: question_model.level,
+
+            answer: attempt_model.answer,
+            evaluation: attempt_model.evaluation,
+            grade: attempt_model.grade,
+
+            ai_solution: question_model.ai_solution,
+
+            r#type: question_model.r#type,
+            options: question_model.options,
+
+            attempt: attempt_model.attempt,
+        };
+
+        return Ok(Json(response).into_response());
     }
 
     let module_id = quiz.module_id;
@@ -346,9 +405,29 @@ async fn get_next_question(
 
         //question.sanitize_for_client();
         let attempt = 1 as i32;
+
+        hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question.id, attempt, &selected_session_id).await?;
+
+        let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
         let response = QuestionResponse {
-            question: question,
-            attempt,
+            id: question.id,
+            quiz_id: quiz_id,
+            topic: question.topic,
+            content: question.content,
+            question: question.question,
+            session_id: attempt_model.session_id,
+            level: question.level,
+
+            answer: attempt_model.answer,
+            evaluation: attempt_model.evaluation,
+            grade: attempt_model.grade,
+
+            ai_solution: question.ai_solution,
+
+            r#type: question.r#type,
+            options: question.options,
+
+            attempt: attempt_model.attempt,
         };
 
         Ok(Json(response).into_response())
@@ -410,9 +489,28 @@ async fn get_next_question(
             let last_attempt = hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(&conn, &user_id, &module_id, &question_model.id).await?;
             let attempt = last_attempt as i32 + 1;
 
+            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question_model.id, attempt, &selected_session_id).await?;
+
+            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question_model.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
             let response = QuestionResponse {
-                question: question_model,
-                attempt,
+                id: question_model.id,
+                quiz_id: quiz_id,
+                topic: question_model.topic,
+                content: question_model.content,
+                question: question_model.question,
+                session_id: attempt_model.session_id,
+                level: question_model.level,
+
+                answer: attempt_model.answer,
+                evaluation: attempt_model.evaluation,
+                grade: attempt_model.grade,
+
+                ai_solution: question_model.ai_solution,
+
+                r#type: question_model.r#type,
+                options: question_model.options,
+
+                attempt: attempt_model.attempt,
             };
 
             Ok(Json(response).into_response())
@@ -456,9 +554,29 @@ async fn get_next_question(
             //question.sanitize_for_client();
             let attempt = 1 as i32;
 
+            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question.id, attempt, &selected_session_id).await?;
+
+            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+
             let response = QuestionResponse {
-                question: question,
-                attempt,
+                id: question.id,
+                quiz_id: quiz_id,
+                topic: question.topic,
+                content: question.content,
+                question: question.question,
+                session_id: attempt_model.session_id,
+                level: question.level,
+
+                answer: attempt_model.answer,
+                evaluation: attempt_model.evaluation,
+                grade: attempt_model.grade,
+
+                ai_solution: question.ai_solution,
+
+                r#type: question.r#type,
+                options: question.options,
+
+                attempt: attempt_model.attempt,
             };
 
             Ok(Json(response).into_response())

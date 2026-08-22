@@ -277,11 +277,9 @@ pub async fn create_question(
         QuestionType::Text(text_question) => {
             let question = hikari_db::quiz::question::Mutation::create_text_question(
                 conn,
-                quiz_id,
                 &text_question.question,
                 &text_question.solution,
                 &level.into_db_model(),
-                session_id,
                 topic,
                 content,
             )
@@ -294,11 +292,9 @@ pub async fn create_question(
             let options = serde_json::to_string(&multiple_choice_question.options)?;
             let question = hikari_db::quiz::question::Mutation::create_multiple_choice_question(
                 conn,
-                quiz_id,
                 &multiple_choice_question.question,
                 &options,
                 &level.into_db_model(),
-                session_id,
                 topic,
                 content,
             )

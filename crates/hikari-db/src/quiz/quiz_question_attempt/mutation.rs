@@ -6,6 +6,30 @@ use crate::quiz::quiz_question_attempt::query::Query;
 pub struct Mutation;
 
 impl Mutation {
+    pub async fn create_attempt(
+        db: &DatabaseConnection,
+        quiz_id: &Uuid,
+        question_id: &Uuid,
+        attempt: i32,
+        session_id: &str,
+    ) -> Result<quiz_question_attempt::Model, DbErr> {
+        let attempt = quiz_question_attempt::ActiveModel {
+            quiz_id: Set(*quiz_id),
+            question_id: Set(*question_id),
+            attempt: Set(attempt),
+            session_id: Set(session_id.to_owned()),
+            asked_at: Set(Some(chrono::Utc::now().naive_utc())),
+            answered_at: Set(None),
+            answer: Set(None),
+            evaluation: Set(None),
+            grade: Set(None),
+            status: Set(quiz_question_attempt::Status::Open),
+            feedback: Set(None),
+            feedback_explanation: Set(None),
+        };
+
+        attempt.insert(db).await
+    }
 
     pub async fn add_evaluation(
         db: &DatabaseConnection,

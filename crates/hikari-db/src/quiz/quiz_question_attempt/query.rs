@@ -106,4 +106,22 @@ impl Query {
 
         Ok(count)
     }
+
+    pub async fn get_open_attempt(
+        db: &DatabaseConnection,
+        quiz_id: &Uuid,
+        question_id: &Uuid,
+    ) -> Result<Option<AttemptModel>, DbErr> {
+        let query = Attempt::find()
+            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuizId.eq(*quiz_id))
+            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuestionId.eq(*question_id))
+            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::Status.eq(hikari_entity::quiz::quiz_question_attempt::Status::Open));
+
+        query.one(db).await.inspect_err(|error| {
+            tracing::error!(
+                error = error as &dyn Error,
+                "failed to load open attempt"
+            );
+        })
+    }
 }
