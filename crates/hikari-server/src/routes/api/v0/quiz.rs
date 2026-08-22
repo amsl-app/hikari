@@ -254,6 +254,14 @@ async fn get_question(
     Ok(Json(quiz_question).into_response())
 }
 
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct QuestionResponse {
+    question: Question,
+    attempt: i32,
+}
+
 #[utoipa::path(
     get,
     path = "/api/v0/quizzes/{quiz_id}/questions/next",
@@ -297,64 +305,9 @@ async fn get_next_question(
         .get(&selected_session_id)
         .ok_or(QuizError::SessionNotFound(selected_session_id.clone()))?;
 
-    let saved_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id).await?;
+    let number_questions_answered = hikari_db::quiz::quiz_question_attempt::query::Query::count_attempts_by_user_module(&conn, &user_id, &module_id).await?;
 
-    if(saved_recommendations.len() <= 1) {
-
-        let learner_model_client = RecommendationClient::new(
-            "http://learner-model:8000".to_string()
-        );
-
-        let recommendations = learner_model_client
-            .get_recommendations(
-                user_id,
-                module_id.to_string(),
-            ).await?;
-
-        let question_ids: Vec<Uuid> = recommendations
-            .recommendations
-            .iter()
-            .map(|recommendation| recommendation.question_id)
-            .collect();
-
-        hikari_db::quiz::question_recommendation::mutation::Mutation::create__multiple_recommendations(
-            &conn,
-            &quiz_id,
-            &question_ids,
-        )
-            .await?;
-    }
-
-    let unused_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(
-        &conn,
-        &quiz_id)
-        .await?;
-
-    let recommendation = unused_recommendations
-        .into_iter()
-        .next()
-        .ok_or(QuizError::RecommendationNotReceived)?;
-
-    hikari_db::quiz::question_recommendation::mutation::Mutation::mark_recommendation_as_used(
-        &conn,
-        &recommendation.id)
-        .await?;
-
-    let question = hikari_db::quiz::question::Query::get_question_by_id(
-        &conn,
-        &recommendation.question_id,
-    )
-        .await?
-        .ok_or(QuizError::QuestionNotFound)?;
-
-    if rng().random_bool(0.7) {
-
-        let question_model: Question = question.into_model();
-
-        Ok(Json(question_model).into_response())
-
-    } else {
-
+    if number_questions_answered <= 20 {
         let content: Content = pick_random_content(session).ok_or(QuizError::NoContentProvided)?;
 
         let topic = &content.title;
@@ -392,8 +345,124 @@ async fn get_next_question(
 
 
         //question.sanitize_for_client();
+        let attempt = 1 as i32;
+        let response = QuestionResponse {
+            question: question,
+            attempt,
+        };
 
-        Ok(Json(question).into_response())
+        Ok(Json(response).into_response())
+    } else {
+
+        let saved_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id).await?;
+
+        if (saved_recommendations.len() <= 1) {
+            let learner_model_client = RecommendationClient::new(
+                "http://learner-model:8000".to_string()
+            );
+
+            let recommendations = learner_model_client
+                .get_recommendations(
+                    user_id,
+                    module_id.to_string(),
+                ).await?;
+
+            let question_ids: Vec<Uuid> = recommendations
+                .recommendations
+                .iter()
+                .map(|recommendation| recommendation.question_id)
+                .collect();
+
+            hikari_db::quiz::question_recommendation::mutation::Mutation::create__multiple_recommendations(
+                &conn,
+                &quiz_id,
+                &question_ids,
+            )
+                .await?;
+        }
+
+        let unused_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(
+            &conn,
+            &quiz_id)
+            .await?;
+
+        let recommendation = unused_recommendations
+            .into_iter()
+            .next()
+            .ok_or(QuizError::RecommendationNotReceived)?;
+
+        hikari_db::quiz::question_recommendation::mutation::Mutation::mark_recommendation_as_used(
+            &conn,
+            &recommendation.id)
+            .await?;
+
+        let recommended_question = hikari_db::quiz::question::Query::get_question_by_id(
+            &conn,
+            &recommendation.question_id,
+        )
+            .await?
+            .ok_or(QuizError::QuestionNotFound)?;
+
+        let question_model: Question = recommended_question.into_model();
+
+        if rng().random_bool(0.7) {
+
+            let last_attempt = hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(&conn, &user_id, &module_id, &question_model.id).await?;
+            let attempt = last_attempt as i32 + 1;
+
+            let response = QuestionResponse {
+                question: question_model,
+                attempt,
+            };
+
+            Ok(Json(response).into_response())
+
+        } else {
+
+            let specific_content: &str = &question_model.content;
+
+            let topic = question_model.topic;
+
+            let llm_config: &LlmConfig = app_config.llm_config();
+
+            let contents = &session.contents;
+
+            let exams = contents
+                .iter()
+                .flat_map(|c| c.exams.iter().map(|e| (c.title.clone(), e.clone())))
+                .collect::<Vec<(String, ContentExam)>>();
+
+            let sources: Vec<String> = contents
+                .iter()
+                .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
+                .collect();
+
+            tracing::debug!(selected_session_id, topic, "requesting new question");
+
+            let mut question = create_question(
+                &user_id,
+                &selected_session_id,
+                specific_content,
+                &topic,
+                &exams,
+                llm_config,
+                &conn,
+                &quiz_id,
+                &sources,
+            )
+                .await?;
+
+
+            //question.sanitize_for_client();
+            let attempt = 1 as i32;
+
+            let response = QuestionResponse {
+                question: question,
+                attempt,
+            };
+
+            Ok(Json(response).into_response())
+        }
     }
 }
 

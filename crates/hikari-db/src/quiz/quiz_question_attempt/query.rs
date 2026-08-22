@@ -1,4 +1,4 @@
-use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QuerySelect};
+use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QuerySelect, JoinType, PaginatorTrait, QueryFilter, ColumnTrait, RelationTrait};
 use hikari_entity::quiz::quiz_question_attempt::{Entity as Attempt, Model as AttemptModel};
 use std::error::Error;
 use uuid::Uuid;
@@ -50,5 +50,60 @@ impl Query {
             })?;
 
         Ok(result)
+    }
+
+    pub async fn count_attempts_by_user_module(
+        db: &DatabaseConnection,
+        user_id: &Uuid,
+        module_id: &str,
+    ) -> Result<u64, DbErr> {
+        let count = Attempt::find()
+            .join(
+                JoinType::InnerJoin,
+                hikari_entity::quiz::quiz_question_attempt::Relation::Quiz.def(),
+            )
+            .filter(<hikari_entity::quiz::quiz::Entity as sea_orm::EntityTrait>::Column::UserId.eq(*user_id))
+            .filter(<hikari_entity::quiz::quiz::Entity as sea_orm::EntityTrait>::Column::ModuleId.eq(module_id))
+            .count(db)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(
+                error = error as &dyn Error,
+                "failed to count question attempts by user and module"
+            );
+            })?;
+
+        Ok(count)
+    }
+
+    pub async fn count_question_attempts_by_user_module(
+        db: &DatabaseConnection,
+        user_id: &Uuid,
+        module_id: &str,
+        question_id: &Uuid,
+    ) -> Result<u64, DbErr> {
+        let count = Attempt::find()
+            .join(
+                JoinType::InnerJoin,
+                hikari_entity::quiz::quiz_question_attempt::Relation::Quiz.def(),
+            )
+            .filter(<hikari_entity::quiz::quiz::Entity as sea_orm::EntityTrait>::Column::UserId.eq(*user_id))
+            .filter(<hikari_entity::quiz::quiz::Entity as sea_orm::EntityTrait>::Column::ModuleId.eq(module_id))
+            .filter(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuestionId.eq(*question_id),
+            )
+            .filter(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::AnsweredAt.is_not_null(),
+            )
+            .count(db)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(
+                error = error as &dyn Error,
+                "failed to count question attempts by user, module and question"
+            );
+            })?;
+
+        Ok(count)
     }
 }
