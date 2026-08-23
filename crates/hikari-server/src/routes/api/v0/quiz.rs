@@ -54,9 +54,9 @@ where
                         "/{question_id}",
                         Router::new()
                             .route("/", get(get_question))
-                            .route("/feedback", post(add_feedback))
-                            .route("/skip", post(skip_question))
-                            .route("/answer", post(submit_answer)),
+                            .route("/{attempt}/feedback", post(add_feedback))
+                            .route("/{attempt}/skip", post(skip_question))
+                            .route("/{attempt}/answer", post(submit_answer)),
                     ),
             ),
         )
@@ -256,6 +256,7 @@ async fn get_question(
 
 use serde::Serialize;
 use hikari_entity::quiz::question::BloomLevel;
+use crate::routes::api::v0::assessment::error::Error;
 
 #[derive(Serialize)]
 struct QuestionResponse {
@@ -445,6 +446,8 @@ async fn get_next_question(
                     user_id,
                     module_id.to_string(),
                 ).await?;
+
+            tracing::info!("Recommendations: {:?}", recommendations);
 
             let question_ids: Vec<Uuid> = recommendations
                 .recommendations
@@ -665,8 +668,32 @@ async fn submit_answer(
     .await?;
 
     tracing::info!("Evaluated question: {:?}", evaluated_question.evaluation);
+    let question_model: Question = hikari_db::quiz::question::Query::get_question_by_id(&conn, &question_id).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
 
-    Ok(Json(evaluated_question).into_response())
+    let response = QuestionResponse {
+        id: question_model.id,
+        quiz_id: quiz_id,
+        topic: question_model.topic,
+        content: question_model.content,
+        question: question_model.question,
+        session_id: evaluated_question.session_id,
+        level: question_model.level,
+
+        answer: evaluated_question.answer,
+        evaluation: evaluated_question.evaluation,
+        grade: evaluated_question.grade,
+
+        ai_solution: question_model.ai_solution,
+
+        r#type: question_model.r#type,
+        options: question_model.options,
+
+        attempt: evaluated_question.attempt,
+    };
+
+
+
+    Ok(Json(response).into_response())
 }
 
 #[utoipa::path(
