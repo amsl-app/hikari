@@ -436,37 +436,138 @@ async fn get_next_question(
 
         let saved_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id).await?;
 
-        if (saved_recommendations.len() <= 1) {
-            let learner_model_client = RecommendationClient::new(
-                "http://learner-model:8000".to_string()
-            );
+        if saved_recommendations.len() <= 1 {
+            let conn = conn.clone();
+            let quiz_id = quiz_id;
+            let user_id = user_id;
+            let module_id = module_id.to_string();
 
-            let recommendations = learner_model_client
-                .get_recommendations(
-                    user_id,
-                    module_id.to_string(),
-                ).await?;
+            tokio::spawn(async move {
+                let learner_model_client = RecommendationClient::new(
+                    "http://host.docker.internal:8000".to_string(),
+                );
 
-            tracing::info!("Recommendations: {:?}", recommendations);
+                match learner_model_client
+                    .get_recommendations(user_id, module_id)
+                    .await
+                {
+                    Ok(recommendations) => {
+                        tracing::info!("Learner Model recommendations: {:?}", recommendations);
+                        let question_ids: Vec<Uuid> = recommendations
+                            .recommendations
+                            .iter()
+                            .map(|recommendation| recommendation.question_id)
+                            .collect();
 
-            let question_ids: Vec<Uuid> = recommendations
-                .recommendations
-                .iter()
-                .map(|recommendation| recommendation.question_id)
-                .collect();
+                        if question_ids.is_empty() {
+                            tracing::warn!(
+                        ?quiz_id,
+                        "recommendation service returned no question IDs"
+                    );
+                            return;
+                        }
 
-            hikari_db::quiz::question_recommendation::mutation::Mutation::create__multiple_recommendations(
-                &conn,
-                &quiz_id,
-                &question_ids,
-            )
-                .await?;
+                        if let Err(error) =
+                            hikari_db::quiz::question_recommendation::mutation::Mutation
+                            ::create__multiple_recommendations(
+                                &conn,
+                                &quiz_id,
+                                &question_ids,
+                            )
+                                .await
+                        {
+                            tracing::error!(
+                        ?error,
+                        ?quiz_id,
+                        "failed to save recommendations"
+                    );
+                        }
+                    }
+
+                    Err(error) => {
+                        tracing::error!(
+                    ?error,
+                    ?quiz_id,
+                    "recommendation request failed"
+                );
+                    }
+                }
+            });
         }
 
         let unused_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(
             &conn,
             &quiz_id)
             .await?;
+
+        if unused_recommendations.len() == 0 {
+            let content: Content = pick_random_content(session).ok_or(QuizError::NoContentProvided)?;
+
+            let topic = &content.title;
+
+            let specific_content: &str = pick_specific_content(&content);
+
+            let llm_config: &LlmConfig = app_config.llm_config();
+
+            let contents = &session.contents;
+
+            let exams = contents
+                .iter()
+                .flat_map(|c| c.exams.iter().map(|e| (c.title.clone(), e.clone())))
+                .collect::<Vec<(String, ContentExam)>>();
+
+            let sources: Vec<String> = contents
+                .iter()
+                .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
+                .collect();
+
+            tracing::debug!(selected_session_id, topic, "requesting new question");
+
+            let mut question = create_question(
+                &user_id,
+                &selected_session_id,
+                specific_content,
+                topic,
+                &exams,
+                llm_config,
+                &conn,
+                &quiz_id,
+                &sources,
+            )
+                .await?;
+
+
+            //question.sanitize_for_client();
+            let attempt = 1 as i32;
+
+            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question.id, attempt, &selected_session_id).await?;
+
+            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+            let response = QuestionResponse {
+                id: question.id,
+                quiz_id: quiz_id,
+                topic: question.topic,
+                content: question.content,
+                question: question.question,
+                session_id: attempt_model.session_id,
+                level: question.level,
+
+                answer: attempt_model.answer,
+                evaluation: attempt_model.evaluation,
+                grade: attempt_model.grade,
+
+                ai_solution: question.ai_solution,
+
+                r#type: question.r#type,
+                options: question.options,
+
+                attempt: attempt_model.attempt,
+            };
+
+            return Ok(Json(response).into_response())
+        }
+
+
 
         let recommendation = unused_recommendations
             .into_iter()
