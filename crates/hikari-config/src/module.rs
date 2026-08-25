@@ -6,6 +6,7 @@ use crate::module::assessment::ModuleAssessment;
 use crate::module::content::Content;
 use crate::module::error::ModuleError;
 use crate::module::llm_agent::{LlmAgent, LlmService};
+use crate::module::milestone::ModuleMilestone;
 use crate::module::session::Session;
 use futures::StreamExt;
 use hikari_utils::loader::{Filter, Loader, LoaderTrait};
@@ -19,6 +20,7 @@ pub mod assessment;
 pub mod content;
 pub mod error;
 pub mod llm_agent;
+pub mod milestone;
 pub mod next_session;
 pub mod session;
 pub mod unlock;
@@ -55,6 +57,7 @@ pub struct Module<'a> {
     pub default_session: Option<String>,
     pub hidden: bool,
     pub sessions: IndexMap<String, Session>,
+    pub milestones: Vec<ModuleMilestone>,
     pub theme: Option<Theme>,
     pub weight: Option<usize>,
     pub assessment: Option<ModuleAssessment<'a>>,
@@ -96,6 +99,17 @@ impl Module<'_> {
             tracing::debug!("No self-learning session for module {}", module.id);
         }
 
+        let milestones = module
+            .milestones
+            .into_iter()
+            .map(|m| ModuleMilestone {
+                id: m.id,
+                title: m.title,
+                date: m.date,
+                description: m.description,
+            })
+            .collect();
+
         Ok(Self {
             id: module.id,
             title: module.title,
@@ -105,6 +119,7 @@ impl Module<'_> {
             banner: module.banner,
             default_session: module.default_session,
             sessions,
+            milestones,
             hidden: module.hidden,
             theme: module.theme,
             assessment: module.assessment,
