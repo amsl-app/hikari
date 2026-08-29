@@ -1,5 +1,6 @@
 use crate::builder::slot::SaveTarget;
 use crate::builder::slot::paths::Destination;
+use crate::builder::steps::media::MediaType;
 use crate::execution::agent::response::{ChatChunk, Response};
 use crate::execution::bubble::BubbleAccumulator;
 use crate::execution::error::LlmExecutionError;
@@ -13,7 +14,7 @@ use hikari_config::module::llm_agent::LlmService;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::openai::Content;
 use hikari_core::usage::add_usage;
-use hikari_model::chat::{Direction, TextContent, TypeSafePayload};
+use hikari_model::chat::{Direction, ImageContent, TextContent, TypeSafePayload, VideoContent};
 use hikari_model::llm::message::MessageStatus;
 use hikari_model::llm::slot::Slot;
 use hikari_model::llm::state::{LlmConversationState, LlmStepStatus};
@@ -192,6 +193,37 @@ impl LlmAgent {
                         }
                     }
                 }
+                LlmStepContent::Media{url, r#type} => {
+
+                    let payload = match r#type {
+                         MediaType::Image => {
+                            TypeSafePayload::Image(ImageContent{image_url: url.clone()})
+                        },
+                        MediaType::Video => {
+                            TypeSafePayload::Video(VideoContent{video_url: url})
+                        }
+                    };
+
+                    let conn = self.conn.clone();
+                    let conversation_id = self.conversation_id;
+                    let step_id_owned = step_id.to_owned();
+
+                    let (content_type, message) = split_payload_for_database(payload.clone()).map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
+
+                    hikari_db::llm::message::Mutation::insert_new_message(
+                        &conn,
+                        conversation_id,
+                        step_id_owned,
+                        content_type,
+                        message,
+                        Direction::Send.into_db_model(),
+                        MessageStatus::Completed.into_db_model(),
+                    ).await?;
+
+                    yield Some(Response::Payload(payload));
+
+                    self.set_finished(step_id).await?;
+                }
                 LlmStepContent::Message{message, store} => {
                     let conn = self.conn.clone();
                     let conversation_id = self.conversation_id;
@@ -228,9 +260,6 @@ impl LlmAgent {
                             }
                         }.boxed()
                     });
-
-
-
 
                     while let Some(result) = message.next().await {
                         match result {
