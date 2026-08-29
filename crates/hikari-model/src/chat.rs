@@ -63,6 +63,7 @@ pub struct TextContent {
 #[serde(rename_all = "kebab-case")]
 pub struct PayloadContent {
     pub payload: String,
+    #[serde(rename = "type")]
     pub content_type: Option<PayloadContentType>,
     pub display_type: Option<PayloadDisplayType>,
 }
@@ -81,16 +82,26 @@ pub enum PayloadDisplayType {
 }
 
 #[derive(ToSchema, Serialize, Deserialize, Debug, PartialEq, Clone)]
-#[serde(rename_all = "kebab-case")]
 pub struct ButtonContent {
     pub title: String,
     pub payload: Option<String>,
 }
 
 #[derive(ToSchema, Serialize, Deserialize, Debug, PartialEq, Clone)]
-#[serde(rename_all = "kebab-case")]
 pub struct TypingContent {
     pub duration: Option<u16>,
+}
+
+#[derive(ToSchema, Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct ImageContent {
+    pub image_url: String,
+}
+
+#[derive(ToSchema, Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct VideoContent {
+    pub video_url: String,
 }
 
 #[derive(ToSchema, Serialize, Deserialize, Debug, Clone, PartialEq, IntoStaticStr, Display)]
@@ -101,6 +112,8 @@ pub enum TypeSafePayload {
     Payload(PayloadContent),
     Button(ButtonContent),
     FlowTrigger(FlowTrigger),
+    Image(ImageContent),
+    Video(VideoContent),
 }
 
 impl TypeSafePayload {
@@ -109,7 +122,10 @@ impl TypeSafePayload {
         match self {
             TypeSafePayload::Text(text) => Some(text.text),
             TypeSafePayload::Payload(payload) => Some(payload.payload),
-            TypeSafePayload::Button(_) | TypeSafePayload::FlowTrigger(_) => None,
+            TypeSafePayload::Button(_)
+            | TypeSafePayload::FlowTrigger(_)
+            | TypeSafePayload::Image(_)
+            | TypeSafePayload::Video(_) => None,
         }
     }
 }
@@ -124,6 +140,8 @@ impl TryFrom<TypeSafePayload> for Payload {
             TypeSafePayload::Payload(inner) => Some(serde_json::to_value(inner)?),
             TypeSafePayload::Button(inner) => Some(serde_json::to_value(inner)?),
             TypeSafePayload::FlowTrigger(inner) => Some(serde_json::to_value(inner)?),
+            TypeSafePayload::Image(inner) => Some(serde_json::to_value(inner)?),
+            TypeSafePayload::Video(inner) => Some(serde_json::to_value(inner)?),
         };
         Ok(Payload {
             content_type,
