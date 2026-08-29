@@ -73,6 +73,7 @@ pub struct Goal {
     #[serde(skip_serializing)]
     pub user_id: Uuid,
     pub name: String,
+    pub date: NaiveDate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub fulfilled: bool,
@@ -83,6 +84,7 @@ pub struct Goal {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NewGoal {
     pub name: String,
+    pub date: NaiveDate,
     #[serde(default)]
     pub description: Option<String>,
 }
@@ -94,6 +96,7 @@ pub struct GoalFull {
     #[serde(skip_serializing)]
     pub user_id: Uuid,
     pub name: String,
+    pub date: NaiveDate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub fulfilled: bool,
@@ -110,6 +113,7 @@ impl Goal {
             id: self.id,
             user_id: self.user_id,
             name: self.name.clone(),
+            date: self.date,
             description: self.description.clone(),
             fulfilled: self.fulfilled,
             created_at: self.created_at,

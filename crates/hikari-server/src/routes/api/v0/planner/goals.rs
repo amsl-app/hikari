@@ -7,6 +7,7 @@ use axum::Router;
 use axum::extract::{Path, Query};
 use axum::response::IntoResponse;
 use axum::routing::get;
+use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::sea_orm::DatabaseConnection;
 use hikari_model::planner::{Goal, GoalFull, NewGoal, PlannerMilestone};
@@ -27,6 +28,7 @@ pub(crate) struct GoalFlags {
 #[derive(Debug, Deserialize, ToSchema)]
 pub(crate) struct GoalChanges {
     pub name: Option<String>,
+    pub date: Option<NaiveDate>,
     #[serde(default, with = "::serde_with::rust::double_option")]
     #[allow(clippy::option_option)]
     pub description: Option<Option<String>>,
@@ -159,7 +161,7 @@ pub(crate) async fn create_goal(
         return Err(PlannerError::ValidationError("name must not be empty".to_owned()));
     }
 
-    let goal = planner::goal::Mutation::create_goal(&conn, user, name, body.description).await?;
+    let goal = planner::goal::Mutation::create_goal(&conn, user, name, body.date, body.description).await?;
     Ok((StatusCode::CREATED, Json(Goal::from_db_model(goal))))
 }
 
@@ -202,6 +204,9 @@ pub(crate) async fn update_goal(
             return Err(PlannerError::ValidationError("name must not be empty".to_owned()));
         }
         active_model.name = ActiveValue::Set(name);
+    }
+    if let Some(date) = changes.date {
+        active_model.date = ActiveValue::Set(date);
     }
     if let Some(inner) = changes.description {
         active_model.description = ActiveValue::Set(inner);

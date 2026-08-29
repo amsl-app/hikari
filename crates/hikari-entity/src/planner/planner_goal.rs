@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -7,6 +8,7 @@ pub struct Model {
     pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
+    pub date: NaiveDate,
     pub description: Option<String>,
     pub fulfilled: bool,
     pub created_at: DateTime,

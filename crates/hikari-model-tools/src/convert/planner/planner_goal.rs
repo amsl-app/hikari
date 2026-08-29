@@ -8,6 +8,7 @@ impl FromDbModel<GoalModel> for Goal {
             id: model.id,
             user_id: model.user_id,
             name: model.name,
+            date: model.date,
             description: model.description,
             fulfilled: model.fulfilled,
             created_at: model.created_at,

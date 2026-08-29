@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use hikari_entity::planner::planner_goal::{ActiveModel, Model as GoalModel};
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, NotSet, QueryFilter};
 use uuid::Uuid;
@@ -9,12 +10,14 @@ impl Mutation {
         db: &C,
         user_id: Uuid,
         name: String,
+        date: NaiveDate,
         description: Option<String>,
     ) -> Result<GoalModel, DbErr> {
         let goal = ActiveModel {
             id: ActiveValue::Set(Uuid::new_v4()),
             user_id: ActiveValue::Set(user_id),
             name: ActiveValue::Set(name),
+            date: ActiveValue::Set(date),
             description: ActiveValue::Set(description),
             fulfilled: ActiveValue::Set(false),
             created_at: NotSet,
