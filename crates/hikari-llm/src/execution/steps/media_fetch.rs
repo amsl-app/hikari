@@ -23,7 +23,6 @@ pub struct MediaFetch {
 
 impl MediaFetch {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(id: String, url: Template, r#type: MediaType, conditions: Vec<Condition>) -> Self {
         Self {
             id,

@@ -76,6 +76,7 @@ pub enum PayloadContentType {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
 pub enum PayloadDisplayType {
     Duration,
 }

@@ -209,7 +209,6 @@ impl LlmAgent {
                     let step_id_owned = step_id.to_owned();
 
                     let (content_type, message) = split_payload_for_database(payload.clone()).map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
-                    yield Some(Response::Payload(payload));
 
                     hikari_db::llm::message::Mutation::insert_new_message(
                         &conn,
@@ -220,6 +219,8 @@ impl LlmAgent {
                         Direction::Send.into_db_model(),
                         MessageStatus::Completed.into_db_model(),
                     ).await?;
+
+                    yield Some(Response::Payload(payload));
 
                     self.set_finished(step_id).await?;
                 }
