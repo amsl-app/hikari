@@ -43,6 +43,8 @@ async fn load_module_assessment_instances(
         return Ok((None, None));
     };
 
+    // Pre is the first session of that assessment type
+    // Post is the last session of that assessment type after the module was completed
     let (pre, post) = try_join(
         hikari_db::assessment::session::Query::load_first_session(conn, assessment.pre.as_ref(), user_id),
         hikari_db::assessment::session::Query::load_last_session(
