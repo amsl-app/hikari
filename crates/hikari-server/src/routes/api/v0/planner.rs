@@ -402,6 +402,18 @@ fn validate_new_entry(
     })
 }
 
+async fn goals_by_milestone_id(
+    conn: &DatabaseConnection,
+    user: Uuid,
+    milestone_ids: &[Uuid],
+) -> Result<HashMap<Uuid, Vec<Goal>>, PlannerError> {
+    let goals = planner::goal::Query::get_goals_by_milestone_ids(conn, user, milestone_ids).await?;
+    Ok(goals
+        .into_iter()
+        .map(|(milestone_id, gs)| (milestone_id, gs.into_iter().map(Goal::from_db_model).collect()))
+        .collect())
+}
+
 fn validate_milestone_title(title: &str) -> Result<String, PlannerError> {
     let title = title.trim().to_owned();
     if title.is_empty() {
@@ -448,21 +460,7 @@ pub(crate) async fn get_milestones(
         }
 
         let milestone_ids: Vec<Uuid> = milestones.iter().map(|m| m.id).collect();
-        let links = planner::goal_milestone::Query::get_links_for_milestones(&conn, &milestone_ids).await?;
-        let goal_ids: Vec<Uuid> = links.iter().map(|link| link.goal_id).collect();
-        let goals_by_id: HashMap<Uuid, Goal> = planner::goal::Query::get_user_goals_by_ids(&conn, user, goal_ids)
-            .await?
-            .into_iter()
-            .map(|g| (g.id, Goal::from_db_model(g)))
-            .collect();
-        for link in links {
-            if let Some(goal) = goals_by_id.get(&link.goal_id) {
-                goals_by_milestone
-                    .entry(link.milestone_id)
-                    .or_default()
-                    .push(goal.clone());
-            }
-        }
+        goals_by_milestone = goals_by_milestone_id(&conn, user, &milestone_ids).await?;
     }
 
     let milestones = milestones
@@ -533,13 +531,10 @@ pub(crate) async fn get_milestone(
         .map(PlannerEntry::from_db_model)
         .collect::<Vec<PlannerEntry>>();
 
-    let links = planner::goal_milestone::Query::get_links_for_milestones(&conn, &[id]).await?;
-    let goal_ids: Vec<Uuid> = links.iter().map(|link| link.goal_id).collect();
-    let goals = planner::goal::Query::get_user_goals_by_ids(&conn, user, goal_ids)
+    let goals = goals_by_milestone_id(&conn, user, &[id])
         .await?
-        .into_iter()
-        .map(Goal::from_db_model)
-        .collect();
+        .remove(&id)
+        .unwrap_or_default();
 
     Ok(Json(milestone.as_milestone_full(entries, goals)))
 }

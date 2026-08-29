@@ -25,4 +25,16 @@ pub enum Relation {
     Milestone,
 }
 
+impl Related<super::planner_goal::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Goal.def()
+    }
+}
+
+impl Related<super::planner_milestone::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Milestone.def()
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}

@@ -1,5 +1,7 @@
 use hikari_entity::planner::planner_goal::{Entity as Goal, Model as GoalModel};
+use hikari_entity::planner::planner_goal_milestone;
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 pub struct Query;
@@ -55,5 +57,30 @@ impl Query {
         }
 
         Ok(res)
+    }
+
+    pub async fn get_goals_by_milestone_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        milestone_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<GoalModel>>, DbErr> {
+        if milestone_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows: Vec<(planner_goal_milestone::Model, Option<GoalModel>)> = planner_goal_milestone::Entity::find()
+            .filter(planner_goal_milestone::Column::MilestoneId.is_in(milestone_ids.to_vec()))
+            .find_also_related(Goal)
+            .filter(hikari_entity::planner::planner_goal::Column::UserId.eq(user_id))
+            .all(db)
+            .await
+            .inspect_err(|error| tracing::error!(error = %error, "failed to load goals for milestones"))?;
+
+        let mut goals_by_milestone: HashMap<Uuid, Vec<GoalModel>> = HashMap::new();
+        for (link, goal) in rows {
+            if let Some(goal) = goal {
+                goals_by_milestone.entry(link.milestone_id).or_default().push(goal);
+            }
+        }
+        Ok(goals_by_milestone)
     }
 }

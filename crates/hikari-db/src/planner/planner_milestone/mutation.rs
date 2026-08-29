@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use hikari_entity::planner::{
-    planner_goal, planner_goal_milestone,
+    planner_goal_milestone,
     planner_milestone::{ActiveModel, Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel},
 };
 use sea_orm::{
@@ -23,36 +23,12 @@ pub struct MilestoneInput {
 pub struct Mutation;
 
 impl Mutation {
-    /// Fetches the goals owned by `user_id` for `goal_ids`, erroring if any id doesn't resolve.
-    async fn require_owned_goals<C: ConnectionTrait>(
-        db: &C,
-        user_id: Uuid,
-        mut goal_ids: Vec<Uuid>,
-    ) -> Result<Vec<planner_goal::Model>, DbErr> {
-        if goal_ids.is_empty() {
-            return Ok(vec![]);
-        }
-        goal_ids.sort_unstable();
-        goal_ids.dedup();
-        let count = goal_ids.len();
-        let goals = planner_goal::Entity::find()
-            .filter(planner_goal::Column::UserId.eq(user_id))
-            .filter(planner_goal::Column::Id.is_in(goal_ids))
-            .all(db)
-            .await?;
-        if goals.len() != count {
-            tracing::error!(user_id = %user_id, "did not find the correct number of goals");
-            return Err(DbErr::RecordNotFound("goals".to_string()));
-        }
-        Ok(goals)
-    }
-
     pub async fn create_milestone<C: ConnectionTrait + TransactionTrait>(
         db: &C,
         user_id: Uuid,
         input: MilestoneInput,
     ) -> Result<PlannerMilestoneModel, DbErr> {
-        let goals = Self::require_owned_goals(db, user_id, input.goals).await?;
+        let goals = crate::planner::goal::query::Query::get_user_goals_by_ids(db, user_id, input.goals).await?;
 
         let model = ActiveModel {
             id: ActiveValue::Set(Uuid::new_v4()),
@@ -69,16 +45,12 @@ impl Mutation {
         db.transaction::<_, PlannerMilestoneModel, DbErr>(|txn| {
             Box::pin(async move {
                 let created = model.insert(txn).await?;
-                if !goals.is_empty() {
-                    planner_goal_milestone::Entity::insert_many(goals.iter().map(|goal| {
-                        planner_goal_milestone::ActiveModel {
-                            goal_id: ActiveValue::Set(goal.id),
-                            milestone_id: ActiveValue::Set(created.id),
-                        }
-                    }))
-                    .exec(txn)
-                    .await?;
-                }
+                crate::planner::goal_milestone::mutation::Mutation::insert_goal_links(
+                    txn,
+                    created.id,
+                    goals.iter().map(|g| g.id).collect(),
+                )
+                .await?;
                 Ok(created)
             })
         })
@@ -98,7 +70,9 @@ impl Mutation {
         let user_id = *active_model.user_id.try_as_ref().expect("user id must be set");
 
         let goals = match goals {
-            Some(goal_ids) => Some(Self::require_owned_goals(db, user_id, goal_ids).await?),
+            Some(goal_ids) => {
+                Some(crate::planner::goal::query::Query::get_user_goals_by_ids(db, user_id, goal_ids).await?)
+            }
             None => None,
         };
 
@@ -110,16 +84,12 @@ impl Mutation {
                         .filter(planner_goal_milestone::Column::MilestoneId.eq(milestone_id))
                         .exec(txn)
                         .await?;
-                    if !goals.is_empty() {
-                        planner_goal_milestone::Entity::insert_many(goals.iter().map(|goal| {
-                            planner_goal_milestone::ActiveModel {
-                                goal_id: ActiveValue::Set(goal.id),
-                                milestone_id: ActiveValue::Set(milestone_id),
-                            }
-                        }))
-                        .exec(txn)
-                        .await?;
-                    }
+                    crate::planner::goal_milestone::mutation::Mutation::insert_goal_links(
+                        txn,
+                        updated.id,
+                        goals.iter().map(|g| g.id).collect(),
+                    )
+                    .await?;
                 }
                 Ok(updated)
             })
