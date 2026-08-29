@@ -522,7 +522,7 @@ pub(crate) async fn submit(
         "submit assessment session"
     );
 
-    let entry = require_running_session(&conn, &user, &assessment).await?;
+    let entry = require_running_session(&conn, user, &assessment).await?;
     if entry.id != session {
         return Err(Error::UnrelatedSessionId);
     }
@@ -594,7 +594,7 @@ pub(crate) async fn update(
     Path((assessment, session, question)): Path<(String, Uuid, String)>,
     Json(body): Json<AnswerValue>,
 ) -> Result<impl IntoResponse, Error> {
-    let entry = hikari_db::assessment::session::Query::load_session(&conn, &user, &session).await?;
+    let entry = hikari_db::assessment::session::Query::load_session(&conn, user, session).await?;
 
     if entry.assessment.ne(&assessment) {
         return Err(Error::UnrelatedSessionId);
@@ -640,7 +640,7 @@ async fn get_scale_values(
         session_id = %session.as_hyphenated(),
         "getting scale values"
     );
-    let assessment_session = hikari_db::assessment::session::Query::load_session(conn, &user_id, &session).await?;
+    let assessment_session = hikari_db::assessment::session::Query::load_session(conn, user_id, session).await?;
 
     if assessment_session.assessment.ne(&assessment_id) || session != assessment_session.id {
         return Err(Error::UnrelatedSessionId);

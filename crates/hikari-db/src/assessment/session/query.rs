@@ -8,9 +8,9 @@ use uuid::Uuid;
 pub struct Query;
 
 impl Query {
-    pub async fn load_sessions<C: ConnectionTrait>(conn: &C, user_id: &Uuid) -> Result<Vec<Session>, DbErr> {
+    pub async fn load_sessions<C: ConnectionTrait>(conn: &C, user_id: Uuid) -> Result<Vec<Session>, DbErr> {
         SessionEntity::find()
-            .filter(session::Column::UserId.eq(*user_id))
+            .filter(session::Column::UserId.eq(user_id))
             .all(conn)
             .await
             .inspect_err(|error| tracing::error!(error = error as &dyn Error, %user_id, "failed to load sessions"))
@@ -18,11 +18,11 @@ impl Query {
 
     pub async fn load_session<C: ConnectionTrait>(
         conn: &C,
-        user_id: &Uuid,
-        session_id: &Uuid,
+        user_id: Uuid,
+        session_id: Uuid,
     ) -> Result<Session, DbErr> {
-        SessionEntity::find_by_id(*session_id)
-            .filter(session::Column::UserId.eq(*user_id))
+        SessionEntity::find_by_id(session_id)
+            .filter(session::Column::UserId.eq(user_id))
             .one(conn)
             .await
             .require()
@@ -34,10 +34,10 @@ impl Query {
     pub async fn load_first_session<C: ConnectionTrait>(
         conn: &C,
         assessment: &str,
-        user_id: &Uuid,
+        user_id: Uuid,
     ) -> Result<Option<Session>, DbErr> {
         SessionEntity::find()
-            .filter(session::Column::UserId.eq(*user_id))
+            .filter(session::Column::UserId.eq(user_id))
             .filter(session::Column::Assessment.eq(assessment))
             .filter(session::Column::Completed.is_not_null())
             .order_by(session::Column::Completed, sea_orm::Order::Asc)
@@ -51,7 +51,7 @@ impl Query {
     pub async fn load_first_or_running_session<C: ConnectionTrait>(
         conn: &C,
         assessment: &str,
-        user_id: &Uuid,
+        user_id: Uuid,
     ) -> Result<Option<Session>, DbErr> {
         if let Some(session) = Self::load_first_session(conn, assessment, user_id).await? {
             return Ok(Some(session));
@@ -64,10 +64,10 @@ impl Query {
         conn: &C,
         assessment: &str,
         min_completed: Option<chrono::NaiveDateTime>,
-        user_id: &Uuid,
+        user_id: Uuid,
     ) -> Result<Option<Session>, DbErr> {
         let mut query = SessionEntity::find()
-            .filter(session::Column::UserId.eq(*user_id))
+            .filter(session::Column::UserId.eq(user_id))
             .filter(session::Column::Assessment.eq(assessment))
             .filter(session::Column::Completed.is_not_null());
 
@@ -87,7 +87,7 @@ impl Query {
         conn: &C,
         assessment: &str,
         min_completed: Option<chrono::NaiveDateTime>,
-        user_id: &Uuid,
+        user_id: Uuid,
     ) -> Result<Option<Session>, DbErr> {
         if let Some(session) = Self::load_last_session(conn, assessment, min_completed, user_id).await? {
             return Ok(Some(session));
@@ -99,10 +99,10 @@ impl Query {
     pub async fn load_running_session<C: ConnectionTrait>(
         conn: &C,
         assessment: &str,
-        user_id: &Uuid,
+        user_id: Uuid,
     ) -> Result<Option<Session>, DbErr> {
         SessionEntity::find()
-            .filter(session::Column::UserId.eq(*user_id))
+            .filter(session::Column::UserId.eq(user_id))
             .filter(session::Column::Assessment.eq(assessment))
             .filter(session::Column::Status.eq(AssessmentStatus::Running))
             .one(conn)

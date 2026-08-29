@@ -44,12 +44,12 @@ async fn load_module_assessment_instances(
     };
 
     let (pre, post) = try_join(
-        hikari_db::assessment::session::Query::load_first_session(conn, assessment.pre.as_ref(), &user_id),
+        hikari_db::assessment::session::Query::load_first_session(conn, assessment.pre.as_ref(), user_id),
         hikari_db::assessment::session::Query::load_last_session(
             conn,
             assessment.post.as_ref(),
             completion.map(|c| c.naive_utc()),
-            &user_id,
+            user_id,
         ),
     )
     .await?;
@@ -559,7 +559,7 @@ pub(crate) async fn history(
 ) -> Result<impl IntoResponse, ModuleError> {
     let data = hikari_db::history::Query::load_history_entries(&conn, user).await?;
 
-    let assessment_sessions = hikari_db::assessment::session::Query::load_sessions(&conn, &user).await?;
+    let assessment_sessions = hikari_db::assessment::session::Query::load_sessions(&conn, user).await?;
     let _assessment_sessions_map: HashMap<_, _> = assessment_sessions
         .into_iter()
         .map(|session| (session.id, session))

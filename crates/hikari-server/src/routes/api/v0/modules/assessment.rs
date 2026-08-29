@@ -170,7 +170,7 @@ pub(crate) async fn submit_module_assessment(
     let (_, assessment) = get_module_assessment(app_config.module_config(), &module_id, &user.groups)?;
     let assessment_id = pre_post.get_assessment_id(assessment);
 
-    let session = require_running_session(&conn, &user.id, assessment_id).await?;
+    let session = require_running_session(&conn, user.id, assessment_id).await?;
     submit_session(&conn, user.id, session, app_config.assessments(), answers).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
@@ -210,7 +210,7 @@ pub(crate) async fn pre_post_assessment(
     // latest completed session (after module completion) for post.
     let session = match pre_post {
         PrePost::Pre => {
-            hikari_db::assessment::session::Query::load_first_or_running_session(&conn, assessment_id, &user.id).await?
+            hikari_db::assessment::session::Query::load_first_or_running_session(&conn, assessment_id, user.id).await?
         }
         PrePost::Post => {
             let completion = hikari_db::module::status::Query::get_for_user(&conn, user.id, &module_id)
@@ -225,7 +225,7 @@ pub(crate) async fn pre_post_assessment(
                 &conn,
                 assessment_id,
                 completion,
-                &user.id,
+                user.id,
             )
             .await?
         }
