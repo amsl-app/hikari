@@ -20,6 +20,7 @@ pub enum HistoryEntryType {
 
 #[derive(Serialize, ToSchema)]
 pub struct HistoryAssessment {
+    #[deprecated(note = "This field is not used and will be removed in a future version")]
     pub assessment_type: String,
     pub session_id: Uuid,
 }

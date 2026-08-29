@@ -16,11 +16,7 @@ impl Query {
             .inspect_err(|error| tracing::error!(error = error as &dyn Error, %user_id, "failed to load sessions"))
     }
 
-    pub async fn load_session<C: ConnectionTrait>(
-        conn: &C,
-        user_id: Uuid,
-        session_id: Uuid,
-    ) -> Result<Session, DbErr> {
+    pub async fn load_session<C: ConnectionTrait>(conn: &C, user_id: Uuid, session_id: Uuid) -> Result<Session, DbErr> {
         SessionEntity::find_by_id(session_id)
             .filter(session::Column::UserId.eq(user_id))
             .one(conn)
