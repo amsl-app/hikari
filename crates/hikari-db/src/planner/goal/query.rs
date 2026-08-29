@@ -35,11 +35,13 @@ impl Query {
     pub async fn get_user_goals_by_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
-        ids: Vec<Uuid>,
+        mut ids: Vec<Uuid>,
     ) -> Result<Vec<GoalModel>, DbErr> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
+        ids.sort_unstable();
+        ids.dedup();
         let len = ids.len();
         let res = Goal::find()
             .filter(hikari_entity::planner::planner_goal::Column::UserId.eq(user_id))

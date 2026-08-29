@@ -407,9 +407,6 @@ fn validate_milestone_title(title: &str) -> Result<String, PlannerError> {
     if title.is_empty() {
         return Err(PlannerError::ValidationError("title must not be empty".to_owned()));
     }
-    if title.len() > 500 {
-        return Err(PlannerError::ValidationError("title exceeds 500 characters".to_owned()));
-    }
     Ok(title)
 }
 

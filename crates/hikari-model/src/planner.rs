@@ -192,6 +192,7 @@ pub struct NewPlannerMilestone {
     pub date: NaiveDate,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
     pub goals: Vec<Uuid>,
 }
 

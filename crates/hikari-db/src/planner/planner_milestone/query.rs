@@ -32,11 +32,13 @@ impl Query {
     pub async fn get_user_milestones_by_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
-        ids: Vec<Uuid>,
+        mut ids: Vec<Uuid>,
     ) -> Result<Vec<PlannerMilestoneModel>, DbErr> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
+        ids.sort_unstable();
+        ids.dedup();
         let len = ids.len();
         let res = PlannerMilestone::find()
             .filter(Column::UserId.eq(user_id))

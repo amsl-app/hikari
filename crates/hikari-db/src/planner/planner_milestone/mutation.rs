@@ -27,11 +27,13 @@ impl Mutation {
     async fn require_owned_goals<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
-        goal_ids: Vec<Uuid>,
+        mut goal_ids: Vec<Uuid>,
     ) -> Result<Vec<planner_goal::Model>, DbErr> {
         if goal_ids.is_empty() {
             return Ok(vec![]);
         }
+        goal_ids.sort_unstable();
+        goal_ids.dedup();
         let count = goal_ids.len();
         let goals = planner_goal::Entity::find()
             .filter(planner_goal::Column::UserId.eq(user_id))
