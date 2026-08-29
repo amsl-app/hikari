@@ -1,27 +1,13 @@
-use crate::util::FlattenTransactionResultExt;
-use base64::Engine;
+use crate::util::{FlattenTransactionResultExt, generate_token};
 use hikari_entity::{
     access_tokens,
     access_tokens::{ActiveModel, Entity, Model},
 };
-use ring::rand::{self, SecureRandom};
 use sea_orm::ActiveValue::Set;
 use sea_orm::prelude::*;
 use sea_orm::{TransactionTrait, sea_query};
 
 pub struct Mutation;
-
-fn generate_token() -> String {
-    let rng = rand::SystemRandom::new();
-    // TODO (LOW): once MaybeUnit::uninit_array is stabilized, use it here
-    let mut bytes = [0u8; 64];
-    // This should never fail because the only function that can fail here is getentropy
-    // which should never fail on a modern system.
-    // (The length error is impossible because the length is shorter than 256 bytes
-    //    and the library would also handle longer lengths correctly)
-    rng.fill(&mut bytes).expect("Failed to generate random bytes");
-    base64::engine::general_purpose::STANDARD.encode(bytes)
-}
 
 impl Mutation {
     pub async fn create_access_token<C: TransactionTrait>(conn: &C, user_id: Uuid) -> Result<Model, DbErr> {
@@ -60,22 +46,5 @@ impl Mutation {
             .exec(conn)
             .await?;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_generate_token() {
-        let token = generate_token();
-        let token = base64::engine::general_purpose::STANDARD.decode(&token).unwrap();
-        assert_eq!(token.len(), 64);
-        // If this does happen we probably forgot to fill the buffer with random bytes
-        token
-            .iter()
-            .find(|&&b| b != 0)
-            .expect("token is all zeros, this should never happen");
     }
 }

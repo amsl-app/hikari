@@ -11,6 +11,7 @@ pub mod user;
 pub mod util;
 
 pub mod assessment;
+pub mod planner;
 pub mod tag;
 pub mod user_context_logs;
 pub mod user_handle;

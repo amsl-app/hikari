@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::module::{
     locked_until,
+    next_session::Next,
     session::instance::{SessionInstance, SessionInstanceStatus},
 };
 use chrono::{DateTime, Utc};
@@ -73,8 +74,12 @@ pub struct SessionFull<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion: Option<DateTime<Utc>>,
 
+    #[deprecated(note = "Use `next` instead")]
     #[serde(rename = "next-session", skip_serializing_if = "Option::is_none")]
     pub next_session: Option<&'a str>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<Next>,
 
     pub status: SessionInstanceStatus,
 
@@ -146,6 +151,8 @@ impl<'a> SessionFull<'a> {
             banner: session.banner.as_deref(),
             theme: session.theme.as_ref(),
             time: session.time.as_ref(),
+            next: session.next.as_ref().map(Next::from_config),
+            #[allow(deprecated)]
             next_session: session.next_session.as_deref(),
             unlock: session.unlock.as_ref(),
             locked_until,

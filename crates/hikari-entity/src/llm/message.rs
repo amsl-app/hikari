@@ -27,6 +27,10 @@ pub enum ContentType {
     Payload,
     #[sea_orm(string_value = "buttons")]
     Buttons,
+    #[sea_orm(string_value = "image")]
+    Image,
+    #[sea_orm(string_value = "video")]
+    Video,
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
