@@ -8,24 +8,62 @@ use sea_orm::DbErr;
 use std::str::Utf8Error;
 use thiserror::Error;
 
-// TODO (LOW) Document error types
+#[derive(Error, Debug)]
+pub(crate) enum ModuleDbError {
+    #[error(transparent)]
+    Db(#[from] DbError),
+
+    #[error(transparent)]
+    SeaOrm(#[from] DbErr),
+}
+
+impl From<DbError> for ModuleError {
+    fn from(error: DbError) -> Self {
+        Self::Db(ModuleDbError::from(error))
+    }
+}
+
+impl From<DbErr> for ModuleError {
+    fn from(error: DbErr) -> Self {
+        Self::Db(ModuleDbError::from(error))
+    }
+}
+
+impl From<DbError> for UserError {
+    fn from(error: DbError) -> Self {
+        Self::Db(ModuleDbError::from(error))
+    }
+}
+
+impl From<DbErr> for UserError {
+    fn from(error: DbErr) -> Self {
+        Self::Db(ModuleDbError::from(error))
+    }
+}
+
+impl From<DbError> for MessagingError {
+    fn from(error: DbError) -> Self {
+        Self::Db(ModuleDbError::from(error))
+    }
+}
+
+impl From<DbErr> for MessagingError {
+    fn from(error: DbErr) -> Self {
+        Self::Db(ModuleDbError::from(error))
+    }
+}
+
 // TODO (LOW) Document error types
 #[derive(Error, Debug)]
 pub(crate) enum ModuleError {
     #[error(transparent)]
-    DBError(#[from] DbError),
-
-    #[error(transparent)]
-    SeaOrmError(#[from] DbErr),
+    Db(#[from] ModuleDbError),
 
     #[error(transparent)]
     DataError(#[from] modules::error::ModuleError),
 
     #[error("Configuration Error: {0}")]
     ConfigurationError(String),
-
-    #[error("Assessment was not configured for this module")]
-    AssessmentNotConfigured,
 
     #[error("Failed to serialize result")]
     SerdeError(#[from] serde_json::Error),
@@ -49,10 +87,7 @@ pub(crate) enum ModuleError {
 #[derive(Error, Debug)]
 pub(crate) enum UserError {
     #[error(transparent)]
-    DBError(#[from] DbError),
-
-    #[error(transparent)]
-    SeaOrmError(#[from] DbErr),
+    Db(#[from] ModuleDbError),
 
     #[error("Error creating response json")]
     Serde(#[from] serde_json::Error),
@@ -82,10 +117,7 @@ pub(crate) enum MessagingError {
     Csml(#[from] EngineError),
 
     #[error(transparent)]
-    DBError(#[from] DbError),
-
-    #[error(transparent)]
-    SeaOrm(#[from] DbErr),
+    Db(#[from] ModuleDbError),
 
     #[error("Error creating response json")]
     Serde(#[from] serde_json::Error),
@@ -156,7 +188,9 @@ fn module_error_status(error: &ModuleError) -> StatusCode {
     match error {
         ModuleError::DataError(_)
         | ModuleError::SourceNotFound(_)
-        | ModuleError::DBError(DbError::QueryError(diesel::result::Error::NotFound)) => StatusCode::NOT_FOUND,
+        | ModuleError::Db(ModuleDbError::Db(DbError::QueryError(diesel::result::Error::NotFound))) => {
+            StatusCode::NOT_FOUND
+        }
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }

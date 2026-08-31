@@ -30,10 +30,23 @@ pub enum Relation {
         to = "crate::user::Column::Id"
     )]
     User,
+
+    #[sea_orm(
+        has_many = "super::answer::Entity",
+        from = "Column::Id",
+        to = "super::answer::Column::AssessmentSessionId"
+    )]
+    Answer,
 }
 
 impl Related<crate::user::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::User.def()
+    }
+}
+
+impl Related<super::answer::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Answer.def()
     }
 }

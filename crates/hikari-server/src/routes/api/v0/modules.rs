@@ -7,10 +7,12 @@ use axum::extract::{Path, Query};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
+use chrono::{DateTime, Utc};
 use csml_engine::data::AsyncDatabase;
 use error::ModuleError;
+use futures::future::try_join;
 use futures::future::try_join_all;
-use futures::future::try_join3;
+use hikari_config::module::assessment::ModuleAssessment;
 use hikari_db::module::session::status;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::util::{FlattenTransactionResultExt, InspectTransactionError};
@@ -31,6 +33,32 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::iter;
 use utoipa::ToSchema;
+use uuid::Uuid;
+
+async fn load_module_assessment_instances(
+    conn: &DatabaseConnection,
+    user_id: Uuid,
+    assessment: Option<&ModuleAssessment<'_>>,
+    completion: Option<DateTime<Utc>>,
+) -> Result<(Option<Uuid>, Option<Uuid>), sea_orm::DbErr> {
+    let Some(assessment) = assessment else {
+        return Ok((None, None));
+    };
+
+    // Pre is the first session of that assessment type
+    // Post is the last session of that assessment type after the module was completed
+    let (pre, post) = try_join(
+        hikari_db::assessment::session::Query::load_first_session(conn, assessment.pre.as_ref(), user_id),
+        hikari_db::assessment::session::Query::load_last_session(
+            conn,
+            assessment.post.as_ref(),
+            completion.map(|c| c.naive_utc()),
+            user_id,
+        ),
+    )
+    .await?;
+    Ok((pre.map(|session| session.id), post.map(|session| session.id)))
+}
 
 pub(crate) mod assessment;
 pub(crate) mod error;
@@ -111,35 +139,42 @@ pub(crate) async fn list_modules(
     Query(deep): Query<ModuleFlags>,
 ) -> Result<Response, ModuleError> {
     let conn = &conn;
-    let (session_instances, module_status, assessments) = try_join3(
+    let (session_instances, module_status) = try_join(
         status::Query::all(conn, user.id),
         hikari_db::module::status::Query::all(conn, user.id),
-        hikari_db::module::assessment::Query::all(conn, user.id),
     )
     .await?;
     let session_instances: Vec<_> = session_instances.into_iter().map(IntoModel::into_model).collect();
-    let module_completion: HashMap<_, _> = module_status.into_iter().map(|m| (m.module, m.completion)).collect();
+    let module_completion: HashMap<_, _> = module_status
+        .into_iter()
+        .map(|m| (m.module, m.completion.map(|c| c.and_utc())))
+        .collect();
 
     let module_cfg = app_config.module_config();
 
     let deep = deep.deep.is_some();
-    let assessments = assessments
-        .iter()
-        .map(|ma| (&ma.module, ma.clone().into_model()))
-        .collect::<HashMap<_, _>>();
+    let modules = module_cfg.modules_filtered(&user.groups);
 
-    let res = module_cfg
-        .modules_filtered(&user.groups)
+    let assessments: HashMap<&str, (Option<Uuid>, Option<Uuid>)> = try_join_all(modules.iter().map(|module| async {
+        let completion = module_completion.get(module.id.as_str()).copied().flatten();
+        let instances = load_module_assessment_instances(conn, user.id, module.assessment(), completion).await?;
+        Ok::<_, sea_orm::DbErr>((module.id.as_str(), instances))
+    }))
+    .await?
+    .into_iter()
+    .collect();
+
+    let res = modules
         .into_iter()
         .map(|module| {
+            let (last_pre, last_post) = assessments.get(module.id.as_str()).copied().unwrap_or((None, None));
             ModuleFull::from_config(
                 module,
                 deep,
                 &session_instances,
-                assessments.get(&module.id),
-                module_completion
-                    .get(module.id.as_str())
-                    .and_then(|module_status| module_status.as_ref().map(chrono::NaiveDateTime::and_utc)),
+                last_pre,
+                last_post,
+                module_completion.get(module.id.as_str()).copied().flatten(),
             )
         })
         .collect();
@@ -239,23 +274,16 @@ pub(crate) async fn get_module(
         .map(IntoModel::into_model)
         .collect();
 
-    let assessment = hikari_db::module::assessment::Query::get_for_module(&conn, user.id, &module_id)
-        .await?
-        .map(IntoModel::into_model);
-
     let module = app_config
         .module_config()
         .get_for_group(&module_id, &user.groups)
         .ok_or(modules::error::ModuleError::ModuleNotFound)?
         .clone();
     let module_status = hikari_db::module::status::Query::get_for_user(&conn, user.id, &module_id).await?;
-    let res: ModuleFull = ModuleFull::from_config(
-        &module,
-        true,
-        &session_instances,
-        assessment.as_ref(),
-        module_status.and_then(|status| status.completion).map(|c| c.and_utc()),
-    );
+    let completion = module_status.and_then(|status| status.completion).map(|c| c.and_utc());
+    let (last_pre, last_post) =
+        load_module_assessment_instances(&conn, user.id, module.assessment(), completion).await?;
+    let res: ModuleFull = ModuleFull::from_config(&module, true, &session_instances, last_pre, last_post, completion);
     Ok(Json(res).into_response())
 }
 
@@ -625,19 +653,42 @@ pub(crate) async fn history(
     Extension(conn): Extension<DatabaseConnection>,
 ) -> Result<impl IntoResponse, ModuleError> {
     let data = hikari_db::history::Query::load_history_entries(&conn, user).await?;
-    let modules = data.module.into_iter().map(|(history, module)| HistoryEntry {
-        completed: history.completed.and_utc(),
-        value: HistoryEntryType::Module(module.into_model()),
-    });
-    let sessions = data.session.into_iter().map(|(history, session)| HistoryEntry {
-        completed: history.completed.and_utc(),
-        value: HistoryEntryType::Session(session.into_model()),
-    });
-    let assessments = data.assessment.into_iter().map(|(history, assessment)| HistoryEntry {
-        completed: history.completed.and_utc(),
-        value: HistoryEntryType::Assessment(assessment.into_model()),
-    });
-    let mut res = modules.chain(sessions).chain(assessments).collect::<Vec<_>>();
+
+    let assessment_sessions = hikari_db::assessment::session::Query::load_sessions(&conn, user).await?;
+    let _assessment_sessions_map: HashMap<_, _> = assessment_sessions
+        .into_iter()
+        .map(|session| (session.id, session))
+        .collect();
+
+    let modules = data
+        .module
+        .into_iter()
+        .map(|(history, module)| HistoryEntry {
+            completed: history.completed.and_utc(),
+            value: HistoryEntryType::Module(module.into_model()),
+        })
+        .collect::<Vec<_>>();
+    let sessions = data
+        .session
+        .into_iter()
+        .map(|(history, session)| HistoryEntry {
+            completed: history.completed.and_utc(),
+            value: HistoryEntryType::Session(session.into_model()),
+        })
+        .collect::<Vec<_>>();
+
+    let assessments = data
+        .assessment
+        .into_iter()
+        .map(|(history, assessment)| HistoryEntry {
+            completed: history.completed.and_utc(),
+            value: HistoryEntryType::Assessment(assessment.into_model()),
+        })
+        .collect::<Vec<_>>();
+
+    let mut res = modules;
+    res.extend(sessions);
+    res.extend(assessments);
     res.sort_by_key(|v| std::cmp::Reverse(v.completed));
     Ok(Json(res))
 }

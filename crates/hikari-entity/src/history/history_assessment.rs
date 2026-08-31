@@ -1,19 +1,10 @@
 use sea_orm::entity::prelude::*;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "i16", db_type = "Integer")]
-pub enum HistoryAssessmentType {
-    Pre = 1,
-    Post = 2,
-}
-
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "history_assessment")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub history_id: Uuid,
-    pub module: String,
-    pub type_id: HistoryAssessmentType,
     pub assessment_session_id: Uuid,
 }
 

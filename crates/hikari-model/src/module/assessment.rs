@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-pub mod instance;
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
 pub struct ModuleAssessmentFull<'a> {
     pub pre: Cow<'a, str>,

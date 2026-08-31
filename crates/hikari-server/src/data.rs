@@ -1,5 +1,6 @@
 use url::Url;
 
+pub(crate) mod assessment;
 pub(crate) mod bots;
 pub(crate) mod csml;
 pub(crate) mod modules;
