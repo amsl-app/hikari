@@ -1,8 +1,8 @@
 use chrono::NaiveDate;
-use hikari_entity::planner_entry::{
+use hikari_entity::planner::planner_entry::{
     Column as PlannerEntryColumn, Entity as PlannerEntry, PlannerEntryWithEffectiveDate,
 };
-use hikari_entity::planner_milestone::{Entity as PlannerMilestone, Model as PlannerMilestoneModel};
+use hikari_entity::planner::planner_milestone::{Entity as PlannerMilestone, Model as PlannerMilestoneModel};
 use sea_orm::sea_query::{CaseStatement, Expr, ExprTrait, SimpleExpr};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use uuid::Uuid;

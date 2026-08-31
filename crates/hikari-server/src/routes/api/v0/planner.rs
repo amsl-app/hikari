@@ -12,10 +12,11 @@ use chrono::NaiveDate;
 use hikari_db::planner;
 use hikari_db::planner::planner_milestone::MilestoneInput;
 use hikari_db::sea_orm::DatabaseConnection;
-use hikari_entity::planner_milestone::Model as PlannerMilestoneModel;
+use hikari_entity::planner::planner_goal::Model as PlannerGoalModel;
+use hikari_entity::planner::planner_milestone::Model as PlannerMilestoneModel;
 use hikari_model::planner::{
-    NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerEntryFull, PlannerIcalToken,
-    PlannerMilestone, PlannerMilestoneFull,
+    Goal, NewPlannerEntry, NewPlannerMilestone, PlannerAssistantRequest, PlannerEntry, PlannerEntryFull,
+    PlannerIcalToken, PlannerMilestone, PlannerMilestoneFull,
 };
 use hikari_model_tools::convert::FromDbModel;
 use http::{HeaderValue, StatusCode, header};
@@ -23,12 +24,13 @@ use protect_axum::protect;
 use sea_orm::ActiveValue;
 use serde::Deserialize;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 mod error;
+pub(crate) mod goals;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub(crate) struct PlannerEntryChanges {
@@ -48,6 +50,8 @@ pub(crate) struct PlannerMilestoneChanges {
     #[serde(default, with = "::serde_with::rust::double_option")]
     #[allow(clippy::option_option)]
     pub description: Option<Option<String>>,
+    #[serde(default)]
+    pub goals: Option<HashSet<Uuid>>,
 }
 
 pub(crate) fn create_router<S>() -> Router<S>
@@ -70,6 +74,7 @@ where
             "/milestones/{id}",
             get(get_milestone).patch(update_milestone).delete(delete_milestone),
         )
+        .nest("/goals", goals::create_router())
         .with_state(())
 }
 
@@ -177,7 +182,7 @@ pub(crate) async fn update_planner_entry(
         .await?
         .ok_or(PlannerError::NotFound)?;
 
-    let mut active_model = hikari_entity::planner_entry::ActiveModel {
+    let mut active_model = hikari_entity::planner::planner_entry::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),
         user_id: ActiveValue::Unchanged(existing.user_id),
         ..Default::default()
@@ -200,9 +205,12 @@ pub(crate) async fn update_planner_entry(
         match inner {
             Some(milestone_id) => {
                 // Check if the milestone exists and belongs to the user
-                let milestones =
-                    planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, vec![milestone_id])
-                        .await?;
+                let milestones = planner::planner_milestone::Query::get_user_milestones_by_ids(
+                    &conn,
+                    user,
+                    HashSet::from([milestone_id]),
+                )
+                .await?;
                 milestones.into_iter().next().map(PlannerMilestone::from_db_model)
             }
             None => None,
@@ -306,11 +314,13 @@ pub(crate) async fn get_planner_ical(
         .await?
         .ok_or(PlannerError::NotFound)?;
 
-    let entries =
-        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, false).await?;
-    let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user_id).await?;
+    let (entries, milestones, goals) = tokio::try_join!(
+        planner::planner_entry::Query::get_entries_with_milestone_by_range(&conn, user_id, None, None, false),
+        planner::planner_milestone::Query::get_user_milestones(&conn, user_id),
+        planner::goal::Query::get_user_goals(&conn, user_id),
+    )?;
 
-    let body = build_ical(entries, milestones);
+    let body = build_ical(entries, milestones, goals);
     Ok((
         [(
             header::CONTENT_TYPE,
@@ -344,18 +354,13 @@ pub(crate) async fn create_planner_entries(
         .map(|(i, e)| validate_new_entry(i, e))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let milestone_ids: Vec<Uuid> = inputs.iter().filter_map(|i| i.milestone_id).collect();
+    let milestone_ids: HashSet<Uuid> = inputs.iter().filter_map(|i| i.milestone_id).collect();
     let milestones_by_id: HashMap<Uuid, PlannerMilestone> = if milestone_ids.is_empty() {
         HashMap::new()
     } else {
-        let unique: Vec<Uuid> = {
-            let mut v = milestone_ids.clone();
-            v.sort();
-            v.dedup();
-            v
-        };
         // Check if all milestone_ids exist and belong to the user
-        let milestones = planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, unique).await?;
+        let milestones =
+            planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, milestone_ids).await?;
         milestones
             .into_iter()
             .map(|m| (m.id, PlannerMilestone::from_db_model(m)))
@@ -384,11 +389,7 @@ fn validate_new_entry(
             "entry {index}: title must not be empty"
         )));
     }
-    if title.len() > 500 {
-        return Err(PlannerError::ValidationError(format!(
-            "entry {index}: title exceeds 500 characters"
-        )));
-    }
+
     if !(0..=3).contains(&entry.priority) {
         return Err(PlannerError::ValidationError(format!(
             "entry {index}: priority must be between 0 and 3"
@@ -402,13 +403,22 @@ fn validate_new_entry(
     })
 }
 
+async fn goals_by_milestone_id(
+    conn: &DatabaseConnection,
+    user: Uuid,
+    milestone_ids: HashSet<Uuid>,
+) -> Result<HashMap<Uuid, HashSet<Goal>>, PlannerError> {
+    let goals = planner::goal::Query::get_goals_by_milestone_ids(conn, user, milestone_ids).await?;
+    Ok(goals
+        .into_iter()
+        .map(|(milestone_id, gs)| (milestone_id, gs.into_iter().map(Goal::from_db_model).collect()))
+        .collect())
+}
+
 fn validate_milestone_title(title: &str) -> Result<String, PlannerError> {
     let title = title.trim().to_owned();
     if title.is_empty() {
         return Err(PlannerError::ValidationError("title must not be empty".to_owned()));
-    }
-    if title.len() > 500 {
-        return Err(PlannerError::ValidationError("title exceeds 500 characters".to_owned()));
     }
     Ok(title)
 }
@@ -438,6 +448,7 @@ pub(crate) async fn get_milestones(
     let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user).await?;
 
     let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
+
     if deep {
         let entries = planner::planner_entry::Query::get_entries_by_range(&conn, user, None, None).await?;
         for entry in entries {
@@ -450,12 +461,17 @@ pub(crate) async fn get_milestones(
         }
     }
 
+    let milestone_ids: HashSet<Uuid> = milestones.iter().map(|m| m.id).collect();
+    let mut goals_by_milestone: HashMap<Uuid, HashSet<Goal>> =
+        goals_by_milestone_id(&conn, user, milestone_ids).await?;
+
     let milestones = milestones
         .into_iter()
         .map(|m| {
             let milestone = PlannerMilestone::from_db_model(m);
             let entries = entries_by_milestone.remove(&milestone.id).unwrap_or_default();
-            milestone.as_milestone_full(entries)
+            let goals = goals_by_milestone.remove(&milestone.id).unwrap_or_default();
+            milestone.as_milestone_full(entries, goals)
         })
         .collect::<Vec<PlannerMilestoneFull>>();
     Ok(Json(milestones))
@@ -465,7 +481,7 @@ pub(crate) async fn get_milestones(
     post,
     path = "/api/v0/planner/milestones",
     request_body = NewPlannerMilestone,
-    responses((status = CREATED, description = "Create a milestone", body = PlannerMilestone)),
+    responses((status = CREATED, description = "Create a milestone", body = PlannerMilestoneFull)),
     tag = "v0/planner",
     security(("token" = []))
 )]
@@ -482,9 +498,18 @@ pub(crate) async fn create_milestone(
         description: body.description,
         module_id: None,
         origin_id: None,
+        goals: body.goals,
     };
-    let created = planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?;
-    Ok((StatusCode::CREATED, Json(PlannerMilestone::from_db_model(created))))
+    let created = PlannerMilestone::from_db_model(
+        planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?,
+    );
+
+    let goals = goals_by_milestone_id(&conn, user, HashSet::from([created.id]))
+        .await?
+        .remove(&created.id)
+        .unwrap_or_default();
+
+    Ok((StatusCode::CREATED, Json(created.as_milestone_full(vec![], goals))))
 }
 
 #[utoipa::path(
@@ -516,7 +541,12 @@ pub(crate) async fn get_milestone(
         .map(PlannerEntry::from_db_model)
         .collect::<Vec<PlannerEntry>>();
 
-    Ok(Json(milestone.as_milestone_full(entries)))
+    let goals = goals_by_milestone_id(&conn, user, HashSet::from([id]))
+        .await?
+        .remove(&id)
+        .unwrap_or_default();
+
+    Ok(Json(milestone.as_milestone_full(entries, goals)))
 }
 
 #[utoipa::path(
@@ -524,7 +554,7 @@ pub(crate) async fn get_milestone(
     path = "/api/v0/planner/milestones/{id}",
     request_body = PlannerMilestoneChanges,
     responses(
-        (status = OK, description = "Update a milestone", body = PlannerMilestone),
+        (status = OK, description = "Update a milestone", body = PlannerMilestoneFull),
         (status = NOT_FOUND, description = "Milestone not found"),
     ),
     params(("id" = Uuid, Path, description = "The milestone id")),
@@ -542,7 +572,7 @@ pub(crate) async fn update_milestone(
         .await?
         .ok_or(PlannerError::NotFound)?;
 
-    let mut active_model = hikari_entity::planner_milestone::ActiveModel {
+    let mut active_model = hikari_entity::planner::planner_milestone::ActiveModel {
         id: ActiveValue::Unchanged(existing.id),
         user_id: ActiveValue::Unchanged(existing.user_id),
         ..Default::default()
@@ -558,8 +588,15 @@ pub(crate) async fn update_milestone(
         active_model.description = ActiveValue::Set(description);
     }
 
-    let updated = planner::planner_milestone::Mutation::update_milestone(&conn, active_model).await?;
-    Ok(Json(PlannerMilestone::from_db_model(updated)))
+    let updated = PlannerMilestone::from_db_model(
+        planner::planner_milestone::Mutation::update_milestone(&conn, active_model, changes.goals).await?,
+    );
+    let goals = goals_by_milestone_id(&conn, user, HashSet::from([id]))
+        .await?
+        .remove(&id)
+        .unwrap_or_default();
+
+    Ok(Json(updated.as_milestone_full(vec![], goals)))
 }
 
 #[utoipa::path(
@@ -694,14 +731,29 @@ fn milestone_ascii_ical_len<'a, I: Iterator<Item = (&'a str, Option<&'a str>)>>(
     total
 }
 
+const GOAL_SUMMARY_PREFIX: &str = "Goal: ";
+
+fn goal_ascii_ical_len<'a, I: Iterator<Item = (&'a str, Option<&'a str>)>>(goals: I) -> usize {
+    let mut total = 0;
+    for (name, description) in goals {
+        total += 180;
+        total += ical_fold_required_ascii_space("SUMMARY".len(), &format!("{GOAL_SUMMARY_PREFIX}{name}"));
+        if let Some(description) = description {
+            total += ical_fold_required_ascii_space("DESCRIPTION".len(), description);
+        }
+    }
+    total
+}
+
 /// An entry is overdue when its effective date (pulled forward to today because it's unchecked
 /// and past due) differs from its original date.
 fn build_ical(
     entries: Vec<(
-        hikari_entity::planner_entry::PlannerEntryWithEffectiveDate,
+        hikari_entity::planner::planner_entry::PlannerEntryWithEffectiveDate,
         Option<PlannerMilestoneModel>,
     )>,
     milestones: Vec<PlannerMilestoneModel>,
+    goals: Vec<PlannerGoalModel>,
 ) -> String {
     let events: Vec<_> = entries
         .into_iter()
@@ -736,6 +788,10 @@ fn build_ical(
         milestones
             .iter()
             .map(|milestone| (milestone.title.as_str(), milestone.description.as_deref())),
+    ) + goal_ascii_ical_len(
+        goals
+            .iter()
+            .map(|goal| (goal.name.as_str(), goal.description.as_deref())),
     ) + 3 * 2;
 
     let mut out = String::with_capacity(capacity);
@@ -780,6 +836,26 @@ fn build_ical(
         if let Some(description) = milestone.description {
             ical_fold_line(&mut out, "DESCRIPTION", &ical_escape(&description));
         }
+        out.push_str("END:VEVENT\r\n");
+    }
+
+    for goal in goals {
+        let start = goal.date.format("%Y%m%d");
+        let end = goal.date.succ_opt().unwrap_or(goal.date).format("%Y%m%d");
+        let status = if goal.fulfilled { "CANCELLED" } else { "CONFIRMED" };
+        let dtstamp = goal.updated_at.format("%Y%m%dT%H%M%SZ");
+        let summary = format!("{GOAL_SUMMARY_PREFIX}{}", ical_escape(&goal.name));
+
+        out.push_str("BEGIN:VEVENT\r\n");
+        push_ical_line!(out, key: "UID", write: &goal.id, value: "@hikari-goal");
+        push_ical_line!(out, key: "DTSTAMP", date: dtstamp);
+        push_ical_line!(out, key: "DTSTART;VALUE=DATE", date: start);
+        push_ical_line!(out, key: "DTEND;VALUE=DATE", date: end);
+        ical_fold_line(&mut out, "SUMMARY", &summary);
+        if let Some(description) = goal.description {
+            ical_fold_line(&mut out, "DESCRIPTION", &ical_escape(&description));
+        }
+        push_ical_line!(out, key: "STATUS", value: status);
         out.push_str("END:VEVENT\r\n");
     }
 
@@ -880,10 +956,10 @@ END:VCALENDAR\r\n",
     fn create_planner_entry(
         value: &str,
     ) -> (
-        hikari_entity::planner_entry::PlannerEntryWithEffectiveDate,
+        hikari_entity::planner::planner_entry::PlannerEntryWithEffectiveDate,
         Option<PlannerMilestoneModel>,
     ) {
-        let entry = hikari_entity::planner_entry::PlannerEntryWithEffectiveDate {
+        let entry = hikari_entity::planner::planner_entry::PlannerEntryWithEffectiveDate {
             id: Default::default(),
             user_id: Default::default(),
             date: Default::default(),
@@ -898,8 +974,11 @@ END:VCALENDAR\r\n",
         (entry, None)
     }
 
-    fn create_planner_milestone(title: &str, description: Option<&str>) -> hikari_entity::planner_milestone::Model {
-        hikari_entity::planner_milestone::Model {
+    fn create_planner_milestone(
+        title: &str,
+        description: Option<&str>,
+    ) -> hikari_entity::planner::planner_milestone::Model {
+        hikari_entity::planner::planner_milestone::Model {
             id: Default::default(),
             user_id: Default::default(),
             title: title.to_string(),
@@ -928,6 +1007,36 @@ END:VEVENT\r\n\
         )
     }
 
+    fn create_planner_goal(name: &str, description: Option<&str>, fulfilled: bool) -> PlannerGoalModel {
+        PlannerGoalModel {
+            id: Default::default(),
+            user_id: Default::default(),
+            name: name.to_string(),
+            date: Default::default(),
+            description: description.map(str::to_string),
+            fulfilled,
+            created_at: Default::default(),
+            updated_at: Default::default(),
+        }
+    }
+
+    fn expected_ical_goal_vevent(summary_value: &str, description: Option<&str>, status: &str) -> String {
+        let description_line = description.map(|d| format!("DESCRIPTION:{d}\r\n")).unwrap_or_default();
+        format!(
+            "\
+BEGIN:VEVENT\r\n\
+UID:00000000-0000-0000-0000-000000000000@hikari-goal\r\n\
+DTSTAMP:19700101T000000Z\r\n\
+DTSTART;VALUE=DATE:19700101\r\n\
+DTEND;VALUE=DATE:19700102\r\n\
+SUMMARY:{summary_value}\r\n\
+{description_line}\
+STATUS:{status}\r\n\
+END:VEVENT\r\n\
+"
+        )
+    }
+
     const ICAL_TEST_VALUES: [(&str, &str); 3] = [
         ("", ""),
         ("test", "test"),
@@ -942,7 +1051,7 @@ END:VEVENT\r\n\
         for (value, split_value) in ICAL_TEST_VALUES {
             let entries = vec![create_planner_entry(value)];
             let expected = expected_ical_output(&expected_ical_vevent(split_value));
-            let res = build_ical(entries, vec![]);
+            let res = build_ical(entries, vec![], vec![]);
             assert_eq!(res, expected);
             // 96: Header + Footer
             // 175: Per VEVENT Constant
@@ -972,7 +1081,7 @@ END:VEVENT\r\n\
             .iter()
             .map(|(_, expected)| expected_ical_vevent(expected))
             .collect::<Vec<_>>();
-        let res = build_ical(models, vec![]);
+        let res = build_ical(models, vec![], vec![]);
 
         let expected = expected_ical_output(&expected_vevents.join(""));
         let total_vevent_len = expected_vevents.iter().map(|vevent| vevent.len()).sum::<usize>();
@@ -995,7 +1104,7 @@ END:VEVENT\r\n\
         let expected_value = "a".repeat(61) + "👍\r\n 🏽" + "a".repeat(70).as_str() + "\r\n a";
         let entry = create_planner_entry(&value);
         let expected = expected_ical_output(&expected_ical_vevent(&expected_value));
-        let res = build_ical(vec![entry], vec![]);
+        let res = build_ical(vec![entry], vec![], vec![]);
         assert_eq!(res, expected);
         // The emoji without the color modifier should be on the first line
         let expected_summary_line = String::from("SUMMARY:") + "a".repeat(61).as_str() + "👍";
@@ -1024,7 +1133,7 @@ END:VEVENT\r\n\
         entry.date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
         entry.effective_date = NaiveDate::from_ymd_opt(1970, 1, 5).unwrap();
 
-        let res = build_ical(vec![(entry, milestone)], vec![]);
+        let res = build_ical(vec![(entry, milestone)], vec![], vec![]);
 
         assert!(res.contains("SUMMARY:ÜBERFÄLLIG: Task\r\n"));
         assert!(res.contains("DESCRIPTION:Ursprünglich fällig: 1970-01-01\r\n"));
@@ -1046,7 +1155,7 @@ END:VEVENT\r\n\
             updated_at: Default::default(),
         };
 
-        let res = build_ical(vec![(entry, Some(milestone))], vec![]);
+        let res = build_ical(vec![(entry, Some(milestone))], vec![], vec![]);
 
         assert!(res.contains("SUMMARY:Task\r\n"));
         assert!(res.contains("DESCRIPTION:Milestone: Launch\r\n"));
@@ -1069,7 +1178,7 @@ END:VEVENT\r\n\
             updated_at: Default::default(),
         };
 
-        let res = build_ical(vec![(entry, Some(milestone))], vec![]);
+        let res = build_ical(vec![(entry, Some(milestone))], vec![], vec![]);
 
         assert!(res.contains("SUMMARY:ÜBERFÄLLIG: Task\r\n"));
         assert!(res.contains("DESCRIPTION:Milestone: Launch\\nUrsprünglich fällig: 1970-01-01\r\n"));
@@ -1079,7 +1188,7 @@ END:VEVENT\r\n\
     fn test_build_ical_milestone_only() {
         let milestone = create_planner_milestone("Launch day", None);
         let expected = expected_ical_output(&expected_ical_milestone_vevent("Milestone: Launch day", None));
-        let res = build_ical(vec![], vec![milestone]);
+        let res = build_ical(vec![], vec![milestone], vec![]);
         assert_eq!(res, expected);
         assert_eq!(
             res.len(),
@@ -1100,7 +1209,7 @@ END:VEVENT\r\n\
             "Milestone: Launch day",
             Some("Ship it"),
         ));
-        let res = build_ical(vec![], vec![milestone]);
+        let res = build_ical(vec![], vec![milestone], vec![]);
         assert_eq!(res, expected);
         assert_eq!(
             res.len(),
@@ -1123,7 +1232,7 @@ END:VEVENT\r\n\
             expected_ical_vevent("An entry"),
             expected_ical_milestone_vevent("Milestone: Launch day", Some("Ship it"))
         ));
-        let res = build_ical(vec![entry], vec![milestone]);
+        let res = build_ical(vec![entry], vec![milestone], vec![]);
         assert_eq!(res, expected);
 
         let expected_len = ascii_ical_len(std::iter::once(("An entry", None)))
@@ -1150,7 +1259,7 @@ END:VEVENT\r\n\
             .and_then(|s| s.strip_suffix("\r\n"))
             .unwrap();
         let expected = expected_ical_output(&expected_ical_milestone_vevent(summary_value, None));
-        let res = build_ical(vec![], vec![milestone]);
+        let res = build_ical(vec![], vec![milestone], vec![]);
         assert_eq!(res, expected);
     }
 
@@ -1167,7 +1276,7 @@ END:VEVENT\r\n\
             "Milestone: Launch day",
             Some(description_value),
         ));
-        let res = build_ical(vec![], vec![milestone]);
+        let res = build_ical(vec![], vec![milestone], vec![]);
         assert_eq!(res, expected);
     }
 
@@ -1175,14 +1284,103 @@ END:VEVENT\r\n\
     fn test_build_ical_milestone_description_escaping() {
         let description = "Fix; this, item\\ now\r\nplease";
         let milestone = create_planner_milestone("Launch day", Some(description));
-        let res = build_ical(vec![], vec![milestone]);
+        let res = build_ical(vec![], vec![milestone], vec![]);
         assert!(res.contains("DESCRIPTION:Fix\\; this\\, item\\\\ now\\nplease\r\n"));
+    }
+
+    #[test]
+    fn test_build_ical_goal_only() {
+        let goal = create_planner_goal("Learn Rust", None, false);
+        let expected = expected_ical_output(&expected_ical_goal_vevent("Goal: Learn Rust", None, "CONFIRMED"));
+        let res = build_ical(vec![], vec![], vec![goal]);
+        assert_eq!(res, expected);
+        assert_eq!(
+            res.len(),
+            96 + goal_ascii_ical_len(std::iter::once(("Learn Rust", None))),
+            "Calculated length does not match expected length"
+        );
+        assert_eq!(
+            res.capacity(),
+            96 + goal_ascii_ical_len(std::iter::once(("Learn Rust", None))) + 3 * 2,
+            "Calculated capacity does not match expected capacity"
+        );
+    }
+
+    #[test]
+    fn test_build_ical_goal_with_description() {
+        let goal = create_planner_goal("Learn Rust", Some("Finish the book"), false);
+        let expected = expected_ical_output(&expected_ical_goal_vevent(
+            "Goal: Learn Rust",
+            Some("Finish the book"),
+            "CONFIRMED",
+        ));
+        let res = build_ical(vec![], vec![], vec![goal]);
+        assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_build_ical_goal_fulfilled() {
+        let goal = create_planner_goal("Learn Rust", None, true);
+        let expected = expected_ical_output(&expected_ical_goal_vevent("Goal: Learn Rust", None, "CANCELLED"));
+        let res = build_ical(vec![], vec![], vec![goal]);
+        assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_build_ical_goal_folds_long_name() {
+        let name = "long test that requires adding linebreaks according to RFC 5545 section 3.1 guidelines for iCalendar format";
+        let goal = create_planner_goal(name, None, false);
+        let folded_summary_line = fold("SUMMARY", &format!("Goal: {name}"));
+        let summary_value = folded_summary_line
+            .strip_prefix("SUMMARY:")
+            .and_then(|s| s.strip_suffix("\r\n"))
+            .unwrap();
+        let expected = expected_ical_output(&expected_ical_goal_vevent(summary_value, None, "CONFIRMED"));
+        let res = build_ical(vec![], vec![], vec![goal]);
+        assert_eq!(res, expected);
+    }
+
+    #[test]
+    fn test_build_ical_goal_description_escaping() {
+        let description = "Fix; this, item\\ now\r\nplease";
+        let goal = create_planner_goal("Learn Rust", Some(description), false);
+        let res = build_ical(vec![], vec![], vec![goal]);
+        assert!(res.contains("DESCRIPTION:Fix\\; this\\, item\\\\ now\\nplease\r\n"));
+    }
+
+    #[test]
+    fn test_build_ical_entries_milestones_and_goals() {
+        let entry = create_planner_entry("An entry");
+        let milestone = create_planner_milestone("Launch day", Some("Ship it"));
+        let goal = create_planner_goal("Learn Rust", Some("Finish the book"), false);
+        let expected = expected_ical_output(&format!(
+            "{}{}{}",
+            expected_ical_vevent("An entry"),
+            expected_ical_milestone_vevent("Milestone: Launch day", Some("Ship it")),
+            expected_ical_goal_vevent("Goal: Learn Rust", Some("Finish the book"), "CONFIRMED"),
+        ));
+        let res = build_ical(vec![entry], vec![milestone], vec![goal]);
+        assert_eq!(res, expected);
+
+        let expected_len = ascii_ical_len(std::iter::once(("An entry", None)))
+            + milestone_ascii_ical_len(std::iter::once(("Launch day", Some("Ship it"))))
+            + goal_ascii_ical_len(std::iter::once(("Learn Rust", Some("Finish the book"))));
+        assert_eq!(
+            res.len(),
+            expected_len,
+            "Calculated length does not match expected length"
+        );
+        assert_eq!(
+            res.capacity(),
+            expected_len + 3 * 2,
+            "Calculated capacity does not match expected capacity"
+        );
     }
 
     #[test]
     fn test_build_ical_entry_summary_escaping() {
         let entry = create_planner_entry("Fix; this, item\\ now");
-        let res = build_ical(vec![entry], vec![]);
+        let res = build_ical(vec![entry], vec![], vec![]);
         assert!(res.contains("SUMMARY:Fix\\; this\\, item\\\\ now\r\n"));
     }
 

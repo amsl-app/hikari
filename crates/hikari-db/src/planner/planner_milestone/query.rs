@@ -1,5 +1,7 @@
-use hikari_entity::planner_milestone::{Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel};
+use hikari_entity::planner::planner_goal_milestone;
+use hikari_entity::planner::planner_milestone::{Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 pub struct Query;
@@ -32,11 +34,12 @@ impl Query {
     pub async fn get_user_milestones_by_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
-        ids: Vec<Uuid>,
+        ids: HashSet<Uuid>,
     ) -> Result<Vec<PlannerMilestoneModel>, DbErr> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
+
         let len = ids.len();
         let res = PlannerMilestone::find()
             .filter(Column::UserId.eq(user_id))
@@ -52,6 +55,32 @@ impl Query {
         }
 
         Ok(res)
+    }
+
+    pub async fn get_milestones_by_goal_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        goal_ids: HashSet<Uuid>,
+    ) -> Result<HashMap<Uuid, Vec<PlannerMilestoneModel>>, DbErr> {
+        if goal_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows: Vec<(planner_goal_milestone::Model, Option<PlannerMilestoneModel>)> =
+            planner_goal_milestone::Entity::find()
+                .filter(planner_goal_milestone::Column::GoalId.is_in(goal_ids))
+                .find_also_related(PlannerMilestone)
+                .filter(Column::UserId.eq(user_id))
+                .all(db)
+                .await
+                .inspect_err(|error| tracing::error!(%error, "failed to load milestones for goals"))?;
+
+        let mut milestones_by_goal: HashMap<Uuid, Vec<PlannerMilestoneModel>> = HashMap::new();
+        for (link, milestone) in rows {
+            if let Some(milestone) = milestone {
+                milestones_by_goal.entry(link.goal_id).or_default().push(milestone);
+            }
+        }
+        Ok(milestones_by_goal)
     }
 
     pub async fn get_imported_origin_ids<C: ConnectionTrait>(

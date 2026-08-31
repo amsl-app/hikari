@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::planner::planner_entry::query::Query;
 use chrono::NaiveDate;
-use hikari_entity::planner_entry::{ActiveModel, Entity as PlannerEntry, PlannerEntryWithEffectiveDate};
+use hikari_entity::planner::planner_entry::{ActiveModel, Entity as PlannerEntry, PlannerEntryWithEffectiveDate};
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, NotSet, QueryFilter};
 use uuid::Uuid;
 
@@ -117,8 +117,8 @@ impl Mutation {
 
     pub async fn delete_planner_entry<C: ConnectionTrait>(db: &C, user_id: Uuid, id: Uuid) -> Result<u64, DbErr> {
         let res = PlannerEntry::delete_many()
-            .filter(hikari_entity::planner_entry::Column::Id.eq(id))
-            .filter(hikari_entity::planner_entry::Column::UserId.eq(user_id))
+            .filter(hikari_entity::planner::planner_entry::Column::Id.eq(id))
+            .filter(hikari_entity::planner::planner_entry::Column::UserId.eq(user_id))
             .exec(db)
             .await;
 

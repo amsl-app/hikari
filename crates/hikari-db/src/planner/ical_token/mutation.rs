@@ -1,5 +1,5 @@
 use crate::util::generate_url_safe_token;
-use hikari_entity::planner_ical_token::{ActiveModel, Column, Entity as IcalToken, Model};
+use hikari_entity::planner::planner_ical_token::{ActiveModel, Column, Entity as IcalToken, Model};
 use sea_orm::ActiveValue::Set;
 use sea_orm::prelude::*;
 use sea_orm::sea_query;
