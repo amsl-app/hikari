@@ -106,6 +106,7 @@ pub(crate) async fn require_running_session<C: ConnectionTrait>(
         .ok_or(Error::NotRunning)
 }
 
+#[tracing::instrument(skip(conn, session, config, answers), fields(user_id = %user_id.as_hyphenated(), assessment_id = %session.assessment.as_str(), session_id = %session.id.as_hyphenated()))]
 pub(crate) async fn submit_session(
     conn: &DatabaseConnection,
     user_id: Uuid,
@@ -123,6 +124,13 @@ pub(crate) async fn submit_session(
         })
     })
     .await
-    .flatten_res()?;
+    .flatten_res()
+    .inspect_err(|e| {
+        tracing::error!(
+            user_id = %user_id.as_hyphenated(),
+            session_id = %session_id.as_hyphenated(),
+            "failed to submit assessment session: {e:?}"
+        );
+    })?;
     Ok(())
 }
