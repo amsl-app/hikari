@@ -406,7 +406,7 @@ fn validate_new_entry(
 async fn goals_by_milestone_id(
     conn: &DatabaseConnection,
     user: Uuid,
-    milestone_ids: &[Uuid],
+    milestone_ids: HashSet<Uuid>,
 ) -> Result<HashMap<Uuid, HashSet<Goal>>, PlannerError> {
     let goals = planner::goal::Query::get_goals_by_milestone_ids(conn, user, milestone_ids).await?;
     Ok(goals
@@ -461,9 +461,9 @@ pub(crate) async fn get_milestones(
         }
     }
 
-    let milestone_ids: Vec<Uuid> = milestones.iter().map(|m| m.id).collect();
+    let milestone_ids: HashSet<Uuid> = milestones.iter().map(|m| m.id).collect();
     let mut goals_by_milestone: HashMap<Uuid, HashSet<Goal>> =
-        goals_by_milestone_id(&conn, user, &milestone_ids).await?;
+        goals_by_milestone_id(&conn, user, milestone_ids).await?;
 
     let milestones = milestones
         .into_iter()
@@ -504,7 +504,7 @@ pub(crate) async fn create_milestone(
         planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?,
     );
 
-    let goals = goals_by_milestone_id(&conn, user, &[created.id])
+    let goals = goals_by_milestone_id(&conn, user, HashSet::from([created.id]))
         .await?
         .remove(&created.id)
         .unwrap_or_default();
@@ -541,7 +541,7 @@ pub(crate) async fn get_milestone(
         .map(PlannerEntry::from_db_model)
         .collect::<Vec<PlannerEntry>>();
 
-    let goals = goals_by_milestone_id(&conn, user, &[id])
+    let goals = goals_by_milestone_id(&conn, user, HashSet::from([id]))
         .await?
         .remove(&id)
         .unwrap_or_default();
@@ -591,7 +591,7 @@ pub(crate) async fn update_milestone(
     let updated = PlannerMilestone::from_db_model(
         planner::planner_milestone::Mutation::update_milestone(&conn, active_model, changes.goals).await?,
     );
-    let goals = goals_by_milestone_id(&conn, user, &[id])
+    let goals = goals_by_milestone_id(&conn, user, HashSet::from([id]))
         .await?
         .remove(&id)
         .unwrap_or_default();

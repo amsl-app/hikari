@@ -61,13 +61,13 @@ impl Query {
     pub async fn get_goals_by_milestone_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
-        milestone_ids: &[Uuid],
+        milestone_ids: HashSet<Uuid>,
     ) -> Result<HashMap<Uuid, Vec<GoalModel>>, DbErr> {
         if milestone_ids.is_empty() {
             return Ok(HashMap::new());
         }
         let rows: Vec<(planner_goal_milestone::Model, Option<GoalModel>)> = planner_goal_milestone::Entity::find()
-            .filter(planner_goal_milestone::Column::MilestoneId.is_in(milestone_ids.to_vec()))
+            .filter(planner_goal_milestone::Column::MilestoneId.is_in(milestone_ids))
             .find_also_related(Goal)
             .filter(hikari_entity::planner::planner_goal::Column::UserId.eq(user_id))
             .all(db)
