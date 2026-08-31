@@ -71,7 +71,7 @@ impl LlmStepTrait for GoTo {
 
     fn add_previous_response(&mut self, _response: String) {
         tracing::error!(
-            "Adding previous response to goto should not happen, since this step does not produce a response."
+            "adding previous response to goto should not happen, since this step does not produce a response"
         );
     }
 

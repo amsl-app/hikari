@@ -204,14 +204,13 @@ impl LlmAgent {
                         }
                     };
 
-                    let conn = self.conn.clone();
                     let conversation_id = self.conversation_id;
                     let step_id_owned = step_id.to_owned();
 
                     let (content_type, message) = split_payload_for_database(payload.clone()).map_err(|e| LlmExecutionError::Unexpected(e.to_string()))?;
 
                     hikari_db::llm::message::Mutation::insert_new_message(
-                        &conn,
+                        &self.conn,
                         conversation_id,
                         step_id_owned,
                         content_type,

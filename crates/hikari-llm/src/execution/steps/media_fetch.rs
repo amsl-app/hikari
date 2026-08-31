@@ -54,7 +54,7 @@ impl LlmStepTrait for MediaFetch {
             Ok(LlmStepResponse {
                 content: LlmStepContent::Media {
                     url: url.to_string(),
-                    r#type: self.r#type.clone(),
+                    r#type: self.r#type,
                 },
                 tokens: None,
             })
@@ -64,7 +64,7 @@ impl LlmStepTrait for MediaFetch {
 
     fn add_previous_response(&mut self, _response: String) {
         tracing::error!(
-            "Adding previous response to api_call should not happen, since this step does not produce a response."
+            "adding previous response to media_fetch should not happen, since this step does not produce a response"
         );
     }
 

@@ -13,7 +13,7 @@ use crate::{
     execution::steps::{LlmStep, media_fetch::MediaFetch},
 };
 
-#[derive(Deserialize, Debug, Clone, JsonSchema)]
+#[derive(Deserialize, Debug, Clone, JsonSchema, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum MediaType {
     Image,
