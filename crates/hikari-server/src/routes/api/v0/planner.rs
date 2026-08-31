@@ -404,7 +404,7 @@ async fn goals_by_milestone_id(
     conn: &DatabaseConnection,
     user: Uuid,
     milestone_ids: &[Uuid],
-) -> Result<HashMap<Uuid, Vec<Goal>>, PlannerError> {
+) -> Result<HashMap<Uuid, HashSet<Goal>>, PlannerError> {
     let goals = planner::goal::Query::get_goals_by_milestone_ids(conn, user, milestone_ids).await?;
     Ok(goals
         .into_iter()
@@ -445,7 +445,7 @@ pub(crate) async fn get_milestones(
     let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user).await?;
 
     let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
-    let mut goals_by_milestone: HashMap<Uuid, Vec<Goal>> = HashMap::new();
+    let mut goals_by_milestone: HashMap<Uuid, HashSet<Goal>> = HashMap::new();
     if deep {
         let entries = planner::planner_entry::Query::get_entries_by_range(&conn, user, None, None).await?;
         for entry in entries {

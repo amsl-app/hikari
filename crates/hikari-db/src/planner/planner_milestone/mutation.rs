@@ -30,8 +30,7 @@ impl Mutation {
         user_id: Uuid,
         input: MilestoneInput,
     ) -> Result<PlannerMilestoneModel, DbErr> {
-        let goal_ids: HashSet<Uuid> = input.goals.iter().copied().collect();
-        let goals = crate::planner::goal::query::Query::get_user_goals_by_ids(db, user_id, goal_ids).await?;
+        let goals = crate::planner::goal::query::Query::get_user_goals_by_ids(db, user_id, input.goals).await?;
 
         let model = ActiveModel {
             id: ActiveValue::Set(Uuid::new_v4()),

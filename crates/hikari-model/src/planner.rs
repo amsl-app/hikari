@@ -69,7 +69,7 @@ pub struct PlannerIcalToken {
     pub token: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq, Hash)]
 pub struct Goal {
     pub id: Uuid,
     #[serde(skip_serializing)]
@@ -169,13 +169,13 @@ pub struct PlannerMilestoneFull {
     pub updated_at: NaiveDateTime,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<PlannerEntry>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub goals: Vec<Goal>,
+    #[serde(skip_serializing_if = "HashSet::is_empty")]
+    pub goals: HashSet<Goal>,
 }
 
 impl PlannerMilestone {
     #[must_use]
-    pub fn as_milestone_full(&self, entries: Vec<PlannerEntry>, goals: Vec<Goal>) -> PlannerMilestoneFull {
+    pub fn as_milestone_full(&self, entries: Vec<PlannerEntry>, goals: HashSet<Goal>) -> PlannerMilestoneFull {
         PlannerMilestoneFull {
             id: self.id,
             user_id: self.user_id,
