@@ -137,7 +137,7 @@ pub(crate) async fn get_goal(
     path = "/api/v0/planner/goals",
     request_body = NewGoal,
     responses(
-        (status = CREATED, description = "Create a goal", body = Goal),
+        (status = CREATED, description = "Create a goal", body = GoalFull),
     ),
     tag = "v0/planner",
     security(
@@ -155,8 +155,11 @@ pub(crate) async fn create_goal(
         return Err(PlannerError::ValidationError("name must not be empty".to_owned()));
     }
 
-    let goal = planner::goal::Mutation::create_goal(&conn, user, name, body.date, body.description).await?;
-    Ok((StatusCode::CREATED, Json(Goal::from_db_model(goal))))
+    let goal = Goal::from_db_model(
+        planner::goal::Mutation::create_goal(&conn, user, name, body.date, body.description).await?,
+    );
+
+    Ok((StatusCode::CREATED, Json(goal.as_goal_full(vec![]))))
 }
 
 #[utoipa::path(
@@ -164,7 +167,7 @@ pub(crate) async fn create_goal(
     path = "/api/v0/planner/goals/{id}",
     request_body = GoalChanges,
     responses(
-        (status = OK, description = "Update a goal", body = Goal),
+        (status = OK, description = "Update a goal", body = GoalFull),
         (status = NOT_FOUND, description = "Goal not found"),
     ),
     params(
@@ -182,6 +185,7 @@ pub(crate) async fn update_goal(
     Extension(conn): Extension<DatabaseConnection>,
     Json(changes): Json<GoalChanges>,
 ) -> Result<impl IntoResponse, PlannerError> {
+    tracing::debug!(?changes, "updating goal");
     let existing = planner::goal::Query::get_user_goal(&conn, user, id)
         .await?
         .ok_or(PlannerError::NotFound)?;
@@ -209,8 +213,8 @@ pub(crate) async fn update_goal(
         active_model.fulfilled = ActiveValue::Set(fulfilled);
     }
 
-    let updated = planner::goal::Mutation::update_goal(&conn, active_model).await?;
-    Ok(Json(Goal::from_db_model(updated)))
+    let updated = Goal::from_db_model(planner::goal::Mutation::update_goal(&conn, active_model).await?);
+    Ok(Json(updated.as_goal_full(vec![])))
 }
 
 #[utoipa::path(

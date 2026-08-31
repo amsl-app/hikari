@@ -429,7 +429,7 @@ pub(crate) struct MilestoneFlags {
     get,
     path = "/api/v0/planner/milestones",
     params(
-        ("deep" = Option<String>, Query, description = "if set all milestones are listed with their entries and goals embedded"),
+        ("deep" = Option<String>, Query, description = "if set all milestones are listed with their entries"),
     ),
     responses((status = OK, description = "List milestones for current user", body = [PlannerMilestoneFull])),
     tag = "v0/planner",
@@ -445,7 +445,7 @@ pub(crate) async fn get_milestones(
     let milestones = planner::planner_milestone::Query::get_user_milestones(&conn, user).await?;
 
     let mut entries_by_milestone: HashMap<Uuid, Vec<PlannerEntry>> = HashMap::new();
-    let mut goals_by_milestone: HashMap<Uuid, HashSet<Goal>> = HashMap::new();
+
     if deep {
         let entries = planner::planner_entry::Query::get_entries_by_range(&conn, user, None, None).await?;
         for entry in entries {
@@ -456,10 +456,11 @@ pub(crate) async fn get_milestones(
                     .push(PlannerEntry::from_db_model(entry));
             }
         }
-
-        let milestone_ids: Vec<Uuid> = milestones.iter().map(|m| m.id).collect();
-        goals_by_milestone = goals_by_milestone_id(&conn, user, &milestone_ids).await?;
     }
+
+    let milestone_ids: Vec<Uuid> = milestones.iter().map(|m| m.id).collect();
+    let mut goals_by_milestone: HashMap<Uuid, HashSet<Goal>> =
+        goals_by_milestone_id(&conn, user, &milestone_ids).await?;
 
     let milestones = milestones
         .into_iter()
@@ -477,7 +478,7 @@ pub(crate) async fn get_milestones(
     post,
     path = "/api/v0/planner/milestones",
     request_body = NewPlannerMilestone,
-    responses((status = CREATED, description = "Create a milestone", body = PlannerMilestone)),
+    responses((status = CREATED, description = "Create a milestone", body = PlannerMilestoneFull)),
     tag = "v0/planner",
     security(("token" = []))
 )]
@@ -496,8 +497,16 @@ pub(crate) async fn create_milestone(
         origin_id: None,
         goals: body.goals,
     };
-    let created = planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?;
-    Ok((StatusCode::CREATED, Json(PlannerMilestone::from_db_model(created))))
+    let created = PlannerMilestone::from_db_model(
+        planner::planner_milestone::Mutation::create_milestone(&conn, user, input).await?,
+    );
+
+    let goals = goals_by_milestone_id(&conn, user, &[created.id])
+        .await?
+        .remove(&created.id)
+        .unwrap_or_default();
+
+    Ok((StatusCode::CREATED, Json(created.as_milestone_full(vec![], goals))))
 }
 
 #[utoipa::path(
@@ -542,7 +551,7 @@ pub(crate) async fn get_milestone(
     path = "/api/v0/planner/milestones/{id}",
     request_body = PlannerMilestoneChanges,
     responses(
-        (status = OK, description = "Update a milestone", body = PlannerMilestone),
+        (status = OK, description = "Update a milestone", body = PlannerMilestoneFull),
         (status = NOT_FOUND, description = "Milestone not found"),
     ),
     params(("id" = Uuid, Path, description = "The milestone id")),
@@ -576,8 +585,15 @@ pub(crate) async fn update_milestone(
         active_model.description = ActiveValue::Set(description);
     }
 
-    let updated = planner::planner_milestone::Mutation::update_milestone(&conn, active_model, changes.goals).await?;
-    Ok(Json(PlannerMilestone::from_db_model(updated)))
+    let updated = PlannerMilestone::from_db_model(
+        planner::planner_milestone::Mutation::update_milestone(&conn, active_model, changes.goals).await?,
+    );
+    let goals = goals_by_milestone_id(&conn, user, &[id])
+        .await?
+        .remove(&id)
+        .unwrap_or_default();
+
+    Ok(Json(updated.as_milestone_full(vec![], goals)))
 }
 
 #[utoipa::path(
