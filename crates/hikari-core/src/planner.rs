@@ -128,34 +128,38 @@ fn build_system_prompt(
     milestones: &[PlannerAssistantMilestone],
     existing_entries: &[PlannerAssistantExistingEntry],
 ) -> String {
+    let exisiting_entires_limit = 10;
+
     let mut content = format!(
-        "You are a planning assistant that extracts tasks and events from free text.\n\
-         Today's date is {today}.\n\n"
+        "Du bist ein Planungsassistent, der Aufgaben und Termine aus Freitext extrahiert.\n\
+         Heutiges Datum: {today}.\n\n"
     );
 
     if !milestones.is_empty() {
-        content.push_str("Available milestones (use the exact ID when assigning):\n");
+        content.push_str("Verfügbare Meilensteine (verwende die exakte ID bei der Zuordnung):\n");
         for m in milestones {
-            writeln!(content, "- \"{}\": {} (due {})", m.id, m.title, m.date).expect("Writing to a String can't fail");
+            writeln!(content, "- \"{}\": {} (fällig am {})", m.id, m.title, m.date)
+                .expect("Writing to a String can't fail");
         }
         content.push('\n');
     }
 
     if !existing_entries.is_empty() {
-        content.push_str("Already planned entries (for context, avoid creating duplicates):\n");
-        for e in existing_entries {
+        content.push_str("Bereits geplante Einträge (als Kontext, um Duplikate zu vermeiden):\n");
+        for e in existing_entries.iter().take(exisiting_entires_limit) {
             writeln!(content, "- {}: {}", e.date, e.title).expect("Writing to a String can't fail");
         }
         content.push('\n');
     }
 
     content.push_str(
-        "Extract all distinct tasks or events from the user's text. For each entry:\n\
-         - Set a short, clear title\n\
-         - Determine the date in ISO 8601 format (YYYY-MM-DD); calculate absolute dates for relative expressions like \"tomorrow\" or \"next Monday\" based on today's date\n\
-         - Set priority: 1 = low, 2 = medium, 3 = high (default 2 if unspecified)\n\
-         - Only set milestone_id if the task clearly relates to one of the provided milestones\n\
-         Call the `PlannerEntries` function with all extracted entries.",
+        "Extrahiere alle einzelnen Aufgaben oder Termine aus dem Text des Nutzers. Für jeden Eintrag:\n\
+         - Lege einen kurzen, klaren Titel fest\n\
+         - Bestimme das Datum im ISO-8601-Format (YYYY-MM-DD); berechne absolute Daten für relative Ausdrücke wie \"morgen\" oder \"nächsten Montag\" basierend auf dem heutigen Datum\n\
+         - Lege die Priorität fest: 1 = niedrig, 2 = mittel, 3 = hoch (Standard 2, falls nicht angegeben)\n\
+         - Setze milestone_id nur, wenn die Aufgabe eindeutig zu einem der angegebenen Meilensteine passt\n\
+         - Erstelle neue Einträge immer auf Deutsch
+         Rufe die Funktion `PlannerEntries` mit allen extrahierten Einträgen auf.",
     );
 
     content
@@ -173,7 +177,7 @@ mod tests {
             date: NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
         }];
         let prompt = build_system_prompt(NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(), &milestones, &[]);
-        assert!(prompt.contains("Available milestones"));
+        assert!(prompt.contains("Verfügbare Meilensteine"));
         assert!(prompt.contains("Midterm"));
         assert!(prompt.contains("2026-08-01"));
     }
