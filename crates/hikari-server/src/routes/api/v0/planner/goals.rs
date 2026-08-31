@@ -17,6 +17,7 @@ use protect_axum::protect;
 use sea_orm::ActiveValue;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -48,7 +49,7 @@ where
 async fn milestones_by_goal_id(
     conn: &DatabaseConnection,
     user: Uuid,
-    goal_ids: &[Uuid],
+    goal_ids: HashSet<Uuid>,
 ) -> Result<HashMap<Uuid, Vec<PlannerMilestone>>, PlannerError> {
     let milestones = planner::planner_milestone::Query::get_milestones_by_goal_ids(conn, user, goal_ids).await?;
     Ok(milestones
@@ -82,8 +83,8 @@ pub(crate) async fn get_goals(
 
     let mut milestones_by_goal: HashMap<Uuid, Vec<PlannerMilestone>> = HashMap::new();
     if deep {
-        let goal_ids: Vec<Uuid> = goals.iter().map(|g| g.id).collect();
-        milestones_by_goal = milestones_by_goal_id(&conn, user, &goal_ids).await?;
+        let goal_ids: HashSet<Uuid> = goals.iter().map(|g| g.id).collect();
+        milestones_by_goal = milestones_by_goal_id(&conn, user, goal_ids).await?;
     }
 
     let goals = goals
@@ -123,7 +124,7 @@ pub(crate) async fn get_goal(
         .ok_or(PlannerError::NotFound)?;
     let goal = Goal::from_db_model(goal);
 
-    let milestones = milestones_by_goal_id(&conn, user, &[goal.id])
+    let milestones = milestones_by_goal_id(&conn, user, HashSet::from([goal.id]))
         .await?
         .remove(&goal.id)
         .unwrap_or_default();

@@ -336,7 +336,7 @@ pub(crate) async fn import_module_milestones(
             description: m.description.clone(),
             module_id: Some(module_id.clone()),
             origin_id: Some(m.id.clone()),
-            goals: vec![], // Imported milestones from modules do not have goals by default
+            goals: HashSet::new(), // Imported milestones from modules do not have goals by default
         })
         .collect();
 

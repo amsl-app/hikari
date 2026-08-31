@@ -23,7 +23,7 @@ use protect_axum::protect;
 use sea_orm::ActiveValue;
 use serde::Deserialize;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -50,7 +50,7 @@ pub(crate) struct PlannerMilestoneChanges {
     #[allow(clippy::option_option)]
     pub description: Option<Option<String>>,
     #[serde(default)]
-    pub goals: Option<Vec<Uuid>>,
+    pub goals: Option<HashSet<Uuid>>,
 }
 
 pub(crate) fn create_router<S>() -> Router<S>
@@ -204,9 +204,12 @@ pub(crate) async fn update_planner_entry(
         match inner {
             Some(milestone_id) => {
                 // Check if the milestone exists and belongs to the user
-                let milestones =
-                    planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, vec![milestone_id])
-                        .await?;
+                let milestones = planner::planner_milestone::Query::get_user_milestones_by_ids(
+                    &conn,
+                    user,
+                    HashSet::from([milestone_id]),
+                )
+                .await?;
                 milestones.into_iter().next().map(PlannerMilestone::from_db_model)
             }
             None => None,
@@ -348,18 +351,13 @@ pub(crate) async fn create_planner_entries(
         .map(|(i, e)| validate_new_entry(i, e))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let milestone_ids: Vec<Uuid> = inputs.iter().filter_map(|i| i.milestone_id).collect();
+    let milestone_ids: HashSet<Uuid> = inputs.iter().filter_map(|i| i.milestone_id).collect();
     let milestones_by_id: HashMap<Uuid, PlannerMilestone> = if milestone_ids.is_empty() {
         HashMap::new()
     } else {
-        let unique: Vec<Uuid> = {
-            let mut v = milestone_ids.clone();
-            v.sort();
-            v.dedup();
-            v
-        };
         // Check if all milestone_ids exist and belong to the user
-        let milestones = planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, unique).await?;
+        let milestones =
+            planner::planner_milestone::Query::get_user_milestones_by_ids(&conn, user, milestone_ids).await?;
         milestones
             .into_iter()
             .map(|m| (m.id, PlannerMilestone::from_db_model(m)))

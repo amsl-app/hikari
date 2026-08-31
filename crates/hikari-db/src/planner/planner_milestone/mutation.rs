@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::NaiveDate;
 use hikari_entity::planner::{
     planner_goal_milestone,
@@ -17,7 +19,7 @@ pub struct MilestoneInput {
     pub description: Option<String>,
     pub module_id: Option<String>,
     pub origin_id: Option<String>,
-    pub goals: Vec<Uuid>,
+    pub goals: HashSet<Uuid>,
 }
 
 pub struct Mutation;
@@ -28,7 +30,8 @@ impl Mutation {
         user_id: Uuid,
         input: MilestoneInput,
     ) -> Result<PlannerMilestoneModel, DbErr> {
-        let goals = crate::planner::goal::query::Query::get_user_goals_by_ids(db, user_id, input.goals).await?;
+        let goal_ids: HashSet<Uuid> = input.goals.iter().copied().collect();
+        let goals = crate::planner::goal::query::Query::get_user_goals_by_ids(db, user_id, goal_ids).await?;
 
         let model = ActiveModel {
             id: ActiveValue::Set(Uuid::new_v4()),
@@ -62,7 +65,7 @@ impl Mutation {
     pub async fn update_milestone<C: ConnectionTrait + TransactionTrait>(
         db: &C,
         mut active_model: ActiveModel,
-        goals: Option<Vec<Uuid>>,
+        goals: Option<HashSet<Uuid>>,
     ) -> Result<PlannerMilestoneModel, DbErr> {
         active_model.updated_at = ActiveValue::Set(chrono::Utc::now().naive_utc());
 

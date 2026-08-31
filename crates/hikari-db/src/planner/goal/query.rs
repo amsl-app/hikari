@@ -1,7 +1,7 @@
 use hikari_entity::planner::planner_goal::{Entity as Goal, Model as GoalModel};
 use hikari_entity::planner::planner_goal_milestone;
 use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 pub struct Query;
@@ -37,13 +37,12 @@ impl Query {
     pub async fn get_user_goals_by_ids<C: ConnectionTrait>(
         db: &C,
         user_id: Uuid,
-        mut ids: Vec<Uuid>,
+        ids: HashSet<Uuid>,
     ) -> Result<Vec<GoalModel>, DbErr> {
         if ids.is_empty() {
             return Ok(vec![]);
         }
-        ids.sort_unstable();
-        ids.dedup();
+
         let len = ids.len();
         let res = Goal::find()
             .filter(hikari_entity::planner::planner_goal::Column::UserId.eq(user_id))

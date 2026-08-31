@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -197,7 +199,7 @@ pub struct NewPlannerMilestone {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub goals: Vec<Uuid>,
+    pub goals: HashSet<Uuid>,
 }
 
 /// A module-defined milestone the user may import, annotated with whether it is already present.
