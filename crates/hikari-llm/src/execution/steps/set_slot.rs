@@ -65,7 +65,7 @@ impl LlmStepTrait for SetSlot {
 
     fn add_previous_response(&mut self, _response: String) {
         tracing::error!(
-            "Adding previous response to set_slot should not happen, since this step does not produce a response."
+            "adding previous response to set_slot should not happen, since this step does not produce a response"
         );
     }
 
