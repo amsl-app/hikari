@@ -31,6 +31,10 @@ pub struct Scale {
     /// # Title of the scale
     /// A human-readable title for the scale.
     pub title: String,
+    /// # Description of the scale
+    /// An optional description providing additional context or information about the scale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     #[serde(flatten)]
     /// # Body of the scale
     /// Defines the characteristics and behavior of the scale.
@@ -55,5 +59,10 @@ impl ItemId for Scale {
 #[serde(tag = "type", content = "body")]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub enum ScaleBody {
-    Scale { min: u32, max: u32 },
+    Scale {
+        min: u32,
+        max: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reference: Option<f32>,
+    },
 }

@@ -849,7 +849,12 @@ mod tests {
                     Scale {
                         id: SCALE_ID.to_string(),
                         title: "Test Scale".to_string(),
-                        body: ScaleBody::Scale { min: 1, max: 5 },
+                        description: None,
+                        body: ScaleBody::Scale {
+                            min: 1,
+                            max: 5,
+                            reference: None,
+                        },
                         mode: Mode::Average,
                         items: vec![
                             Item {
