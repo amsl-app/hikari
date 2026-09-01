@@ -25,7 +25,7 @@ hikari-model = { path = "../hikari-model" }
 hikari-config = { path = "../hikari-config" }
 hikari-model-tools = { path = "../hikari-model-tools" }
 hikari-utils = { path = "../hikari-utils" }
-sea-orm = { version = "1.1.16", features = [
+sea-orm = { version = "2.0.2", features = [
     "macros",
     "sqlx-postgres",
     "sqlx-sqlite",
