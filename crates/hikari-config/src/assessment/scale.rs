@@ -63,6 +63,6 @@ pub enum ScaleBody {
         min: u32,
         max: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        reference: Option<u32>,
+        reference: Option<f32>,
     },
 }
