@@ -1,14 +1,9 @@
 version = 1
 
 [[annotations]]
-path = [
-    ".github/**",
-    ".env.example"
-]
+path = [".github/**", ".env.example"]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
@@ -22,13 +17,10 @@ path = [
     "Dockerfile",
     "Cargo.lock",
     "Cargo.toml",
-    "README.md"
+    "README.md",
 ]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2022 Sven Scheu",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2022 Sven Scheu", "Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
@@ -47,64 +39,41 @@ path = [
     "crates/hikari-worker/**",
 ]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2023 Sven Scheu",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2023 Sven Scheu", "Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = [
-    "crates/hikari-llm/**",
-]
+path = ["crates/hikari-llm/**"]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2023 Linus Bierhoff",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2023 Linus Bierhoff", "Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = [
-    "rustfmt.toml"
-]
+path = ["rustfmt.toml"]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2024 Sven Scheu",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2024 Sven Scheu", "Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = [
-    "docker-compose.yml",
-]
+path = ["docker-compose.yml"]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2024 Linus Bierhoff",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2024 Linus Bierhoff", "Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = [
-    "crates/hikari-tools/**",
-]
+path = ["crates/hikari-tools/**"]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2025 Linus Bierhoff",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2025 Linus Bierhoff", "Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
-path = [
-    "crates/hikari-oidc/**",
-    "clippy.toml",
-]
+path = ["crates/hikari-oidc/**", "clippy.toml"]
 precedence = "override"
-SPDX-FileCopyrightText = [
-    "2026 Sven Scheu",
-    "Amsl Contributors",
-]
+SPDX-FileCopyrightText = ["2026 Sven Scheu", "Amsl Contributors"]
+SPDX-License-Identifier = "MIT OR Apache-2.0"
+
+[[annotations]]
+path = [".agents/**", ".claude/**", "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"]
+precedence = "override"
+SPDX-FileCopyrightText = ["Amsl Contributors"]
 SPDX-License-Identifier = "MIT OR Apache-2.0"
