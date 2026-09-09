@@ -110,7 +110,7 @@ impl LlmConfig {
         match service {
             LlmService::OpenAI => self.openai.default_model.as_deref().unwrap_or("gpt-4.1-mini"),
             LlmService::Gwdg => self.gwdg.default_model.as_deref().unwrap_or("qwen3.6-27b"),
-            LlmService::KIT => self.kit.default_model.as_deref().unwrap_or("kit.gpt-oss-120b"),
+            LlmService::KIT => self.kit.default_model.as_deref().unwrap_or("alias.medium-local"),
             LlmService::Custom(_) => "llama-3.3-8b-instruct", // Should be defined in the agent config manually
         }
     }
