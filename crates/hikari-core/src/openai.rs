@@ -538,6 +538,8 @@ pub async fn openai_single_tool_call<T: DeserializeOwned + JsonSchema>(
         Content::Text { .. } => Err(OpenAiError::UnexpectedResponseFormat),
     }?;
 
+    tracing::debug!(?response, "received tool call response");
+
     let res: T = serde_json::from_value(response.arguments)?;
     Ok((res, llm_response.tokens))
 }

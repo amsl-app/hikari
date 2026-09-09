@@ -32,6 +32,7 @@ struct Operators {
 #[derive(Serialize, JsonSchema, Deserialize)]
 #[schemars(description = "Die generierte Frage. Es gibt entweder eine Textfrage oder eine Multiple Choice Frage.")]
 struct QuizQuestion {
+    #[serde(flatten)]
     question: QuestionType,
 }
 
