@@ -1,4 +1,4 @@
-use crate::assessment::v01::{question::QuestionV01, scale::ScaleV01};
+use crate::assessment::v01::{question::AssessmentQuestionV01, scale::ScaleV01};
 use hikari_utils::id_map::id_map;
 use indexmap::IndexMap;
 use schemars::JsonSchema;
@@ -15,13 +15,20 @@ pub struct AssessmentV01 {
     pub title: String,
     #[serde(default)]
     #[serde(with = "id_map")]
-    #[schemars(with = "Vec::<QuestionV01>")]
+    #[schemars(with = "Vec::<AssessmentQuestionV01>")]
     /// # Questions included in the assessment
-    pub questions: IndexMap<String, QuestionV01>,
+    pub questions: IndexMap<String, AssessmentQuestionV01>,
     #[serde(default)]
     #[serde(with = "id_map")]
     #[schemars(with = "Vec::<ScaleV01>")]
     /// # Scales used in the assessment
     /// Scales are used to generate scores based on user responses.
     pub scales: IndexMap<String, ScaleV01>,
+    /// # Weight of the assessment
+    /// Optional weight used to order or prioritize the assessment.
+    pub weight: Option<i32>,
+    #[serde(default)]
+    /// # Hidden flag
+    /// Indicates whether the assessment should be hidden.
+    pub hidden: bool,
 }

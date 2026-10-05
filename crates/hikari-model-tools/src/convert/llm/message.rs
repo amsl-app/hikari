@@ -58,6 +58,12 @@ impl FromDbModel<Model> for ConversationMessage {
                 ContentTypeModel::Payload => {
                     TypeSafePayload::Payload(serde_json::from_str(&model.payload).expect("failed to decode payload"))
                 }
+                ContentTypeModel::Image => TypeSafePayload::Image(
+                    serde_json::from_str(&model.payload).expect("failed to decode image payload"),
+                ),
+                ContentTypeModel::Video => TypeSafePayload::Video(
+                    serde_json::from_str(&model.payload).expect("failed to decode video payload"),
+                ),
                 ContentTypeModel::Buttons => TypeSafePayload::Button(
                     serde_json::from_str(&model.payload).expect("failed to decode button payload"),
                 ),
@@ -104,6 +110,14 @@ pub fn split_payload_for_database(payload: TypeSafePayload) -> Result<(ContentTy
         }
         TypeSafePayload::FlowTrigger(_flow_trigger) => {
             Err(anyhow::Error::msg("FlowTrigger payload type not supported".to_owned()))
+        }
+        TypeSafePayload::Image(image_url) => {
+            let image_str = serde_json::to_string(&image_url)?;
+            Ok((ContentType::Image, image_str))
+        }
+        TypeSafePayload::Video(video_url) => {
+            let video_str = serde_json::to_string(&video_url)?;
+            Ok((ContentType::Video, video_str))
         }
     }
 }

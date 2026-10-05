@@ -124,8 +124,7 @@ CREATE TABLE history_session (
 CREATE TABLE history_assessment (
     history_id BLOB PRIMARY KEY NOT NULL,
     assessment_session_id BLOB NOT NULL,
-    type_id smallint NOT NULL,
-    module varchar(255) NOT NULL,
+
     FOREIGN KEY (history_id) REFERENCES history (id) ON DELETE CASCADE,
     FOREIGN KEY (assessment_session_id) REFERENCES assessment_session (id) ON DELETE CASCADE
 );
@@ -344,10 +343,31 @@ CREATE TABLE planner_entry (
     title TEXT NOT NULL,
     completed BOOLEAN NOT NULL DEFAULT false,
     priority INTEGER NOT NULL,
-    module_id VARCHAR(255) DEFAULT NULL,
-    session_id VARCHAR(255) DEFAULT NULL,
+    milestone_id BLOB DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (milestone_id) REFERENCES planner_milestone(id) ON DELETE
+    SET NULL
 );
 CREATE INDEX idx_planner_entry_user_id ON planner_entry(user_id);
 CREATE INDEX idx_planner_entry_user_id_date ON planner_entry(user_id, date);
+CREATE TABLE planner_ical_token (
+    user_id BLOB PRIMARY KEY NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE planner_milestone (
+    id BLOB PRIMARY KEY NOT NULL,
+    user_id BLOB NOT NULL,
+    title TEXT NOT NULL,
+    date DATE NOT NULL,
+    description TEXT DEFAULT NULL,
+    module_id VARCHAR(255) DEFAULT NULL,
+    origin_id VARCHAR(255) DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_planner_milestone_user_id ON planner_milestone(user_id);

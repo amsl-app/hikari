@@ -1,0 +1,103 @@
+use hikari_entity::planner::planner_goal_milestone;
+use hikari_entity::planner::planner_milestone::{Column, Entity as PlannerMilestone, Model as PlannerMilestoneModel};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
+
+pub struct Query;
+
+impl Query {
+    pub async fn get_user_milestones<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+    ) -> Result<Vec<PlannerMilestoneModel>, DbErr> {
+        PlannerMilestone::find()
+            .filter(Column::UserId.eq(user_id))
+            .order_by_asc(Column::Date)
+            .all(db)
+            .await
+            .inspect_err(|error| tracing::error!(%error, "failed to load user milestones"))
+    }
+
+    pub async fn get_user_milestone<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        id: Uuid,
+    ) -> Result<Option<PlannerMilestoneModel>, DbErr> {
+        PlannerMilestone::find_by_id(id)
+            .filter(Column::UserId.eq(user_id))
+            .one(db)
+            .await
+            .inspect_err(|error| tracing::error!(%error, "failed to load user milestone"))
+    }
+
+    pub async fn get_user_milestones_by_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        ids: HashSet<Uuid>,
+    ) -> Result<Vec<PlannerMilestoneModel>, DbErr> {
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let len = ids.len();
+        let res = PlannerMilestone::find()
+            .filter(Column::UserId.eq(user_id))
+            .filter(Column::Id.is_in(ids))
+            .all(db)
+            .await
+            .inspect_err(|error| tracing::error!(%error, "failed to load milestones by ids"))?;
+
+        if res.len() != len {
+            return Err(DbErr::RecordNotFound(
+                "one or more milestone ids do not exist".to_owned(),
+            ));
+        }
+
+        Ok(res)
+    }
+
+    pub async fn get_milestones_by_goal_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        goal_ids: HashSet<Uuid>,
+    ) -> Result<HashMap<Uuid, Vec<PlannerMilestoneModel>>, DbErr> {
+        if goal_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows: Vec<(planner_goal_milestone::Model, Option<PlannerMilestoneModel>)> =
+            planner_goal_milestone::Entity::find()
+                .filter(planner_goal_milestone::Column::GoalId.is_in(goal_ids))
+                .find_also_related(PlannerMilestone)
+                .filter(Column::UserId.eq(user_id))
+                .all(db)
+                .await
+                .inspect_err(|error| tracing::error!(%error, "failed to load milestones for goals"))?;
+
+        let mut milestones_by_goal: HashMap<Uuid, Vec<PlannerMilestoneModel>> = HashMap::new();
+        for (link, milestone) in rows {
+            if let Some(milestone) = milestone {
+                milestones_by_goal.entry(link.goal_id).or_default().push(milestone);
+            }
+        }
+        Ok(milestones_by_goal)
+    }
+
+    pub async fn get_imported_origin_ids<C: ConnectionTrait>(
+        db: &C,
+        user_id: Uuid,
+        module_id: &str,
+    ) -> Result<Vec<String>, DbErr> {
+        let ids: Vec<Option<String>> = PlannerMilestone::find()
+            .select_only()
+            .column(Column::OriginId)
+            .filter(Column::UserId.eq(user_id))
+            .filter(Column::ModuleId.eq(module_id))
+            .filter(Column::OriginId.is_not_null())
+            .into_tuple()
+            .all(db)
+            .await
+            .inspect_err(|error| tracing::error!(%error, "failed to load imported origin ids"))?;
+        Ok(ids.into_iter().flatten().collect())
+    }
+}

@@ -2,6 +2,7 @@ pub(crate) mod assessment;
 pub(crate) mod content;
 pub(crate) mod feature;
 pub(crate) mod llm_agent;
+pub(crate) mod milestone;
 pub(crate) mod module;
 pub(crate) mod next_session;
 pub(crate) mod session;

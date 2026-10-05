@@ -167,7 +167,7 @@ impl LlmStepTrait for VectorDBExtractor {
 
     fn add_previous_response(&mut self, _response: String) {
         tracing::error!(
-            "Adding previous response to vector_db_extractor should not happen, since this step does not produce a response."
+            "adding previous response to vector_db_extractor should not happen, since this step does not produce a response"
         );
     }
 

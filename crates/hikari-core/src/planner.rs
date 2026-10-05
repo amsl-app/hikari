@@ -2,9 +2,7 @@ use std::fmt::Write;
 use std::time::Duration;
 
 use chrono::NaiveDate;
-use hikari_model::planner::{
-    NewPlannerEntry, PlannerAssistantExistingEntry, PlannerAssistantModule, PlannerAssistantSession,
-};
+use hikari_model::planner::NewPlannerEntry;
 use schemars::JsonSchema;
 use sea_orm::{DatabaseConnection, prelude::Uuid};
 use serde::{Deserialize, Serialize};
@@ -37,10 +35,21 @@ struct PlannerEntryResponse {
     date: String,
     /// Priority: 1 = low, 2 = medium, 3 = high
     priority: i32,
-    /// ID of the matching module from the provided list, or null if none fits
-    module_id: Option<String>,
-    /// ID of the matching session from the provided list, or null if none fits
-    session_id: Option<String>,
+    /// ID (UUID) of the matching milestone from the provided list, or null if none fits
+    milestone_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannerAssistantExistingEntry {
+    pub date: NaiveDate,
+    pub title: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannerAssistantMilestone {
+    pub id: Uuid,
+    pub title: String,
+    pub date: NaiveDate,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -49,13 +58,12 @@ pub async fn planner_assistant(
     user_id: &Uuid,
     text: String,
     today: NaiveDate,
-    modules: Vec<PlannerAssistantModule>,
-    sessions: Vec<PlannerAssistantSession>,
+    milestones: Vec<PlannerAssistantMilestone>,
     existing_entries: Vec<PlannerAssistantExistingEntry>,
     llm_config: &LlmConfig,
     conn: &DatabaseConnection,
 ) -> Result<Vec<NewPlannerEntry>, PlannerAssistantError> {
-    let system_content = build_system_prompt(today, &modules, &sessions, &existing_entries);
+    let system_content = build_system_prompt(today, &milestones, &existing_entries);
 
     let messages: Vec<ChatCompletionRequestMessage> = vec![
         ChatCompletionRequestSystemMessageArgs::default()
@@ -100,17 +108,16 @@ pub async fn planner_assistant(
                 title,
                 date,
                 priority,
-                module_id,
-                session_id,
+                milestone_id,
             } = e;
             let parsed_date =
                 NaiveDate::parse_from_str(&date, "%Y-%m-%d").map_err(|_| PlannerAssistantError::InvalidDate(date))?;
+            let milestone_id = milestone_id.and_then(|id| Uuid::parse_str(&id).ok());
             Ok(NewPlannerEntry {
                 date: parsed_date,
                 title: title.trim().to_owned(),
                 priority: priority.clamp(1, 3),
-                module_id,
-                session_id,
+                milestone_id,
             })
         })
         .collect()
@@ -118,47 +125,60 @@ pub async fn planner_assistant(
 
 fn build_system_prompt(
     today: NaiveDate,
-    modules: &[PlannerAssistantModule],
-    sessions: &[PlannerAssistantSession],
+    milestones: &[PlannerAssistantMilestone],
     existing_entries: &[PlannerAssistantExistingEntry],
 ) -> String {
+    let exisiting_entires_limit = 10;
+
     let mut content = format!(
-        "You are a planning assistant that extracts tasks and events from free text.\n\
-         Today's date is {today}.\n\n"
+        "Du bist ein Planungsassistent, der Aufgaben und Termine aus Freitext extrahiert.\n\
+         Heutiges Datum: {today}.\n\n"
     );
 
-    if !modules.is_empty() {
-        content.push_str("Available modules (use the exact ID when assigning):\n");
-        for m in modules {
-            let _ = writeln!(content, "- \"{}\": {}", m.id, m.name);
-        }
-        content.push('\n');
-    }
-
-    if !sessions.is_empty() {
-        content.push_str("Available sessions (use the exact ID when assigning):\n");
-        for s in sessions {
-            let _ = writeln!(content, "- \"{}\": {}", s.id, s.name);
+    if !milestones.is_empty() {
+        content.push_str("Verfügbare Meilensteine (verwende die exakte ID bei der Zuordnung):\n");
+        for m in milestones {
+            writeln!(content, "- \"{}\": {} (fällig am {})", m.id, m.title, m.date)
+                .expect("Writing to a String can't fail");
         }
         content.push('\n');
     }
 
     if !existing_entries.is_empty() {
-        content.push_str("Already planned entries (for context, avoid creating duplicates):\n");
-        for e in existing_entries {
-            let _ = writeln!(content, "- {}: {}", e.date, e.title);
+        content.push_str("Bereits geplante Einträge (als Kontext, um Duplikate zu vermeiden):\n");
+        for e in existing_entries.iter().take(exisiting_entires_limit) {
+            writeln!(content, "- {}: {}", e.date, e.title).expect("Writing to a String can't fail");
         }
         content.push('\n');
     }
 
     content.push_str(
-        "Extract all distinct tasks or events from the user's text. For each entry:\n\
-         - Set a short, clear title\n\
-         - Determine the date in ISO 8601 format (YYYY-MM-DD); calculate absolute dates for relative expressions like \"tomorrow\" or \"next Monday\" based on today's date\n\
-         - Set priority: 1 = low, 2 = medium, 3 = high (default 2 if unspecified)\n\
-         - Only set module_id or session_id if the task clearly maps to one of the provided IDs\n\
-         Call the `PlannerEntries` function with all extracted entries.",
+        "Extrahiere alle einzelnen Aufgaben oder Termine aus dem Text des Nutzers. Für jeden Eintrag:\n\
+         - Lege einen kurzen, klaren Titel fest\n\
+         - Bestimme das Datum im ISO-8601-Format (YYYY-MM-DD); berechne absolute Daten für relative Ausdrücke wie \"morgen\" oder \"nächsten Montag\" basierend auf dem heutigen Datum\n\
+         - Lege die Priorität fest: 1 = niedrig, 2 = mittel, 3 = hoch (Standard 2, falls nicht angegeben)\n\
+         - Setze milestone_id nur, wenn die Aufgabe eindeutig zu einem der angegebenen Meilensteine passt\n\
+         - Erstelle neue Einträge immer auf Deutsch
+         Rufe die Funktion `PlannerEntries` mit allen extrahierten Einträgen auf.",
     );
 
     content
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_lists_milestones() {
+        let milestones = vec![PlannerAssistantMilestone {
+            id: Uuid::nil(),
+            title: "Midterm".to_owned(),
+            date: NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
+        }];
+        let prompt = build_system_prompt(NaiveDate::from_ymd_opt(2026, 7, 20).unwrap(), &milestones, &[]);
+        assert!(prompt.contains("Verfügbare Meilensteine"));
+        assert!(prompt.contains("Midterm"));
+        assert!(prompt.contains("2026-08-01"));
+    }
 }

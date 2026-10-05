@@ -1,17 +1,19 @@
+use chrono::NaiveDate;
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "module_assessment")]
+#[sea_orm(table_name = "planner_goal")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
     pub user_id: Uuid,
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub module: String,
-    pub last_pre: Option<Uuid>,
-    pub last_post: Option<Uuid>,
+    pub name: String,
+    pub date: NaiveDate,
+    pub description: Option<String>,
+    pub fulfilled: bool,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
 }
-
-impl ActiveModelBehavior for ActiveModel {}
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
@@ -28,3 +30,5 @@ impl Related<crate::user::Entity> for Entity {
         Relation::User.def()
     }
 }
+
+impl ActiveModelBehavior for ActiveModel {}

@@ -86,11 +86,11 @@ impl LlmStepTrait for Counter {
     }
 
     fn add_previous_response(&mut self, _response: String) {
-        tracing::warn!("Adding previous response to retriever should not happen");
+        tracing::warn!("adding previous response to retriever should not happen");
     }
 
     fn remove_previous_response(&mut self) {
-        tracing::warn!("Removing previous response to retriever should not happen");
+        tracing::warn!("removing previous response to retriever should not happen");
     }
 
     fn set_status(&mut self, status: LlmStepStatus) -> LlmConversationState {

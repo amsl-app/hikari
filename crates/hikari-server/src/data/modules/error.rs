@@ -7,4 +7,7 @@ pub enum ModuleError {
 
     #[error("The requested session was not found.")]
     SessionNotFound,
+
+    #[error("Assessment was not configured for this module.")]
+    AssessmentNotConfigured,
 }
