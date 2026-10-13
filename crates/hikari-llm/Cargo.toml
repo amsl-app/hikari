@@ -17,7 +17,7 @@ serde = "1.0.226"
 serde_json = "1.0.145"
 nonempty = { version = "0.12.0", features = ["serialize"] }
 thiserror = "2.0.16"
-sea-orm = { version = "1.1.16", features = [
+sea-orm = { version = "2.0.2", features = [
     "macros",
     "sqlx-postgres",
     "sqlx-sqlite",
