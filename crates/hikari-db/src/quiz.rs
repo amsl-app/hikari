@@ -7,3 +7,4 @@ pub mod quiz_sessions;
 
 pub mod quiz_question_attempt;
 pub mod question_recommendation;
+pub mod goal;

@@ -3101,6 +3101,7 @@ dependencies = [
  "csml_model",
  "hikari-config",
  "http 1.4.2",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "strum 0.28.0",

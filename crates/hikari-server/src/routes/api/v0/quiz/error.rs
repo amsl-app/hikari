@@ -43,6 +43,14 @@ pub(crate) enum QuizError {
 
     #[error(transparent)]
     SerializeError(#[from] serde_json::Error),
+
+    #[error("Invalid deadline: {0}")]
+    InvalidDeadline(String),
+
+    #[error("Goal not found")]
+    GoalNotFound,
+
+
 }
 
 impl IntoResponse for QuizError {
@@ -91,6 +99,16 @@ impl IntoResponse for QuizError {
             QuizError::RecommendationNotReceived =>
                 (StatusCode::INTERNAL_SERVER_ERROR, "No recommendations received")
                 .into_response(),
+
+            QuizError::InvalidDeadline(message) => (
+                StatusCode::BAD_REQUEST,
+                message,
+            )
+                .into_response(),
+
+            QuizError::GoalNotFound =>
+                (StatusCode::INTERNAL_SERVER_ERROR, "No goal found")
+                    .into_response(),
         }
     }
 }

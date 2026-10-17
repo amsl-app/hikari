@@ -75,4 +75,32 @@ impl Mutation {
 
         quiz.update(db).await
     }
+
+    pub async fn create_quiz_in_transaction<C: ConnectionTrait + sea_orm::TransactionTrait>(
+        db: &C,
+        user_id: &Uuid,
+        module_id: &str,
+        session_ids: Vec<String>,
+    ) -> Result<quiz::Model, DbErr> {
+        let quiz = quiz::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            user_id: Set(*user_id),
+            module_id: Set(module_id.to_string()),
+            created_at: Set(Utc::now().naive_utc()),
+            status: Set(quiz::Status::Open),
+        };
+
+        let quiz_model = quiz.insert(db).await?;
+
+        for session_id in session_ids {
+            crate::quiz::quiz_sessions::mutation::Mutation::add_quiz_session(
+                db,
+                &quiz_model.id,
+                &session_id,
+            )
+                .await?;
+        }
+
+        Ok(quiz_model)
+    }
 }

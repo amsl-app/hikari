@@ -4,6 +4,7 @@ use rand::{rng, seq::SliceRandom};
 pub mod error;
 pub mod evaluation;
 pub mod question;
+pub mod goal;
 
 type ExamQuestion = (String, ContentExam);
 

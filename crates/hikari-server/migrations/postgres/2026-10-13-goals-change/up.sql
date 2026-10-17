@@ -1,0 +1,9 @@
+ALTER TABLE goal
+    ALTER COLUMN session_ids DROP DEFAULT;
+
+ALTER TABLE goal
+ALTER COLUMN session_ids TYPE VARCHAR[]
+    USING session_ids::VARCHAR[];
+
+ALTER TABLE goal
+    ALTER COLUMN session_ids SET DEFAULT ARRAY[]::VARCHAR[];

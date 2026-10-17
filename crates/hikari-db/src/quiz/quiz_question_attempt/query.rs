@@ -1,4 +1,5 @@
-use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QuerySelect, JoinType, PaginatorTrait, QueryFilter, ColumnTrait, RelationTrait};
+
+use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QuerySelect, QueryOrder, JoinType, PaginatorTrait, QueryFilter, ColumnTrait, RelationTrait};
 use hikari_entity::quiz::quiz_question_attempt::{Entity as Attempt, Model as AttemptModel};
 use std::error::Error;
 use uuid::Uuid;
@@ -92,9 +93,9 @@ impl Query {
             .filter(
                 <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuestionId.eq(*question_id),
             )
-            .filter(
-                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::AnsweredAt.is_not_null(),
-            )
+            //.filter(
+                //<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::AnsweredAt.is_not_null(),
+            //)
             .count(db)
             .await
             .inspect_err(|error| {
@@ -122,6 +123,23 @@ impl Query {
                 error = error as &dyn Error,
                 "failed to load open attempt"
             );
+        })
+    }
+
+    pub async fn get_attempts_by_quiz(
+        db: &DatabaseConnection,
+        quiz_id: &Uuid,
+    ) -> Result<Vec<AttemptModel>, DbErr> {
+        let query = Attempt::find()
+            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuizId.eq(*quiz_id))
+            .order_by_asc(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::AskedAt);
+
+        query.all(db).await.inspect_err(|error| {
+            tracing::error!(
+            error = error as &dyn Error,
+            quiz_id = %quiz_id,
+            "failed to load attempts by quiz"
+        );
         })
     }
 }

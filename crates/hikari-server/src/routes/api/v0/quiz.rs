@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use chrono::NaiveDate;
+use sea_orm::TransactionTrait;
 use crate::AppConfig;
 use crate::permissions::Permission;
 use crate::routes::api::v0::quiz::error::QuizError;
@@ -21,6 +24,7 @@ use hikari_model::quiz::question::{Question, QuestionOption, QuestionType};
 use hikari_model::quiz::quiz_question_attempt::{QuestionFeedback, QuizQuestionAttempt};
 use hikari_model::quiz::quiz::{Quiz, QuizFull};
 use hikari_model::quiz::score::Score;
+use hikari_model::quiz::goal::Goal;
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use protect_axum::protect;
 use rand::rng;
@@ -33,6 +37,9 @@ use serde::Deserialize;
 use tokio::try_join;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use axum::http::StatusCode;
+use hikari_model::quiz::goal_feedback::GoalFeedback;
+use hikari_model::quiz::goal_feedback::FeedbackInput;
 
 mod error;
 
@@ -43,6 +50,11 @@ where
     Router::new()
         .route("/", get(get_quizzes))
         .route("/scores", get(get_scores))
+        .route("/{module_id}/all", get(get_all_questions_by_module))
+        .route("/{module_id}/goal/new", post(create_goal))
+        .route("/{module_id}/goal/all", get(get_all_goals))
+        .route("/goal/{goal_id}/deactivate", post(deactivate_goal))
+        .route("/goal/feedback", post(generate_goal_feedback))
         .nest(
             "/{quiz_id}",
             Router::new().route("/", get(get_quiz)).nest(
@@ -56,7 +68,8 @@ where
                             .route("/", get(get_question))
                             .route("/{attempt}/feedback", post(add_feedback))
                             .route("/{attempt}/skip", post(skip_question))
-                            .route("/{attempt}/answer", post(submit_answer)),
+                            .route("/{attempt}/answer", post(submit_answer))
+                            .route("/{attempt}/answer/again", post(submit_answer_again)),
                     ),
             ),
         )
@@ -258,7 +271,7 @@ use serde::Serialize;
 use hikari_entity::quiz::question::BloomLevel;
 use crate::routes::api::v0::assessment::error::Error;
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct QuestionResponse {
     pub id: Uuid,
     pub quiz_id: Uuid,
@@ -284,7 +297,13 @@ struct QuestionResponse {
     pub options: Vec<QuestionOption>,
 
     pub attempt: i32,
+
+    pub asked_at:Option<chrono::NaiveDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub answered_at: Option<chrono::NaiveDateTime>,
 }
+
+
 
 #[utoipa::path(
     get,
@@ -348,6 +367,8 @@ async fn get_next_question(
             options: question_model.options,
 
             attempt: attempt_model.attempt,
+            answered_at: attempt_model.answered_at,
+            asked_at: attempt_model.asked_at,
         };
 
         return Ok(Json(response).into_response());
@@ -429,6 +450,8 @@ async fn get_next_question(
             options: question.options,
 
             attempt: attempt_model.attempt,
+            answered_at: attempt_model.answered_at,
+            asked_at: attempt_model.asked_at,
         };
 
         Ok(Json(response).into_response())
@@ -441,6 +464,19 @@ async fn get_next_question(
             let quiz_id = quiz_id;
             let user_id = user_id;
             let module_id = module_id.to_string();
+            let all_sessions: Vec<Session> = app_config
+                .module_config()
+                .get(&module_id)
+                .ok_or(QuizError::ModuleNotFound(module_id.clone()))?
+                .sessions
+                .values()
+                .cloned()
+                .collect();
+
+            let sessions: Vec<Session> = all_sessions
+                .into_iter()
+                .filter(|session| session_ids.contains(&session.id))
+                .collect();
 
             tokio::spawn(async move {
                 let learner_model_client = RecommendationClient::new(
@@ -448,7 +484,7 @@ async fn get_next_question(
                 );
 
                 match learner_model_client
-                    .get_recommendations(user_id, module_id)
+                    .get_recommendations(user_id, module_id, sessions, &conn)
                     .await
                 {
                     Ok(recommendations) => {
@@ -562,6 +598,8 @@ async fn get_next_question(
                 options: question.options,
 
                 attempt: attempt_model.attempt,
+                answered_at: attempt_model.answered_at,
+                asked_at: attempt_model.asked_at,
             };
 
             return Ok(Json(response).into_response())
@@ -615,6 +653,8 @@ async fn get_next_question(
                 options: question_model.options,
 
                 attempt: attempt_model.attempt,
+                answered_at: attempt_model.answered_at,
+                asked_at: attempt_model.asked_at,
             };
 
             Ok(Json(response).into_response())
@@ -681,6 +721,8 @@ async fn get_next_question(
                 options: question.options,
 
                 attempt: attempt_model.attempt,
+                answered_at: attempt_model.answered_at,
+                asked_at: attempt_model.asked_at,
             };
 
             Ok(Json(response).into_response())
@@ -790,12 +832,121 @@ async fn submit_answer(
         options: question_model.options,
 
         attempt: evaluated_question.attempt,
+        answered_at: evaluated_question.answered_at,
+        asked_at: evaluated_question.asked_at,
     };
-
-
-
     Ok(Json(response).into_response())
 }
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/quizzes/{quiz_id}/questions/{question_id}/{attempt}/answer/again",
+    responses(
+        (status = OK, body = Question, description = "Evaluated question with answer and evaluation"),
+    ),
+    request_body = EvaluationRequest,
+    tag = "v0/quizzes",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+async fn submit_answer_again(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path((quiz_id, question_id, attempt)): Path<(Uuid, Uuid, i32)>,
+    Json(payload): Json<EvaluationRequest>,
+) -> Result<impl IntoResponse, QuizError> {
+    let (quiz, quiz_question) = try_join!(
+        // To ensure the user has access to the quiz, we first fetch the quiz
+        get_quiz_by_id(&conn, &user_id, &quiz_id),
+        get_question_by_id(&conn, &question_id)
+    )?;
+    let session_id = hikari_db::quiz::quiz_question_attempt::query::Query::get_session_id_by_attempt(
+        &conn,
+        &quiz_id,
+        &question_id,
+        &attempt
+    ).await?.ok_or(
+        QuizError::SessionNotFound("ID not found".to_owned())
+    )?;
+
+    let module_id = quiz.module_id;
+    //let session_id = quiz_question.session_id.as_str();
+
+    let session = app_config
+        .module_config()
+        .get(&module_id)
+        .ok_or(QuizError::ModuleNotFound(module_id.clone()))?
+        .sessions
+        .get(&session_id)
+        .ok_or(QuizError::SessionNotFound("ID not found".to_owned()))?;
+
+    let llm_config: &LlmConfig = AppConfig::llm_config(&app_config);
+
+
+    let session_sources: Vec<String> = session
+        .contents
+        .iter()
+        .flat_map(|c| c.sources.primary().iter().map(|s| s.file_id.clone()))
+        .collect();
+
+    let contents = &session.contents;
+
+    let exams = contents
+        .iter()
+        .flat_map(|c| c.exams.iter().map(|e| (c.title.clone(), e.clone())))
+        .collect::<Vec<(String, ContentExam)>>();
+
+    let last_attempt = hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(&conn, &user_id, &module_id, &question_id).await?;
+    let new_attempt = last_attempt as i32 + 1;
+
+    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question_id, new_attempt, &session_id).await?;
+
+    let evaluated_question = evaluate_answer(
+        &user_id,
+        &quiz_id,
+        &new_attempt,
+        &session_id,
+        &module_id,
+        &quiz_question,
+        &exams,
+        &payload.answer,
+        llm_config,
+        &conn,
+        session_sources,
+    )
+        .await?;
+
+    tracing::info!("Evaluated question: {:?}", evaluated_question.evaluation);
+    let question_model: Question = hikari_db::quiz::question::Query::get_question_by_id(&conn, &question_id).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+
+    let response = QuestionResponse {
+        id: question_model.id,
+        quiz_id: quiz_id,
+        topic: question_model.topic,
+        content: question_model.content,
+        question: question_model.question,
+        session_id: evaluated_question.session_id,
+        level: question_model.level,
+
+        answer: evaluated_question.answer,
+        evaluation: evaluated_question.evaluation,
+        grade: evaluated_question.grade,
+
+        ai_solution: question_model.ai_solution,
+
+        r#type: question_model.r#type,
+        options: question_model.options,
+
+        attempt: evaluated_question.attempt,
+        answered_at: evaluated_question.answered_at,
+        asked_at: evaluated_question.asked_at,
+    };
+    Ok(Json(response).into_response())
+}
+
 
 #[utoipa::path(
     post,
@@ -878,6 +1029,375 @@ async fn add_feedback(
     Ok(())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v0/quizzes/{module_id}/all",
+    params(
+        ("module_id" = String, Path, description = "ID of the module")
+    ),
+    responses(
+    (
+        status = OK,
+        body = [QuestionResponse],
+        description = "All questions with their attempts for the user's module"
+    ),
+    (
+        status = UNAUTHORIZED,
+        description = "Authentication required"
+    ),
+    (
+        status = INTERNAL_SERVER_ERROR,
+        description = "Failed to load questions or attempts"
+    )
+    ),
+    tag = "v0/quizzes",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+async fn get_all_questions_by_module(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(module_id): Path<String>,
+) -> Result<Json<Vec<QuestionResponse>>, QuizError> {
+    let quizzes =
+        hikari_db::quiz::quiz::query::Query::get_quizzes_by_module(&conn, &user_id, &module_id).await?;
+
+    let mut questions = Vec::new();
+
+    for quiz in quizzes {
+        let attempts = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempts_by_quiz(&conn, &quiz.id).await?;
+
+        for attempt in attempts {
+            let question = hikari_db::quiz::question::query::Query::get_question_by_id(
+                &conn,
+                &attempt.question_id,
+            )
+                .await?
+                .ok_or(QuizError::QuestionNotFound)?;
+            let attempt_model: QuizQuestionAttempt = attempt.into_model();
+            let question_model: Question = question.into_model();
+
+            questions.push(QuestionResponse {
+                id: question_model.id,
+                quiz_id: attempt_model.quiz_id,
+                topic: question_model.topic,
+                content: question_model.content,
+                question: question_model.question,
+                session_id: attempt_model.session_id,
+                level: question_model.level,
+
+                answer: attempt_model.answer,
+                evaluation: attempt_model.evaluation,
+                grade: attempt_model.grade,
+                ai_solution: question_model.ai_solution,
+
+                r#type: question_model.r#type,
+                options: question_model.options,
+                attempt: attempt_model.attempt,
+
+                asked_at: attempt_model.asked_at,
+                answered_at: attempt_model.answered_at,
+            });
+        }
+    }
+
+    Ok(Json(questions))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGoalWithQuizRequest {
+    pub session_ids: Vec<String>,
+    pub target_mode: String,
+    pub level: String,
+    pub deadline: String,
+    pub outcome: String,
+    pub additional_outcomes: Vec<String>,
+    pub obstacles: Vec<String>,
+    pub plans: Vec<String>,
+    pub lecture_targets: hikari_model::quiz::goal::LectureTargets,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalResponse {
+    pub id: Uuid,
+    pub module_id: String,
+    pub quiz_id: Uuid,
+    pub session_ids: Vec<String>,
+    pub target_mode: String,
+    pub level: String,
+    pub deadline: String,
+    pub outcome: String,
+    pub additional_outcomes: Vec<String>,
+    pub obstacles: Vec<String>,
+    pub plans: Vec<String>,
+    pub active: bool,
+    pub lecture_targets: hikari_model::quiz::goal::LectureTargets,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/quizzes/{module_id}/goal/new",
+    params(
+        ("module_id" = String, Path, description = "ID of the module")
+    ),
+    request_body = CreateGoalWithQuizRequest,
+    responses(
+        (
+            status = OK,
+            body = Goal,
+            description = "Created a new goal and its associated quiz"
+        ),
+        (
+            status = UNAUTHORIZED,
+            description = "Authentication required"
+        ),
+        (
+            status = INTERNAL_SERVER_ERROR,
+            description = "Failed to create goal or quiz"
+        )
+    ),
+    tag = "v0/quizzes",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+async fn create_goal(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(app_config): Extension<AppConfig>,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(module_id): Path<String>,
+    Json(payload): Json<CreateGoalWithQuizRequest>,
+) -> Result<Response, QuizError> {
+
+
+    let goal_session_ids = payload.session_ids.clone();
+
+
+    let deadline = NaiveDate::parse_from_str(
+        &payload.deadline,
+        "%Y-%m-%d",
+    )
+        .map_err(|err| QuizError::InvalidDeadline(err.to_string()))?;
+
+
+    let txn = conn.begin().await?;
+
+
+    let quiz = hikari_db::quiz::quiz::mutation::Mutation::create_quiz_in_transaction(
+        &txn,
+        &user_id,
+        &module_id,
+        payload.session_ids,
+    )
+        .await?;
+
+
+    let goal = hikari_db::quiz::goal::mutation::Mutation::create_goal_in_transaction(
+        &txn,
+        user_id,
+        module_id,
+        quiz.id,
+        goal_session_ids,
+        payload.target_mode,
+        payload.level,
+        deadline,
+        payload.outcome,
+        serde_json::to_value(payload.additional_outcomes)?,
+        serde_json::to_value(payload.obstacles)?,
+        serde_json::to_value(payload.plans)?,
+        serde_json::to_value(payload.lecture_targets)?,
+    )
+        .await?;
+
+
+    txn.commit().await?;
+
+    let goal_model: Goal = goal.into_model();
+
+    let goal_response = GoalResponse {
+        id: goal_model.id,
+        module_id: goal_model.module_id,
+        quiz_id: goal_model.quiz_id,
+        session_ids: goal_model
+            .session_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect(),
+        target_mode: goal_model.target_mode,
+        level: goal_model.level,
+        deadline: goal_model.deadline.format("%Y-%m-%d").to_string(),
+        outcome: goal_model.outcome,
+        additional_outcomes: goal_model.additional_outcomes,
+        obstacles: goal_model.obstacles,
+        plans: goal_model.plans,
+        active: goal_model.active,
+        lecture_targets: goal_model.lecture_targets,
+    };
+
+    Ok(Json(goal_response).into_response())
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v0/quizzes/{module_id}/goal/all",
+    params(
+        ("module_id" = String, Path, description = "ID of the module")
+    ),
+    responses(
+        (
+            status = OK,
+            body = Vec<GoalResponse>,
+            description = "Returns all goals for the authenticated user and module"
+        ),
+        (
+            status = UNAUTHORIZED,
+            description = "Authentication required"
+        ),
+        (
+            status = INTERNAL_SERVER_ERROR,
+            description = "Failed to load goals"
+        )
+    ),
+    tag = "v0/quizzes",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+async fn get_all_goals(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(module_id): Path<String>,
+) -> Result<Response, QuizError> {
+    let goals =
+        hikari_db::quiz::goal::query::Query::get_goals_by_user_and_module(
+            &conn,
+            &user_id,
+            &module_id,
+        )
+            .await?;
+
+    let responses: Vec<GoalResponse> = goals
+        .into_iter()
+        .map(|goal| GoalResponse {
+            id: goal.id,
+            module_id: goal.module_id,
+            quiz_id: goal.quiz_id,
+            session_ids: goal.session_ids,
+            target_mode: goal.target_mode,
+            level: goal.level,
+            deadline: goal.deadline.format("%Y-%m-%d").to_string(),
+            outcome: goal.outcome,
+            additional_outcomes: serde_json::from_value(goal.additional_outcomes)
+                .unwrap_or_default(),
+            obstacles: serde_json::from_value(goal.obstacles)
+                .unwrap_or_default(),
+            plans: serde_json::from_value(goal.plans)
+                .unwrap_or_default(),
+            active: goal.active,
+            lecture_targets: serde_json::from_value(goal.lecture_targets)
+                .unwrap_or_default(),
+        })
+        .collect();
+
+    Ok(Json(responses).into_response())
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/quizzes/goal/{goal_id}/deactivate",
+    params(
+        ("goal_id" = Uuid, Path, description = "ID of the goal to deactivate")
+    ),
+    responses(
+        (
+            status = OK,
+            body = GoalResponse,
+            description = "Goal successfully deactivated"
+        ),
+        (
+            status = UNAUTHORIZED,
+            description = "Authentication required"
+        ),
+        (
+            status = NOT_FOUND,
+            description = "Goal not found"
+        ),
+        (
+            status = INTERNAL_SERVER_ERROR,
+            description = "Failed to deactivate goal"
+        )
+    ),
+    tag = "v0/quizzes",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+pub async fn deactivate_goal(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Path(goal_id): Path<Uuid>,
+) -> Result<StatusCode, QuizError> {
+
+    let goal = hikari_db::quiz::goal::query::Query::get_goal_by_id_and_user(&conn, &goal_id, &user_id)
+        .await?
+        .ok_or(QuizError::GoalNotFound)?;
+
+    hikari_db::quiz::goal::mutation::Mutation::deactivate_goal(&conn, &goal.id).await?;
+
+    Ok(StatusCode::OK)
+}
+
+
+
+#[utoipa::path(
+    post,
+    path = "/api/v0/quizzes/goal/feedback",
+    request_body = FeedbackInput,
+    responses(
+        (
+            status = OK,
+            body = GoalFeedback,
+            description = "Goal feedback successfully generated"
+        ),
+        (
+            status = UNAUTHORIZED,
+            description = "Authentication required"
+        ),
+        (
+            status = INTERNAL_SERVER_ERROR,
+            description = "Failed to generate goal feedback"
+        )
+    ),
+    tag = "v0/quizzes",
+    security(
+        ("token" = [])
+    )
+)]
+#[protect("Permission::Basic", ty = "Permission")]
+async fn generate_goal_feedback(
+    ExtractUserId(user_id): ExtractUserId,
+    Extension(conn): Extension<DatabaseConnection>,
+    Extension(app_config): Extension<AppConfig>,
+    Json(payload): Json<FeedbackInput>,
+
+) -> Result<Response, QuizError> {
+
+    let llm_config: &LlmConfig = AppConfig::llm_config(&app_config);
+    let feedback =
+        hikari_core::quiz::goal::generate_feedback(&user_id, &payload, &llm_config, &conn).await?;
+
+    Ok(Json(feedback).into_response())
+}
+
+
+
 async fn get_quiz_by_id(conn: &DatabaseConnection, user_id: &Uuid, quiz_id: &Uuid) -> Result<Quiz, QuizError> {
     let result = hikari_db::quiz::quiz::Query::get_quiz_by_id(conn, user_id, quiz_id)
         .await?
@@ -920,10 +1440,11 @@ fn pick_specific_content(content: &Content) -> &str {
     content
 }
 
-#[derive(Debug, serde_derive::Serialize)]
+#[derive(Debug, Serialize)]
 struct RecommendationRequest {
     student_id: Uuid,
     module_id: String,
+    chapter_bloom_limits: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -952,12 +1473,39 @@ impl RecommendationClient {
 
     pub async fn get_recommendations(
         &self,
-        student_id: Uuid,
+        user_id: Uuid,
         module_id: String,
-    ) -> Result<RecommendationResponse, reqwest::Error> {
+        sessions: Vec<Session>,
+        conn: &DatabaseConnection,
+    ) -> Result<RecommendationResponse, QuizError> {
+        let mut chapter_bloom_limits: HashMap<String, String> = HashMap::new();
+
+
+        for session in &sessions {
+
+            let topics: Vec<String> = session
+                .contents
+                .iter()
+                .map(|content| content.title.clone())
+                .collect();
+
+
+            let limits = get_chapter_bloom_limits(
+                conn,
+                &user_id,
+                &session.id,
+                &topics,
+            )
+                .await?;
+
+
+            chapter_bloom_limits.extend(limits);
+        }
+
         let request = RecommendationRequest {
-            student_id,
-            module_id,
+            student_id: user_id,
+            module_id: module_id,
+            chapter_bloom_limits: Some(chapter_bloom_limits),
         };
 
         let response = self
@@ -972,4 +1520,44 @@ impl RecommendationClient {
 
         Ok(response)
     }
+}
+async fn get_chapter_bloom_limits(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    session_id: &str,
+    topics: &[String],
+) -> Result<HashMap<String, String>, QuizError> {
+    let mut limits = HashMap::new();
+
+    for topic in topics {
+        let score = hikari_db::quiz::score::Query::get_score_by_topic(
+            conn,
+            user_id,
+            session_id,
+            topic,
+        )
+            .await?;
+
+        let level = get_bloom_level(score.unwrap_or(0.0));
+
+        limits.insert(topic.clone(), level.to_string());
+    }
+
+    Ok(limits)
+}
+fn get_bloom_level(score: f64) -> QuestionBloomLevel {
+    let levels = [
+        (25.0, QuestionBloomLevel::Create),
+        (20.0, QuestionBloomLevel::Evaluate),
+        (15.0, QuestionBloomLevel::Analyze),
+        (10.0, QuestionBloomLevel::Apply),
+        (5.0, QuestionBloomLevel::Understand),
+        (0.0, QuestionBloomLevel::Remember),
+    ];
+
+    levels
+        .into_iter()
+        .find(|(threshold, _)| score >= *threshold)
+        .map(|(_, level)| level)
+        .unwrap_or(QuestionBloomLevel::Remember)
 }
