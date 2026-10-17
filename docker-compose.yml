@@ -66,6 +66,8 @@ services:
       POSTGRESQL_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DATABASE}"
       RUST_LOG: "${RUST_LOG}"
       RUST_BACKTRACE: ${RUST_BACKTRACE}
+
+      LEARNER_MODEL_URL: ${LEARNER_MODEL_URL}
     volumes:
       # When using local config files, make sure the configs are attached as volumes
       - "./config:/config"

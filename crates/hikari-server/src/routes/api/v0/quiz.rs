@@ -478,9 +478,13 @@ async fn get_next_question(
                 .filter(|session| session_ids.contains(&session.id))
                 .collect();
 
+            tracing::info!("LEARNER_MODEL_URL: {:?}", std::env::var("LEARNER_MODEL_URL")
+                        .expect("LEARNER_MODEL_URL must be set"));
+
             tokio::spawn(async move {
                 let learner_model_client = RecommendationClient::new(
-                    "http://host.docker.internal:8000".to_string(),
+                    std::env::var("LEARNER_MODEL_URL")
+                        .expect("LEARNER_MODEL_URL must be set"),
                 );
 
                 match learner_model_client
