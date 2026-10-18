@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-
-
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QuestionType {
@@ -37,13 +35,13 @@ pub struct Question {
 
 impl Question {
     //pub fn sanitize_for_client(&mut self) {
-        //let is_graded = self.evaluation.is_some() || self.grade.is_some();
+    //let is_graded = self.evaluation.is_some() || self.grade.is_some();
 
-        //if !is_graded {
-            //self.ai_solution = None;
-            //for option in &mut self.options {
-                //option.correct = None;
-            //}
-        //}
+    //if !is_graded {
+    //self.ai_solution = None;
+    //for option in &mut self.options {
+    //option.correct = None;
+    //}
+    //}
     //}
 }

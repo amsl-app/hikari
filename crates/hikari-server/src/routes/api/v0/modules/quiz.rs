@@ -77,7 +77,7 @@ async fn get_module_quizzes(
         let quiz_question_models: Vec<Question> = quiz_questions
             .into_iter()
             .map(|m| {
-                let mut q: Question = m.into_model();
+                let q: Question = m.into_model();
                 //q.sanitize_for_client();
                 q
             })

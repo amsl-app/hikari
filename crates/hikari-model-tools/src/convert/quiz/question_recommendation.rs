@@ -1,6 +1,5 @@
-use hikari_model::quiz::question::{Question, QuestionOption};
-use hikari_entity::quiz::question_recommendation::{Model as RecommendationModel};
 use crate::convert::FromDbModel;
+use hikari_entity::quiz::question_recommendation::Model as RecommendationModel;
 use hikari_model::quiz::question_recommendation::QuestionRecommendation;
 
 impl FromDbModel<RecommendationModel> for QuestionRecommendation {

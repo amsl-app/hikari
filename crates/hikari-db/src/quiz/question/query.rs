@@ -2,31 +2,20 @@ use hikari_entity::quiz::question::{self, BloomLevel, Entity as Question, Model 
 use hikari_entity::quiz::quiz::{self};
 use hikari_entity::quiz::quiz_question_attempt::{self, Status};
 use sea_orm::RelationTrait;
-use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect, JoinType};
+use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, JoinType, QueryFilter, QuerySelect};
 use std::error::Error;
 use uuid::Uuid;
 pub struct Query;
 
 impl Query {
-    pub async fn get_questions_by_quiz(
-        db: &DatabaseConnection,
-        quiz_id: &Uuid,
-    ) -> Result<Vec<QuestionModel>, DbErr> {
+    pub async fn get_questions_by_quiz(db: &DatabaseConnection, quiz_id: &Uuid) -> Result<Vec<QuestionModel>, DbErr> {
         let query = Question::find()
-            .join(
-                JoinType::InnerJoin,
-                question::Relation::QuizQuestionAttempt.def(),
-            )
-            .filter(
-                quiz_question_attempt::Column::QuizId.eq(*quiz_id),
-            )
+            .join(JoinType::InnerJoin, question::Relation::QuizQuestionAttempt.def())
+            .filter(quiz_question_attempt::Column::QuizId.eq(*quiz_id))
             .distinct();
 
         query.all(db).await.inspect_err(|error| {
-            tracing::error!(
-            error = error as &dyn Error,
-            "failed to load questions"
-        );
+            tracing::error!(error = error as &dyn Error, "failed to load questions");
         })
     }
 
@@ -50,14 +39,8 @@ impl Query {
         level: &BloomLevel,
     ) -> Result<Vec<QuestionModel>, DbErr> {
         let query = Question::find()
-            .join(
-                JoinType::InnerJoin,
-                question::Relation::QuizQuestionAttempt.def(),
-            )
-            .join(
-                JoinType::InnerJoin,
-                quiz_question_attempt::Relation::Quiz.def(),
-            )
+            .join(JoinType::InnerJoin, question::Relation::QuizQuestionAttempt.def())
+            .join(JoinType::InnerJoin, quiz_question_attempt::Relation::Quiz.def())
             .filter(quiz::Column::UserId.eq(*user_id))
             .filter(question::Column::Topic.eq(topic.to_string()))
             .filter(question::Column::Level.eq(*level))
@@ -65,35 +48,22 @@ impl Query {
 
         let result = query.all(db).await.inspect_err(|error| {
             tracing::error!(
-            error = error as &dyn Error,
-            "failed to load question by user, topic and level"
-        );
+                error = error as &dyn Error,
+                "failed to load question by user, topic and level"
+            );
         })?;
 
         Ok(result)
     }
 
-    pub async fn get_open_question(
-        db: &DatabaseConnection,
-        quiz_id: &Uuid,
-    ) -> Result<Option<QuestionModel>, DbErr> {
+    pub async fn get_open_question(db: &DatabaseConnection, quiz_id: &Uuid) -> Result<Option<QuestionModel>, DbErr> {
         let query = Question::find()
-            .join(
-                JoinType::InnerJoin,
-                question::Relation::QuizQuestionAttempt.def(),
-            )
-            .filter(
-                quiz_question_attempt::Column::QuizId.eq(*quiz_id),
-            )
-            .filter(
-                quiz_question_attempt::Column::Status.eq(Status::Open),
-            );
+            .join(JoinType::InnerJoin, question::Relation::QuizQuestionAttempt.def())
+            .filter(quiz_question_attempt::Column::QuizId.eq(*quiz_id))
+            .filter(quiz_question_attempt::Column::Status.eq(Status::Open));
 
         let result = query.one(db).await.inspect_err(|error| {
-            tracing::error!(
-            error = error as &dyn Error,
-            "failed to load open question"
-        );
+            tracing::error!(error = error as &dyn Error, "failed to load open question");
         })?;
 
         Ok(result)

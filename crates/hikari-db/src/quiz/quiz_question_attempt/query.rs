@@ -1,6 +1,8 @@
-
-use sea_orm::{DatabaseConnection, DbErr, EntityTrait, QuerySelect, QueryOrder, JoinType, PaginatorTrait, QueryFilter, ColumnTrait, RelationTrait};
 use hikari_entity::quiz::quiz_question_attempt::{Entity as Attempt, Model as AttemptModel};
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, DbErr, EntityTrait, JoinType, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect, RelationTrait,
+};
 use std::error::Error;
 use uuid::Uuid;
 pub struct Query;
@@ -12,18 +14,11 @@ impl Query {
         question_id: &Uuid,
         attempt: &i32,
     ) -> Result<Option<AttemptModel>, DbErr> {
-        Attempt::find_by_id((
-            *quiz_id,
-            *question_id,
-            *attempt,
-        ))
+        Attempt::find_by_id((*quiz_id, *question_id, *attempt))
             .one(db)
             .await
             .inspect_err(|error| {
-                tracing::error!(
-            error = error as &dyn Error,
-            "failed to load question attempt"
-        );
+                tracing::error!(error = error as &dyn Error, "failed to load question attempt");
             })
     }
 
@@ -33,21 +28,14 @@ impl Query {
         question_id: &Uuid,
         attempt: &i32,
     ) -> Result<Option<String>, DbErr> {
-        let result = Attempt::find_by_id((
-            *quiz_id,
-            *question_id,
-            *attempt,
-        ))
+        let result = Attempt::find_by_id((*quiz_id, *question_id, *attempt))
             .select_only()
             .column(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::SessionId)
             .into_tuple::<String>()
             .one(db)
             .await
             .inspect_err(|error| {
-                tracing::error!(
-            error = error as &dyn Error,
-            "failed to load session id by attempt"
-        );
+                tracing::error!(error = error as &dyn Error, "failed to load session id by attempt");
             })?;
 
         Ok(result)
@@ -69,9 +57,9 @@ impl Query {
             .await
             .inspect_err(|error| {
                 tracing::error!(
-                error = error as &dyn Error,
-                "failed to count question attempts by user and module"
-            );
+                    error = error as &dyn Error,
+                    "failed to count question attempts by user and module"
+                );
             })?;
 
         Ok(count)
@@ -114,32 +102,40 @@ impl Query {
         question_id: &Uuid,
     ) -> Result<Option<AttemptModel>, DbErr> {
         let query = Attempt::find()
-            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuizId.eq(*quiz_id))
-            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuestionId.eq(*question_id))
-            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::Status.eq(hikari_entity::quiz::quiz_question_attempt::Status::Open));
+            .filter(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuizId
+                    .eq(*quiz_id),
+            )
+            .filter(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuestionId
+                    .eq(*question_id),
+            )
+            .filter(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::Status
+                    .eq(hikari_entity::quiz::quiz_question_attempt::Status::Open),
+            );
 
         query.one(db).await.inspect_err(|error| {
-            tracing::error!(
-                error = error as &dyn Error,
-                "failed to load open attempt"
-            );
+            tracing::error!(error = error as &dyn Error, "failed to load open attempt");
         })
     }
 
-    pub async fn get_attempts_by_quiz(
-        db: &DatabaseConnection,
-        quiz_id: &Uuid,
-    ) -> Result<Vec<AttemptModel>, DbErr> {
+    pub async fn get_attempts_by_quiz(db: &DatabaseConnection, quiz_id: &Uuid) -> Result<Vec<AttemptModel>, DbErr> {
         let query = Attempt::find()
-            .filter(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuizId.eq(*quiz_id))
-            .order_by_asc(<hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::AskedAt);
+            .filter(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::QuizId
+                    .eq(*quiz_id),
+            )
+            .order_by_asc(
+                <hikari_entity::quiz::quiz_question_attempt::Entity as sea_orm::EntityTrait>::Column::AskedAt,
+            );
 
         query.all(db).await.inspect_err(|error| {
             tracing::error!(
-            error = error as &dyn Error,
-            quiz_id = %quiz_id,
-            "failed to load attempts by quiz"
-        );
+                error = error as &dyn Error,
+                quiz_id = %quiz_id,
+                "failed to load attempts by quiz"
+            );
         })
     }
 }

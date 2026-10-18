@@ -49,8 +49,6 @@ pub(crate) enum QuizError {
 
     #[error("Goal not found")]
     GoalNotFound,
-
-
 }
 
 impl IntoResponse for QuizError {
@@ -96,19 +94,13 @@ impl IntoResponse for QuizError {
                 format!("Recommendation service request failed: {e}"),
             )
                 .into_response(),
-            QuizError::RecommendationNotReceived =>
-                (StatusCode::INTERNAL_SERVER_ERROR, "No recommendations received")
-                .into_response(),
+            QuizError::RecommendationNotReceived => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "No recommendations received").into_response()
+            }
 
-            QuizError::InvalidDeadline(message) => (
-                StatusCode::BAD_REQUEST,
-                message,
-            )
-                .into_response(),
+            QuizError::InvalidDeadline(message) => (StatusCode::BAD_REQUEST, message).into_response(),
 
-            QuizError::GoalNotFound =>
-                (StatusCode::INTERNAL_SERVER_ERROR, "No goal found")
-                    .into_response(),
+            QuizError::GoalNotFound => (StatusCode::INTERNAL_SERVER_ERROR, "No goal found").into_response(),
         }
     }
 }

@@ -13,6 +13,7 @@ use hikari_config::module::content::ContentExam;
 use hikari_model::llm::vector::embedding_chunk::LlmEmbeddingQueryResult;
 use hikari_model::quiz::question::Question;
 use hikari_model::quiz::question::QuestionType;
+use hikari_model::quiz::quiz_question_attempt::QuizQuestionAttempt;
 use hikari_model_tools::convert::IntoModel;
 use rand::rng;
 use rand::seq::{IndexedRandom, SliceRandom};
@@ -23,7 +24,6 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::vec;
 use tracing::instrument;
-use hikari_model::quiz::quiz_question_attempt::QuizQuestionAttempt;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[schemars(
@@ -57,7 +57,7 @@ pub async fn evaluate_answer(
     let question_topic = question.topic.clone();
     let question_level = question.level;
     let question_content = question.content.clone();
-    let question_session_id = session_id.clone();
+    let question_session_id = session_id;
     let question_question = question.question.clone();
     let question_solution = question.ai_solution.clone();
     let question_options = question.options.clone();
@@ -300,7 +300,7 @@ pub async fn evaluate_answer(
     tracing::debug!(grade = evaluation.grade, %score_adjustment, "evaluation result received");
 
     let current_score: f64 =
-        hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, &question_session_id, &question_topic)
+        hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, question_session_id, &question_topic)
             .await?
             .unwrap_or(0.0);
 
@@ -313,7 +313,7 @@ pub async fn evaluate_answer(
         conn,
         user_id,
         module_id,
-        &question_session_id,
+        question_session_id,
         &question_topic,
         &new_score,
     )
@@ -321,9 +321,9 @@ pub async fn evaluate_answer(
 
     let updated_question = hikari_db::quiz::quiz_question_attempt::mutation::Mutation::add_evaluation(
         conn,
-        &quiz_id,
+        quiz_id,
         &question.id,
-        &attempt,
+        attempt,
         answer,
         &evaluation.evaluation,
         &evaluation.grade,

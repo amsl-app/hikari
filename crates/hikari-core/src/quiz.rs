@@ -3,8 +3,8 @@ use rand::{rng, seq::SliceRandom};
 
 pub mod error;
 pub mod evaluation;
-pub mod question;
 pub mod goal;
+pub mod question;
 
 type ExamQuestion = (String, ContentExam);
 

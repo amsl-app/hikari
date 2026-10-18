@@ -1,5 +1,5 @@
 use hikari_entity::quiz::question_recommendation;
-use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect, JoinType};
+use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 use std::error::Error;
 use uuid::Uuid;
 

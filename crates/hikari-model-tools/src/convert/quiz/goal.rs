@@ -1,6 +1,5 @@
 use hikari_entity::quiz::goal::Model as GoalModel;
-use hikari_model::quiz::goal::{Goal, LectureTarget, LectureTargets};
-
+use hikari_model::quiz::goal::{Goal, LectureTargets};
 
 use crate::convert::FromDbModel;
 
@@ -17,10 +16,8 @@ impl FromDbModel<GoalModel> for Goal {
             outcome: goal.outcome,
             additional_outcomes: serde_json::from_value(goal.additional_outcomes)
                 .expect("Invalid JSON in goal.additional_outcomes"),
-            obstacles: serde_json::from_value(goal.obstacles)
-                .expect("Invalid JSON in goal.obstacles"),
-            plans: serde_json::from_value(goal.plans)
-                .expect("Invalid JSON in goal.plans"),
+            obstacles: serde_json::from_value(goal.obstacles).expect("Invalid JSON in goal.obstacles"),
+            plans: serde_json::from_value(goal.plans).expect("Invalid JSON in goal.plans"),
             active: goal.active,
             lecture_targets: serde_json::from_value::<LectureTargets>(goal.lecture_targets)
                 .expect("Invalid JSON in goal.lecture_targets"),

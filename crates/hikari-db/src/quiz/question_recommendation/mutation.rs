@@ -1,5 +1,5 @@
 use hikari_entity::quiz::question_recommendation;
-use sea_orm::{EntityTrait, ActiveModelTrait, DatabaseConnection, DbErr, Set, TransactionTrait,};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, Set, TransactionTrait};
 use std::error::Error;
 use uuid::Uuid;
 
@@ -20,18 +20,12 @@ impl Mutation {
             used_at: Set(None),
         };
 
-        recommendation
-            .insert(db)
-            .await
-            .inspect_err(|error| {
-                tracing::error!(
-                    error = error as &dyn Error,
-                    "failed to create question recommendation"
-                );
-            })
+        recommendation.insert(db).await.inspect_err(|error| {
+            tracing::error!(error = error as &dyn Error, "failed to create question recommendation");
+        })
     }
 
-    pub async fn create__multiple_recommendations(
+    pub async fn create_multiple_recommendations(
         db: &DatabaseConnection,
         quiz_id: &Uuid,
         question_ids: &[Uuid],
@@ -50,17 +44,9 @@ impl Mutation {
                 used_at: Set(None),
             };
 
-            recommendations.push(
-                recommendation
-                    .insert(&txn)
-                    .await
-                    .inspect_err(|error| {
-                        tracing::error!(
-                            error = error as &dyn Error,
-                            "failed to create question recommendation"
-                        );
-                    })?,
-            );
+            recommendations.push(recommendation.insert(&txn).await.inspect_err(|error| {
+                tracing::error!(error = error as &dyn Error, "failed to create question recommendation");
+            })?);
         }
 
         txn.commit().await?;
@@ -75,9 +61,7 @@ impl Mutation {
         let recommendation = question_recommendation::Entity::find_by_id(*recommendation_id)
             .one(db)
             .await?
-            .ok_or_else(|| DbErr::RecordNotFound(
-                format!("recommendation {} not found", recommendation_id)
-            ))?;
+            .ok_or_else(|| DbErr::RecordNotFound(format!("recommendation {} not found", recommendation_id)))?;
 
         let mut recommendation: question_recommendation::ActiveModel = recommendation.into();
 

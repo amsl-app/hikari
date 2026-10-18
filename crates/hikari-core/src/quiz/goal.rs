@@ -1,21 +1,18 @@
-use serde::{Deserialize, Serialize};
 use crate::llm_config::LlmConfig;
 use crate::openai::{CallConfig, openai_single_tool_call};
-use utoipa::ToSchema;
-use std::time::Duration;
 use crate::quiz::error::QuizError;
 use async_openai::types::chat::{
-    ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestMessage,
-    ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
-    ChatCompletionRequestUserMessageContent,
+    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
+    ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
 };
 use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
+use std::time::Duration;
 use tracing::instrument;
 
-use hikari_model::quiz::goal_feedback::GoalFeedback;
-use hikari_model::quiz::goal_feedback::FeedbackInput;
 use crate::usage::add_usage;
+use hikari_model::quiz::goal_feedback::FeedbackInput;
+use hikari_model::quiz::goal_feedback::GoalFeedback;
 
 #[instrument(skip(input, llm_config, conn), err)]
 pub async fn generate_feedback(
@@ -24,7 +21,6 @@ pub async fn generate_feedback(
     llm_config: &LlmConfig,
     conn: &DatabaseConnection,
 ) -> Result<GoalFeedback, QuizError> {
-
     let session_ids = input.session_ids.join(", ");
     let target_mode = input.target_mode.clone();
     let level = input.level.clone();
@@ -34,10 +30,9 @@ pub async fn generate_feedback(
     let obstacles = input.obstacles.join(", ");
     let plans = input.plans.join(", ");
 
-
     let prompt_messages: Vec<ChatCompletionRequestMessage> = vec![
         ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-            content: ChatCompletionRequestSystemMessageContent::Text(format!("Du bist Amsl, ein experte in Goal-oriented learning. Deine expertise liegt konkret in der WOOP Methode. WOOP steht für Wish, Outcome, Obstacle und Plan und sie funktioniert wie folgt:\
+            content: ChatCompletionRequestSystemMessageContent::Text("Du bist Amsl, ein experte in Goal-oriented learning. Deine expertise liegt konkret in der WOOP Methode. WOOP steht für Wish, Outcome, Obstacle und Plan und sie funktioniert wie folgt:\
             1. Wish: Hier definiert der Lernende ein Ziel, das er erreichen will. In diesem Kontext ist es eine Kombination aus Vorlesung(en), einem Level der Bloom Taxonomie, welches er in der/den Vorlesungen erreichen will und einem oder mehreren Daten, bis wann der lernende das Ziel erreichen will-\
             2. Outcome: Hier schreibt der Lernende den größtmöglichen Nutzen auf, welchen er durch das Erreichen des Ziels aus Schritt 1 erhält. Dies ist vor allem wichtig, damit sich der Nutzer motivieren kann.\
             3. Obstacle: Hier schreibt der Lernende eine oder mehrere Dinge auf, die ihn am erreichen des hindern könnten. Ein Beispiel wäre, dass der Lernende durch sein Handy abgelenkt werden könnte.\
@@ -55,7 +50,7 @@ pub async fn generate_feedback(
             Achte darauf, dich genau and das Schema zu halten.\
             .\
             \
-             ")),
+             ".to_string()),
             name: None,
         }),
         ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
@@ -85,7 +80,7 @@ pub async fn generate_feedback(
         model,
         prompt_messages,
     )
-        .await?;
+    .await?;
 
     if let Some(usage) = tokens {
         add_usage(conn, user_id, usage, "goal_feedback_generation").await?;

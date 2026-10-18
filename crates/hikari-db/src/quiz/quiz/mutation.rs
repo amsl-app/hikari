@@ -93,12 +93,7 @@ impl Mutation {
         let quiz_model = quiz.insert(db).await?;
 
         for session_id in session_ids {
-            crate::quiz::quiz_sessions::mutation::Mutation::add_quiz_session(
-                db,
-                &quiz_model.id,
-                &session_id,
-            )
-                .await?;
+            crate::quiz::quiz_sessions::mutation::Mutation::add_quiz_session(db, &quiz_model.id, &session_id).await?;
         }
 
         Ok(quiz_model)

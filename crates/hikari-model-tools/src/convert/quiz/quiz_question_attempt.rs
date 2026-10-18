@@ -1,12 +1,10 @@
-use hikari_model::quiz::question::Question;
-use hikari_model::quiz::quiz_question_attempt::QuizQuestionAttempt;
-use hikari_entity::quiz::quiz_question_attempt:: Model as AttemptModel;
 use crate::convert::{FromDbModel, IntoDbModel};
-use hikari_model::quiz::quiz_question_attempt::QuestionStatus;
-use hikari_model::quiz::quiz_question_attempt::QuestionFeedback;
-use hikari_entity::quiz::quiz_question_attempt::Status as QuestionStatusModel;
 use hikari_entity::quiz::quiz_question_attempt::Feedback as QuestionFeedbackModel;
-
+use hikari_entity::quiz::quiz_question_attempt::Model as AttemptModel;
+use hikari_entity::quiz::quiz_question_attempt::Status as QuestionStatusModel;
+use hikari_model::quiz::quiz_question_attempt::QuestionFeedback;
+use hikari_model::quiz::quiz_question_attempt::QuestionStatus;
+use hikari_model::quiz::quiz_question_attempt::QuizQuestionAttempt;
 
 impl FromDbModel<AttemptModel> for QuizQuestionAttempt {
     fn from_db_model(model: AttemptModel) -> Self {
@@ -51,4 +49,3 @@ impl FromDbModel<QuestionStatusModel> for QuestionStatus {
         }
     }
 }
-

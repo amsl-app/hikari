@@ -13,6 +13,4 @@ pub struct QuestionRecommendation {
     pub used_at: Option<chrono::NaiveDateTime>,
 }
 
-impl QuestionRecommendation {
-    
-}
+impl QuestionRecommendation {}

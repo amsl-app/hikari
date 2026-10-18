@@ -1,6 +1,5 @@
 use sea_orm::entity::prelude::*;
 
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "question_bloom_level_enum")]
 pub enum BloomLevel {
@@ -44,9 +43,7 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(
-        has_many = "super::quiz_question_attempt::Entity",
-    )]
+    #[sea_orm(has_many = "super::quiz_question_attempt::Entity")]
     QuizQuestionAttempt,
 }
 

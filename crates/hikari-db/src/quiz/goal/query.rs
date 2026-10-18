@@ -1,7 +1,7 @@
-use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect, JoinType};
+use hikari_entity::quiz::goal::{Entity as Goal, Model as GoalModel};
+use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 use std::error::Error;
 use uuid::Uuid;
-use hikari_entity::quiz::goal::{Entity as Goal, Model as GoalModel};
 pub struct Query;
 
 impl Query {
@@ -11,14 +11,8 @@ impl Query {
         module_id: &str,
     ) -> Result<Vec<GoalModel>, DbErr> {
         let query = Goal::find()
-            .filter(
-                <hikari_entity::quiz::goal::Entity as sea_orm::EntityTrait>::Column::UserId
-                    .eq(*user_id),
-            )
-            .filter(
-                <hikari_entity::quiz::goal::Entity as sea_orm::EntityTrait>::Column::ModuleId
-                    .eq(module_id),
-            );
+            .filter(<hikari_entity::quiz::goal::Entity as sea_orm::EntityTrait>::Column::UserId.eq(*user_id))
+            .filter(<hikari_entity::quiz::goal::Entity as sea_orm::EntityTrait>::Column::ModuleId.eq(module_id));
 
         query.all(db).await.inspect_err(|error| {
             tracing::error!(
@@ -35,11 +29,8 @@ impl Query {
         goal_id: &Uuid,
         user_id: &Uuid,
     ) -> Result<Option<GoalModel>, DbErr> {
-
         Goal::find_by_id(*goal_id)
-            .filter(
-                <hikari_entity::quiz::goal::Entity as sea_orm::EntityTrait>::Column::UserId.eq(*user_id)
-            )
+            .filter(<hikari_entity::quiz::goal::Entity as sea_orm::EntityTrait>::Column::UserId.eq(*user_id))
             .one(db)
             .await
     }

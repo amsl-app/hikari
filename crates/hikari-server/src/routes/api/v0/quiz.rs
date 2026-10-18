@@ -1,12 +1,10 @@
-use std::collections::HashMap;
-use chrono::NaiveDate;
-use sea_orm::TransactionTrait;
 use crate::AppConfig;
 use crate::permissions::Permission;
 use crate::routes::api::v0::quiz::error::QuizError;
 use crate::user::ExtractUserId;
 use axum::Json;
 use axum::extract::Query;
+use axum::http::StatusCode;
 use axum::{
     Extension, Router,
     extract::Path,
@@ -14,32 +12,34 @@ use axum::{
     response::Response,
     routing::{get, post},
 };
+use chrono::NaiveDate;
 use futures::TryFutureExt;
 use hikari_config::module::content::{Content, ContentExam, QuestionBloomLevel};
 use hikari_config::module::session::Session;
 use hikari_core::llm_config::LlmConfig;
 use hikari_core::quiz::evaluation::evaluate_answer;
 use hikari_core::quiz::question::create_question;
-use hikari_model::quiz::question::{Question, QuestionOption, QuestionType};
-use hikari_model::quiz::quiz_question_attempt::{QuestionFeedback, QuizQuestionAttempt};
-use hikari_model::quiz::quiz::{Quiz, QuizFull};
-use hikari_model::quiz::score::Score;
 use hikari_model::quiz::goal::Goal;
+use hikari_model::quiz::goal_feedback::FeedbackInput;
+use hikari_model::quiz::goal_feedback::GoalFeedback;
+use hikari_model::quiz::question::{Question, QuestionOption, QuestionType};
+use hikari_model::quiz::quiz::{Quiz, QuizFull};
+use hikari_model::quiz::quiz_question_attempt::{QuestionFeedback, QuizQuestionAttempt};
+use hikari_model::quiz::score::Score;
 use hikari_model_tools::convert::{IntoDbModel, IntoModel};
 use protect_axum::protect;
-use rand::rng;
 use rand::RngExt;
+use rand::rng;
 use rand::seq::IndexedRandom;
-use reqwest_middleware::reqwest;
 use reqwest::Client;
+use reqwest_middleware::reqwest;
 use sea_orm::DatabaseConnection;
+use sea_orm::TransactionTrait;
 use serde::Deserialize;
+use std::collections::HashMap;
 use tokio::try_join;
 use utoipa::ToSchema;
 use uuid::Uuid;
-use axum::http::StatusCode;
-use hikari_model::quiz::goal_feedback::GoalFeedback;
-use hikari_model::quiz::goal_feedback::FeedbackInput;
 
 mod error;
 
@@ -144,7 +144,7 @@ async fn get_quizzes(
         let quiz_question_models: Vec<Question> = quiz_questions
             .into_iter()
             .map(|m| {
-                let mut q: Question = m.into_model();
+                let q: Question = m.into_model();
                 //q.sanitize_for_client();
                 q
             })
@@ -188,7 +188,7 @@ async fn get_quiz(
     let quiz_question_models: Vec<Question> = quiz_questions
         .into_iter()
         .map(|m| {
-            let mut q: Question = m.into_model();
+            let q: Question = m.into_model();
             //q.sanitize_for_client();
             q
         })
@@ -228,7 +228,7 @@ async fn get_questions(
     let quiz_question_models: Vec<Question> = quiz_questions
         .into_iter()
         .map(|m| {
-            let mut q: Question = m.into_model();
+            let q: Question = m.into_model();
             //q.sanitize_for_client();
             q
         })
@@ -261,15 +261,13 @@ async fn get_question(
     )?;
 
     //if quiz_question.quiz_id != quiz_id {
-        //return Err(QuizError::QuestionNotFound);
+    //return Err(QuizError::QuestionNotFound);
     //}
 
     Ok(Json(quiz_question).into_response())
 }
 
 use serde::Serialize;
-use hikari_entity::quiz::question::BloomLevel;
-use crate::routes::api::v0::assessment::error::Error;
 
 #[derive(Serialize, ToSchema)]
 struct QuestionResponse {
@@ -298,12 +296,10 @@ struct QuestionResponse {
 
     pub attempt: i32,
 
-    pub asked_at:Option<chrono::NaiveDateTime>,
+    pub asked_at: Option<chrono::NaiveDateTime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub answered_at: Option<chrono::NaiveDateTime>,
 }
-
-
 
 #[utoipa::path(
     get,
@@ -331,17 +327,13 @@ async fn get_next_question(
 
     if let Some(question) = open_question {
         tracing::debug!(
-        ?quiz_id,
-        question_id = ?question.id,
-        "found open question for quiz",
-    );
+            ?quiz_id,
+            question_id = ?question.id,
+            "found open question for quiz",
+        );
 
         let attempt_model =
-            hikari_db::quiz::quiz_question_attempt::query::Query::get_open_attempt(
-                &conn,
-                &quiz_id,
-                &question.id,
-            )
+            hikari_db::quiz::quiz_question_attempt::query::Query::get_open_attempt(&conn, &quiz_id, &question.id)
                 .await?
                 .ok_or(QuizError::QuestionNotFound)?;
 
@@ -350,7 +342,7 @@ async fn get_next_question(
 
         let response = QuestionResponse {
             id: question_model.id,
-            quiz_id: quiz_id,
+            quiz_id,
             topic: question_model.topic,
             content: question_model.content,
             question: question_model.question,
@@ -386,7 +378,11 @@ async fn get_next_question(
         .get(&selected_session_id)
         .ok_or(QuizError::SessionNotFound(selected_session_id.clone()))?;
 
-    let number_questions_answered = hikari_db::quiz::quiz_question_attempt::query::Query::count_attempts_by_user_module(&conn, &user_id, &module_id).await?;
+    let number_questions_answered =
+        hikari_db::quiz::quiz_question_attempt::query::Query::count_attempts_by_user_module(
+            &conn, &user_id, &module_id,
+        )
+        .await?;
 
     if number_questions_answered <= 20 {
         let content: Content = pick_random_content(session).ok_or(QuizError::NoContentProvided)?;
@@ -411,7 +407,7 @@ async fn get_next_question(
 
         tracing::debug!(selected_session_id, topic, "requesting new question");
 
-        let mut question = create_question(
+        let question = create_question(
             &user_id,
             &selected_session_id,
             specific_content,
@@ -422,18 +418,28 @@ async fn get_next_question(
             &quiz_id,
             &sources,
         )
-            .await?;
-
+        .await?;
 
         //question.sanitize_for_client();
-        let attempt = 1 as i32;
+        let attempt = 1_i32;
 
-        hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question.id, attempt, &selected_session_id).await?;
+        hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(
+            &conn,
+            &quiz_id,
+            &question.id,
+            attempt,
+            &selected_session_id,
+        )
+        .await?;
 
-        let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+        let attempt_model: QuizQuestionAttempt =
+            hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt)
+                .await?
+                .ok_or(QuizError::QuestionNotFound)?
+                .into_model();
         let response = QuestionResponse {
             id: question.id,
-            quiz_id: quiz_id,
+            quiz_id,
             topic: question.topic,
             content: question.content,
             question: question.question,
@@ -456,14 +462,15 @@ async fn get_next_question(
 
         Ok(Json(response).into_response())
     } else {
-
-        let saved_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id).await?;
+        let saved_recommendations =
+            hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id)
+                .await?;
 
         if saved_recommendations.len() <= 1 {
             let conn = conn.clone();
             let quiz_id = quiz_id;
             let user_id = user_id;
-            let module_id = module_id.to_string();
+            let module_id = module_id.clone();
             let all_sessions: Vec<Session> = app_config
                 .module_config()
                 .get(&module_id)
@@ -478,13 +485,14 @@ async fn get_next_question(
                 .filter(|session| session_ids.contains(&session.id))
                 .collect();
 
-            tracing::info!("LEARNER_MODEL_URL: {:?}", std::env::var("LEARNER_MODEL_URL")
-                        .expect("LEARNER_MODEL_URL must be set"));
+            tracing::info!(
+                "LEARNER_MODEL_URL: {:?}",
+                std::env::var("LEARNER_MODEL_URL").expect("LEARNER_MODEL_URL must be set")
+            );
 
             tokio::spawn(async move {
                 let learner_model_client = RecommendationClient::new(
-                    std::env::var("LEARNER_MODEL_URL")
-                        .expect("LEARNER_MODEL_URL must be set"),
+                    std::env::var("LEARNER_MODEL_URL").expect("LEARNER_MODEL_URL must be set"),
                 );
 
                 match learner_model_client
@@ -500,16 +508,13 @@ async fn get_next_question(
                             .collect();
 
                         if question_ids.is_empty() {
-                            tracing::warn!(
-                        ?quiz_id,
-                        "recommendation service returned no question IDs"
-                    );
+                            tracing::warn!(?quiz_id, "recommendation service returned no question IDs");
                             return;
                         }
 
                         if let Err(error) =
                             hikari_db::quiz::question_recommendation::mutation::Mutation
-                            ::create__multiple_recommendations(
+                            ::create_multiple_recommendations(
                                 &conn,
                                 &quiz_id,
                                 &question_ids,
@@ -525,22 +530,17 @@ async fn get_next_question(
                     }
 
                     Err(error) => {
-                        tracing::error!(
-                    ?error,
-                    ?quiz_id,
-                    "recommendation request failed"
-                );
+                        tracing::error!(?error, ?quiz_id, "recommendation request failed");
                     }
                 }
             });
         }
 
-        let unused_recommendations = hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(
-            &conn,
-            &quiz_id)
-            .await?;
+        let unused_recommendations =
+            hikari_db::quiz::question_recommendation::query::Query::get_unused_recommendations_by_quiz(&conn, &quiz_id)
+                .await?;
 
-        if unused_recommendations.len() == 0 {
+        if unused_recommendations.is_empty() {
             let content: Content = pick_random_content(session).ok_or(QuizError::NoContentProvided)?;
 
             let topic = &content.title;
@@ -563,7 +563,7 @@ async fn get_next_question(
 
             tracing::debug!(selected_session_id, topic, "requesting new question");
 
-            let mut question = create_question(
+            let question = create_question(
                 &user_id,
                 &selected_session_id,
                 specific_content,
@@ -574,18 +574,32 @@ async fn get_next_question(
                 &quiz_id,
                 &sources,
             )
-                .await?;
-
+            .await?;
 
             //question.sanitize_for_client();
-            let attempt = 1 as i32;
+            let attempt = 1_i32;
 
-            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question.id, attempt, &selected_session_id).await?;
+            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(
+                &conn,
+                &quiz_id,
+                &question.id,
+                attempt,
+                &selected_session_id,
+            )
+            .await?;
 
-            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(
+                &conn,
+                &quiz_id,
+                &question.id,
+                &attempt,
+            )
+            .await?
+            .ok_or(QuizError::QuestionNotFound)?
+            .into_model();
             let response = QuestionResponse {
                 id: question.id,
-                quiz_id: quiz_id,
+                quiz_id,
                 topic: question.topic,
                 content: question.content,
                 question: question.question,
@@ -606,10 +620,8 @@ async fn get_next_question(
                 asked_at: attempt_model.asked_at,
             };
 
-            return Ok(Json(response).into_response())
+            return Ok(Json(response).into_response());
         }
-
-
 
         let recommendation = unused_recommendations
             .into_iter()
@@ -618,29 +630,49 @@ async fn get_next_question(
 
         hikari_db::quiz::question_recommendation::mutation::Mutation::mark_recommendation_as_used(
             &conn,
-            &recommendation.id)
-            .await?;
-
-        let recommended_question = hikari_db::quiz::question::Query::get_question_by_id(
-            &conn,
-            &recommendation.question_id,
+            &recommendation.id,
         )
-            .await?
-            .ok_or(QuizError::QuestionNotFound)?;
+        .await?;
+
+        let recommended_question =
+            hikari_db::quiz::question::Query::get_question_by_id(&conn, &recommendation.question_id)
+                .await?
+                .ok_or(QuizError::QuestionNotFound)?;
 
         let question_model: Question = recommended_question.into_model();
 
         if rng().random_bool(0.7) {
-
-            let last_attempt = hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(&conn, &user_id, &module_id, &question_model.id).await?;
+            let last_attempt =
+                hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(
+                    &conn,
+                    &user_id,
+                    &module_id,
+                    &question_model.id,
+                )
+                .await?;
             let attempt = last_attempt as i32 + 1;
 
-            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question_model.id, attempt, &selected_session_id).await?;
+            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(
+                &conn,
+                &quiz_id,
+                &question_model.id,
+                attempt,
+                &selected_session_id,
+            )
+            .await?;
 
-            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question_model.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(
+                &conn,
+                &quiz_id,
+                &question_model.id,
+                &attempt,
+            )
+            .await?
+            .ok_or(QuizError::QuestionNotFound)?
+            .into_model();
             let response = QuestionResponse {
                 id: question_model.id,
-                quiz_id: quiz_id,
+                quiz_id,
                 topic: question_model.topic,
                 content: question_model.content,
                 question: question_model.question,
@@ -662,9 +694,7 @@ async fn get_next_question(
             };
 
             Ok(Json(response).into_response())
-
         } else {
-
             let specific_content: &str = &question_model.content;
 
             let topic = question_model.topic;
@@ -685,7 +715,7 @@ async fn get_next_question(
 
             tracing::debug!(selected_session_id, topic, "requesting new question");
 
-            let mut question = create_question(
+            let question = create_question(
                 &user_id,
                 &selected_session_id,
                 specific_content,
@@ -696,19 +726,33 @@ async fn get_next_question(
                 &quiz_id,
                 &sources,
             )
-                .await?;
-
+            .await?;
 
             //question.sanitize_for_client();
-            let attempt = 1 as i32;
+            let attempt = 1_i32;
 
-            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question.id, attempt, &selected_session_id).await?;
+            hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(
+                &conn,
+                &quiz_id,
+                &question.id,
+                attempt,
+                &selected_session_id,
+            )
+            .await?;
 
-            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(&conn, &quiz_id, &question.id, &attempt).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+            let attempt_model: QuizQuestionAttempt = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempt(
+                &conn,
+                &quiz_id,
+                &question.id,
+                &attempt,
+            )
+            .await?
+            .ok_or(QuizError::QuestionNotFound)?
+            .into_model();
 
             let response = QuestionResponse {
                 id: question.id,
-                quiz_id: quiz_id,
+                quiz_id,
                 topic: question.topic,
                 content: question.content,
                 question: question.question,
@@ -768,10 +812,10 @@ async fn submit_answer(
         &conn,
         &quiz_id,
         &question_id,
-        &attempt
-    ).await?.ok_or(
-        QuizError::SessionNotFound("ID not found".to_owned())
-    )?;
+        &attempt,
+    )
+    .await?
+    .ok_or(QuizError::SessionNotFound("ID not found".to_owned()))?;
 
     let module_id = quiz.module_id;
     //let session_id = quiz_question.session_id.as_str();
@@ -815,11 +859,14 @@ async fn submit_answer(
     .await?;
 
     tracing::info!("Evaluated question: {:?}", evaluated_question.evaluation);
-    let question_model: Question = hikari_db::quiz::question::Query::get_question_by_id(&conn, &question_id).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+    let question_model: Question = hikari_db::quiz::question::Query::get_question_by_id(&conn, &question_id)
+        .await?
+        .ok_or(QuizError::QuestionNotFound)?
+        .into_model();
 
     let response = QuestionResponse {
         id: question_model.id,
-        quiz_id: quiz_id,
+        quiz_id,
         topic: question_model.topic,
         content: question_model.content,
         question: question_model.question,
@@ -871,10 +918,10 @@ async fn submit_answer_again(
         &conn,
         &quiz_id,
         &question_id,
-        &attempt
-    ).await?.ok_or(
-        QuizError::SessionNotFound("ID not found".to_owned())
-    )?;
+        &attempt,
+    )
+    .await?
+    .ok_or(QuizError::SessionNotFound("ID not found".to_owned()))?;
 
     let module_id = quiz.module_id;
     //let session_id = quiz_question.session_id.as_str();
@@ -889,7 +936,6 @@ async fn submit_answer_again(
 
     let llm_config: &LlmConfig = AppConfig::llm_config(&app_config);
 
-
     let session_sources: Vec<String> = session
         .contents
         .iter()
@@ -903,10 +949,23 @@ async fn submit_answer_again(
         .flat_map(|c| c.exams.iter().map(|e| (c.title.clone(), e.clone())))
         .collect::<Vec<(String, ContentExam)>>();
 
-    let last_attempt = hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(&conn, &user_id, &module_id, &question_id).await?;
+    let last_attempt = hikari_db::quiz::quiz_question_attempt::query::Query::count_question_attempts_by_user_module(
+        &conn,
+        &user_id,
+        &module_id,
+        &question_id,
+    )
+    .await?;
     let new_attempt = last_attempt as i32 + 1;
 
-    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(&conn, &quiz_id, &question_id, new_attempt, &session_id).await?;
+    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::create_attempt(
+        &conn,
+        &quiz_id,
+        &question_id,
+        new_attempt,
+        &session_id,
+    )
+    .await?;
 
     let evaluated_question = evaluate_answer(
         &user_id,
@@ -921,14 +980,17 @@ async fn submit_answer_again(
         &conn,
         session_sources,
     )
-        .await?;
+    .await?;
 
     tracing::info!("Evaluated question: {:?}", evaluated_question.evaluation);
-    let question_model: Question = hikari_db::quiz::question::Query::get_question_by_id(&conn, &question_id).await?.ok_or(QuizError::QuestionNotFound)?.into_model();
+    let question_model: Question = hikari_db::quiz::question::Query::get_question_by_id(&conn, &question_id)
+        .await?
+        .ok_or(QuizError::QuestionNotFound)?
+        .into_model();
 
     let response = QuestionResponse {
         id: question_model.id,
-        quiz_id: quiz_id,
+        quiz_id,
         topic: question_model.topic,
         content: question_model.content,
         question: question_model.question,
@@ -950,7 +1012,6 @@ async fn submit_answer_again(
     };
     Ok(Json(response).into_response())
 }
-
 
 #[utoipa::path(
     post,
@@ -975,10 +1036,16 @@ async fn skip_question(
     )?;
 
     //if quiz_question.quiz_id != quiz_id {
-        //return Err(QuizError::QuestionNotFound);
+    //return Err(QuizError::QuestionNotFound);
     //}
 
-    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::skip_question(&conn, &quiz_id, &quiz_question.id, &attempt).await?;
+    hikari_db::quiz::quiz_question_attempt::mutation::Mutation::skip_question(
+        &conn,
+        &quiz_id,
+        &quiz_question.id,
+        &attempt,
+    )
+    .await?;
 
     Ok(())
 }
@@ -1014,7 +1081,7 @@ async fn add_feedback(
     )?;
 
     //if quiz_question.quiz_id != quiz_id {
-        //return Err(QuizError::QuestionNotFound);
+    //return Err(QuizError::QuestionNotFound);
     //}
 
     let feedback = payload.feedback.into_db_model();
@@ -1065,19 +1132,16 @@ async fn get_all_questions_by_module(
     Extension(conn): Extension<DatabaseConnection>,
     Path(module_id): Path<String>,
 ) -> Result<Json<Vec<QuestionResponse>>, QuizError> {
-    let quizzes =
-        hikari_db::quiz::quiz::query::Query::get_quizzes_by_module(&conn, &user_id, &module_id).await?;
+    let quizzes = hikari_db::quiz::quiz::query::Query::get_quizzes_by_module(&conn, &user_id, &module_id).await?;
 
     let mut questions = Vec::new();
 
     for quiz in quizzes {
-        let attempts = hikari_db::quiz::quiz_question_attempt::query::Query::get_attempts_by_quiz(&conn, &quiz.id).await?;
+        let attempts =
+            hikari_db::quiz::quiz_question_attempt::query::Query::get_attempts_by_quiz(&conn, &quiz.id).await?;
 
         for attempt in attempts {
-            let question = hikari_db::quiz::question::query::Query::get_question_by_id(
-                &conn,
-                &attempt.question_id,
-            )
+            let question = hikari_db::quiz::question::query::Query::get_question_by_id(&conn, &attempt.question_id)
                 .await?
                 .ok_or(QuizError::QuestionNotFound)?;
             let attempt_model: QuizQuestionAttempt = attempt.into_model();
@@ -1172,25 +1236,17 @@ pub struct GoalResponse {
 #[protect("Permission::Basic", ty = "Permission")]
 async fn create_goal(
     ExtractUserId(user_id): ExtractUserId,
-    Extension(app_config): Extension<AppConfig>,
+    Extension(_app_config): Extension<AppConfig>,
     Extension(conn): Extension<DatabaseConnection>,
     Path(module_id): Path<String>,
     Json(payload): Json<CreateGoalWithQuizRequest>,
 ) -> Result<Response, QuizError> {
-
-
     let goal_session_ids = payload.session_ids.clone();
 
-
-    let deadline = NaiveDate::parse_from_str(
-        &payload.deadline,
-        "%Y-%m-%d",
-    )
+    let deadline = NaiveDate::parse_from_str(&payload.deadline, "%Y-%m-%d")
         .map_err(|err| QuizError::InvalidDeadline(err.to_string()))?;
 
-
     let txn = conn.begin().await?;
-
 
     let quiz = hikari_db::quiz::quiz::mutation::Mutation::create_quiz_in_transaction(
         &txn,
@@ -1198,8 +1254,7 @@ async fn create_goal(
         &module_id,
         payload.session_ids,
     )
-        .await?;
-
+    .await?;
 
     let goal = hikari_db::quiz::goal::mutation::Mutation::create_goal_in_transaction(
         &txn,
@@ -1216,8 +1271,7 @@ async fn create_goal(
         serde_json::to_value(payload.plans)?,
         serde_json::to_value(payload.lecture_targets)?,
     )
-        .await?;
-
+    .await?;
 
     txn.commit().await?;
 
@@ -1227,11 +1281,7 @@ async fn create_goal(
         id: goal_model.id,
         module_id: goal_model.module_id,
         quiz_id: goal_model.quiz_id,
-        session_ids: goal_model
-            .session_ids
-            .iter()
-            .map(|id| id.to_string())
-            .collect(),
+        session_ids: goal_model.session_ids.clone(),
         target_mode: goal_model.target_mode,
         level: goal_model.level,
         deadline: goal_model.deadline.format("%Y-%m-%d").to_string(),
@@ -1278,13 +1328,7 @@ async fn get_all_goals(
     Extension(conn): Extension<DatabaseConnection>,
     Path(module_id): Path<String>,
 ) -> Result<Response, QuizError> {
-    let goals =
-        hikari_db::quiz::goal::query::Query::get_goals_by_user_and_module(
-            &conn,
-            &user_id,
-            &module_id,
-        )
-            .await?;
+    let goals = hikari_db::quiz::goal::query::Query::get_goals_by_user_and_module(&conn, &user_id, &module_id).await?;
 
     let responses: Vec<GoalResponse> = goals
         .into_iter()
@@ -1297,15 +1341,11 @@ async fn get_all_goals(
             level: goal.level,
             deadline: goal.deadline.format("%Y-%m-%d").to_string(),
             outcome: goal.outcome,
-            additional_outcomes: serde_json::from_value(goal.additional_outcomes)
-                .unwrap_or_default(),
-            obstacles: serde_json::from_value(goal.obstacles)
-                .unwrap_or_default(),
-            plans: serde_json::from_value(goal.plans)
-                .unwrap_or_default(),
+            additional_outcomes: serde_json::from_value(goal.additional_outcomes).unwrap_or_default(),
+            obstacles: serde_json::from_value(goal.obstacles).unwrap_or_default(),
+            plans: serde_json::from_value(goal.plans).unwrap_or_default(),
             active: goal.active,
-            lecture_targets: serde_json::from_value(goal.lecture_targets)
-                .unwrap_or_default(),
+            lecture_targets: serde_json::from_value(goal.lecture_targets).unwrap_or_default(),
         })
         .collect();
 
@@ -1348,7 +1388,6 @@ pub async fn deactivate_goal(
     Extension(conn): Extension<DatabaseConnection>,
     Path(goal_id): Path<Uuid>,
 ) -> Result<StatusCode, QuizError> {
-
     let goal = hikari_db::quiz::goal::query::Query::get_goal_by_id_and_user(&conn, &goal_id, &user_id)
         .await?
         .ok_or(QuizError::GoalNotFound)?;
@@ -1357,8 +1396,6 @@ pub async fn deactivate_goal(
 
     Ok(StatusCode::OK)
 }
-
-
 
 #[utoipa::path(
     post,
@@ -1390,17 +1427,12 @@ async fn generate_goal_feedback(
     Extension(conn): Extension<DatabaseConnection>,
     Extension(app_config): Extension<AppConfig>,
     Json(payload): Json<FeedbackInput>,
-
 ) -> Result<Response, QuizError> {
-
     let llm_config: &LlmConfig = AppConfig::llm_config(&app_config);
-    let feedback =
-        hikari_core::quiz::goal::generate_feedback(&user_id, &payload, &llm_config, &conn).await?;
+    let feedback = hikari_core::quiz::goal::generate_feedback(&user_id, &payload, llm_config, &conn).await?;
 
     Ok(Json(feedback).into_response())
 }
-
-
 
 async fn get_quiz_by_id(conn: &DatabaseConnection, user_id: &Uuid, quiz_id: &Uuid) -> Result<Quiz, QuizError> {
     let result = hikari_db::quiz::quiz::Query::get_quiz_by_id(conn, user_id, quiz_id)
@@ -1454,11 +1486,12 @@ struct RecommendationRequest {
 #[derive(Debug, Deserialize)]
 struct Recommendation {
     question_id: Uuid,
-    question_text: String,
+    #[allow(dead_code)]
+    question_text: String, // TODO remove this field (also from LLM schema) if not needed
 }
 
 #[derive(Debug, Deserialize)]
-struct RecommendationResponse {
+pub struct RecommendationResponse {
     recommendations: Vec<Recommendation>,
 }
 
@@ -1475,7 +1508,7 @@ impl RecommendationClient {
         }
     }
 
-    pub async fn get_recommendations(
+    async fn get_recommendations(
         &self,
         user_id: Uuid,
         module_id: String,
@@ -1484,31 +1517,17 @@ impl RecommendationClient {
     ) -> Result<RecommendationResponse, QuizError> {
         let mut chapter_bloom_limits: HashMap<String, String> = HashMap::new();
 
-
         for session in &sessions {
+            let topics: Vec<String> = session.contents.iter().map(|content| content.title.clone()).collect();
 
-            let topics: Vec<String> = session
-                .contents
-                .iter()
-                .map(|content| content.title.clone())
-                .collect();
-
-
-            let limits = get_chapter_bloom_limits(
-                conn,
-                &user_id,
-                &session.id,
-                &topics,
-            )
-                .await?;
-
+            let limits = get_chapter_bloom_limits(conn, &user_id, &session.id, &topics).await?;
 
             chapter_bloom_limits.extend(limits);
         }
 
         let request = RecommendationRequest {
             student_id: user_id,
-            module_id: module_id,
+            module_id,
             chapter_bloom_limits: Some(chapter_bloom_limits),
         };
 
@@ -1534,13 +1553,7 @@ async fn get_chapter_bloom_limits(
     let mut limits = HashMap::new();
 
     for topic in topics {
-        let score = hikari_db::quiz::score::Query::get_score_by_topic(
-            conn,
-            user_id,
-            session_id,
-            topic,
-        )
-            .await?;
+        let score = hikari_db::quiz::score::Query::get_score_by_topic(conn, user_id, session_id, topic).await?;
 
         let level = get_bloom_level(score.unwrap_or(0.0));
 

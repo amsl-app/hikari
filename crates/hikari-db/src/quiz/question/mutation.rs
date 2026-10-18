@@ -1,5 +1,5 @@
 use hikari_entity::quiz::question::{self, BloomLevel};
-use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, DatabaseConnection, DbErr, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr, Set};
 use uuid::Uuid;
 pub struct Mutation;
 

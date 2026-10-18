@@ -1,4 +1,3 @@
-
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, EnumIter, DeriveActiveEnum)]
@@ -20,7 +19,6 @@ pub enum Status {
     #[sea_orm(string_value = "skipped")]
     Skipped,
 }
-
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "quiz_question_attempt")]

@@ -1,7 +1,7 @@
+use crate::quiz::quiz_question_attempt::query::Query;
+use hikari_entity::quiz::quiz_question_attempt;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr, Set};
 use uuid::Uuid;
-use hikari_entity::quiz::quiz_question_attempt;
-use crate::quiz::quiz_question_attempt::query::Query;
 
 pub struct Mutation;
 
@@ -57,7 +57,7 @@ impl Mutation {
         db: &DatabaseConnection,
         quiz_id: &Uuid,
         question_id: &Uuid,
-        attempt: &i32
+        attempt: &i32,
     ) -> Result<quiz_question_attempt::Model, DbErr> {
         let quiz_question_attempt = Query::get_attempt(db, quiz_id, question_id, attempt)
             .await?
@@ -85,5 +85,4 @@ impl Mutation {
         attempt.feedback_explanation = Set(feedback_explanation.map(ToString::to_string));
         attempt.update(db).await
     }
-
 }

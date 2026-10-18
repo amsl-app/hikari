@@ -55,4 +55,3 @@ impl Related<super::question_recommendation::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
