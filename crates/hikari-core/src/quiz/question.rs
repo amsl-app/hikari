@@ -152,6 +152,7 @@ pub async fn create_question(
                 - Integriere diese grammatikalisch korrekt in den Satz. Beachte, dass du die Operatoren teilweise anpassen musst, damit sie in den Satz passen.
                 - **Formatierung:** Markiere die Operatoren im Satz fett mit Markdown (z. B. **Analysieren** Sie...). Markiere NICHTS anderes fett.
                 4. **Autarkie:** Die Frage muss ’self-contained' sein. Wenn ein Szenario oder Sachverhalt notwendig ist, um die Frage zu beantworten, stelle diesen VOR die eigentliche Frage. Der Student darf kein externes Wissen benötigen. Ausdrücke wie ’im obigen Text' sind nicht erlaubt.
+                5. **Sprache:** Die Frage muss in der selben Sprache gestellt werden, wie das bereitgestellte Lernmaterial ist. Wenn das Lernmaterial also z.B. auf Englisch ist, stelle die Frage auch auf Englisch.
 
                 # CONSTRAINTS (Einschränkungen)
                 - **KEINE Lösungen in der Frage:** Gib unter keinen Umständen die Lösung oder Beispiele für die Lösung mit in der Frage an. Die Lösung wird separat erfasst.
